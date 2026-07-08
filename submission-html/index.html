@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Postage Workspace — LEDSone</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ================================================================
+     APP SHELL
+     ================================================================ -->
+<div class="app-shell">
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-left">
+      <span class="header-brand">LEDSone</span>
+      <span class="header-sep">/</span>
+      <span class="header-title">Postage Workspace</span>
+    </div>
+    <span class="header-date" id="header-date"></span>
+  </header>
+
+  <!-- BODY: sidebar + main -->
+  <div class="app-body">
+
+    <!-- SIDEBAR -->
+    <aside class="app-sidebar">
+      <nav>
+        <ul class="sidebar-nav">
+          <li><a href="#dashboard"  class="active">Dashboard</a></li>
+          <li><a href="#booking">Booking Status</a></li>
+          <li><a href="#couriers">Couriers</a></li>
+          <li><a href="#issues">Open Issues</a></li>
+          <li><a href="#reports">Reports</a></li>
+        </ul>
+      </nav>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="app-main">
+
+      <!-- ============================================================
+           SECTION: DASHBOARD
+           ============================================================ -->
+      <section id="section-dashboard">
+
+        <!-- Page heading -->
+        <div class="page-header">
+          <h1 class="page-title">Postage Dashboard</h1>
+          <p class="page-subtitle">Daily booking overview for all regions.</p>
+        </div>
+
+        <!-- ---- Widget 1: Region Booking Status ---- -->
+        <div class="widget">
+          <p class="widget-label">Region Booking Status</p>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th class="w-36">Region</th>
+                    <th>Booking Status</th>
+                    <th>Labels Created</th>
+                    <th>Packed</th>
+                    <th>Courier Collected</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇬🇧</span><span class="region-name">UK</span></span></td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                  </tr>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇩🇪</span><span class="region-name">Germany</span></span></td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                  </tr>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇺🇸</span><span class="region-name">US</span></span></td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                  </tr>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇨🇦</span><span class="region-name">Canada</span></span></td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Widget 2: Courier Status ---- -->
+        <div class="widget">
+          <p class="widget-label">Courier Status</p>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th class="w-36">Courier</th>
+                    <th>Collection Status</th>
+                    <th>Dispatch Status</th>
+                    <th>Last Updated</th>
+                    <th>Notes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="cell-primary">DPD</td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>No updates</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-primary">EVRi</td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>No updates</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-primary">Royal Mail</td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>No updates</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-primary">DHL</td>
+                    <td>Pending</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>No updates</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Widget 3: Unshipped Orders ---- -->
+        <div class="widget">
+          <p class="widget-label">Unshipped Orders</p>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th class="w-36">Region</th>
+                    <th>Unshipped Orders</th>
+                    <th>Priority Orders</th>
+                    <th>Oldest Pending</th>
+                    <th>Last Checked</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇬🇧</span><span class="region-name">UK</span></span></td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>Not Connected</td>
+                  </tr>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇩🇪</span><span class="region-name">Germany</span></span></td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>Not Connected</td>
+                  </tr>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇺🇸</span><span class="region-name">US</span></span></td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>Not Connected</td>
+                  </tr>
+                  <tr>
+                    <td><span class="region-cell"><span aria-hidden="true">🇨🇦</span><span class="region-name">Canada</span></span></td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>—</td>
+                    <td>Not Connected</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Widget 4: Postage Updates ---- -->
+        <div class="widget">
+          <p class="widget-label">Postage Updates</p>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th class="w-52">Category</th>
+                    <th>Status</th>
+                    <th>Last Updated</th>
+                    <th>Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="cell-primary">Courier Updates</td>
+                    <td>No updates</td>
+                    <td>—</td>
+                    <td>Normal</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-primary">Customer Updates</td>
+                    <td>No updates</td>
+                    <td>—</td>
+                    <td>Normal</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-primary">Internal Postage Updates</td>
+                    <td>No updates</td>
+                    <td>—</td>
+                    <td>Normal</td>
+                  </tr>
+                  <tr>
+                    <td class="cell-primary">Pending Actions</td>
+                    <td>No updates</td>
+                    <td>—</td>
+                    <td>Normal</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ---- Widget 5: Open Issues Summary ---- -->
+        <div class="widget">
+          <p class="widget-label">Open Issues</p>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th class="w-32">Issue ID</th>
+                    <th>Title</th>
+                    <th class="w-52">Status</th>
+                    <th class="w-24">Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="cell-mono">ISSUE-001</td>
+                    <td>Placeholder Issue One</td>
+                    <td><span class="badge badge-inv">Investigation Required</span></td>
+                    <td><span class="badge badge-hi">High</span></td>
+                  </tr>
+                  <tr>
+                    <td class="cell-mono">ISSUE-002</td>
+                    <td>Placeholder Issue Two</td>
+                    <td><span class="badge badge-und">Under Investigation</span></td>
+                    <td><span class="badge badge-hi">High</span></td>
+                  </tr>
+                  <tr>
+                    <td class="cell-mono">ISSUE-003</td>
+                    <td>Placeholder Issue Three</td>
+                    <td><span class="badge badge-und">Under Investigation</span></td>
+                    <td><span class="badge badge-nm">Normal</span></td>
+                  </tr>
+                  <tr>
+                    <td class="cell-mono">ISSUE-004</td>
+                    <td>Placeholder Issue Four</td>
+                    <td><span class="badge badge-mon">Under Monitoring</span></td>
+                    <td><span class="badge badge-nm">Normal</span></td>
+                  </tr>
+                  <tr>
+                    <td class="cell-mono">ISSUE-005</td>
+                    <td>Placeholder Issue Five</td>
+                    <td><span class="badge badge-und">Under Investigation</span></td>
+                    <td><span class="badge badge-nm">Normal</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </section><!-- /section-dashboard -->
+
+
+      <!-- ============================================================
+           SECTION: BOOKING STATUS
+           ============================================================ -->
+      <section id="section-booking" hidden>
+        <div class="page-header">
+          <h1 class="page-title">Booking Status</h1>
+          <p class="page-subtitle">This section is under development.</p>
+        </div>
+      </section>
+
+
+      <!-- ============================================================
+           SECTION: COURIERS
+           ============================================================ -->
+      <section id="section-couriers" hidden>
+        <div class="page-header">
+          <h1 class="page-title">Couriers</h1>
+          <p class="page-subtitle">This section is under development.</p>
+        </div>
+      </section>
+
+
+      <!-- ============================================================
+           SECTION: OPEN ISSUES
+           ============================================================ -->
+      <section id="section-issues" hidden>
+        <div class="page-header">
+          <h1 class="page-title">Open Issues</h1>
+          <p class="page-subtitle">This section is under development.</p>
+        </div>
+      </section>
+
+
+      <!-- ============================================================
+           SECTION: REPORTS
+           ============================================================ -->
+      <section id="section-reports" hidden>
+        <div class="page-header">
+          <h1 class="page-title">Reports</h1>
+          <p class="page-subtitle">This section is under development.</p>
+        </div>
+      </section>
+
+    </main><!-- /app-main -->
+  </div><!-- /app-body -->
+</div><!-- /app-shell -->
+
+<script src="js/script.js"></script>
+</body>
+</html>
