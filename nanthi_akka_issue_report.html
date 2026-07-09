@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nanthi Akka — Issue Analysis & Fix Plan</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    background: #f5f6f8;
+    color: #1a1a2e;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  .header {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 32px 40px 28px;
+    border-bottom: 4px solid #e8a020;
+  }
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin-bottom: 4px;
+  }
+  .header .subtitle {
+    font-size: 13px;
+    color: #a0a8c0;
+  }
+  .header-meta {
+    text-align: right;
+    font-size: 12px;
+    color: #a0a8c0;
+    line-height: 1.8;
+  }
+  .header-meta strong { color: #e8a020; }
+
+  /* ── Root cause banner ── */
+  .root-cause {
+    background: #fff8e8;
+    border-left: 5px solid #e8a020;
+    padding: 14px 40px;
+    font-size: 13px;
+    color: #5a4000;
+  }
+  .root-cause strong { color: #c07000; }
+
+  /* ── Summary stats ── */
+  .stats-row {
+    display: flex;
+    gap: 0;
+    background: #fff;
+    border-bottom: 1px solid #e2e5ec;
+  }
+  .stat-box {
+    flex: 1;
+    padding: 16px 24px;
+    border-right: 1px solid #e2e5ec;
+    text-align: center;
+  }
+  .stat-box:last-child { border-right: none; }
+  .stat-num {
+    font-size: 28px;
+    font-weight: 700;
+    display: block;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .stat-label { font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+  .num-red   { color: #c0392b; }
+  .num-amber { color: #d68910; }
+  .num-green { color: #1e8449; }
+
+  /* ── Filter bar ── */
+  .filter-bar {
+    background: #fff;
+    padding: 12px 40px;
+    border-bottom: 1px solid #e2e5ec;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .filter-label { font-size: 11px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
+  .filter-btn {
+    font-size: 12px;
+    padding: 5px 14px;
+    border-radius: 20px;
+    border: 1px solid #d1d5db;
+    background: #f9fafb;
+    color: #374151;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .filter-btn:hover { background: #e5e7eb; }
+  .filter-btn.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
+
+  /* ── Main content ── */
+  .content { padding: 28px 40px 48px; }
+
+  /* ── Section ── */
+  .section { margin-bottom: 32px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .section-icon {
+    width: 28px; height: 28px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+  .icon-ownership { background: #e8eaf6; }
+  .icon-listing   { background: #e8f5e9; }
+  .icon-ops       { background: #fff3e0; }
+  .icon-comms     { background: #e3f2fd; }
+
+  .section-title-text {
+    font-size: 14px;
+    font-weight: 700;
+    color: #1a1a2e;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .section-count {
+    font-size: 11px;
+    background: #f3f4f6;
+    color: #6b7280;
+    border-radius: 10px;
+    padding: 2px 8px;
+    font-weight: 600;
+  }
+
+  /* ── Table ── */
+  .issue-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    border: 1px solid #e2e5ec;
+  }
+  .issue-table thead th {
+    background: #1a1a2e;
+    color: #e0e3ee;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 10px 14px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  .issue-table thead th:first-child { width: 90px; }
+  .issue-table thead th:nth-child(2) { width: 180px; }
+  .issue-table thead th:nth-child(3) { min-width: 200px; }
+  .issue-table thead th:nth-child(4) { min-width: 220px; }
+  .issue-table thead th:last-child  { width: 160px; }
+
+  .issue-table tbody tr {
+    border-bottom: 1px solid #e2e5ec;
+    transition: background 0.1s;
+  }
+  .issue-table tbody tr:last-child { border-bottom: none; }
+  .issue-table tbody tr:hover { background: #f9fafb; }
+  .issue-table td {
+    padding: 12px 14px;
+    vertical-align: top;
+    font-size: 13px;
+    color: #374151;
+    line-height: 1.55;
+  }
+
+  /* ── Priority badges ── */
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .badge-critical { background: #fde8e8; color: #c0392b; border: 1px solid #f5b7b1; }
+  .badge-high     { background: #fef9e7; color: #b7770d; border: 1px solid #f9e49a; }
+  .badge-process  { background: #eafaf1; color: #1e8449; border: 1px solid #a9dfbf; }
+
+  /* ── Issue & fix text ── */
+  .issue-text { color: #374151; }
+  .fix-text {
+    color: #1a1a2e;
+    border-left: 3px solid #e8a020;
+    padding-left: 9px;
+    margin-top: 0;
+  }
+  .owner-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: 11px;
+    color: #374151;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* ── Footer ── */
+  footer {
+    background: #1a1a2e;
+    color: #a0a8c0;
+    text-align: center;
+    padding: 16px 40px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+  }
+  footer strong { color: #e8a020; }
+
+  /* ── Print / hide ── */
+  .row-hidden { display: none; }
+
+  @media print {
+    body { background: #fff; }
+    .filter-bar { display: none; }
+    .issue-table tbody tr { break-inside: avoid; }
+    .section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<div class="header">
+  <div class="header-top">
+    <div>
+      <h1>Nanthi Akka — Issue Analysis &amp; Fix Plan</h1>
+      <p class="subtitle">Why she is over-involved &amp; what the Sri Lanka office must fix to reduce UK warehouse dependency</p>
+    </div>
+    <div class="header-meta">
+      <div>Prepared for <strong>MD Review</strong></div>
+      <div>Classification: <strong>Internal Management</strong></div>
+      <div>Date: July 2026</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ ROOT CAUSE BANNER ══ -->
+<div class="root-cause">
+  <strong>Root cause in one line:</strong> The Sri Lanka office has no clear ownership, no follow-up system, and no communication structure — so every unresolved issue escalates to Nanthi Akka in the UK warehouse.
+</div>
+
+<!-- ══ STATS ══ -->
+<div class="stats-row">
+  <div class="stat-box">
+    <span class="stat-num num-red">6</span>
+    <span class="stat-label">Critical — fix this week</span>
+  </div>
+  <div class="stat-box">
+    <span class="stat-num num-amber">7</span>
+    <span class="stat-label">High — fix this month</span>
+  </div>
+  <div class="stat-box">
+    <span class="stat-num num-green">4</span>
+    <span class="stat-label">Process — ongoing improvement</span>
+  </div>
+  <div class="stat-box">
+    <span class="stat-num" style="color:#1a1a2e">17</span>
+    <span class="stat-label">Total issues identified</span>
+  </div>
+</div>
+
+<!-- ══ FILTER BAR ══ -->
+<div class="filter-bar">
+  <span class="filter-label">Filter:</span>
+  <button class="filter-btn active" onclick="filterRows('all', this)">All issues</button>
+  <button class="filter-btn" onclick="filterRows('ownership', this)">🔑 Ownership &amp; Responsibility</button>
+  <button class="filter-btn" onclick="filterRows('listing', this)">🏷 Listing &amp; Product</button>
+  <button class="filter-btn" onclick="filterRows('ops', this)">🚚 Operations</button>
+  <button class="filter-btn" onclick="filterRows('comms', this)">💬 Communication</button>
+  <button class="filter-btn" onclick="filterRows('critical', this)">🔴 Critical only</button>
+  <button class="filter-btn" onclick="filterRows('high', this)">🟡 High only</button>
+</div>
+
+<!-- ══ CONTENT ══ -->
+<div class="content">
+
+  <!-- ── SECTION 1: OWNERSHIP ── -->
+  <div class="section" data-section="ownership">
+    <div class="section-header">
+      <div class="section-icon icon-ownership">🔑</div>
+      <span class="section-title-text">Ownership &amp; Responsibility Gaps</span>
+      <span class="section-count">5 issues</span>
+    </div>
+
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Issue</th>
+          <th>What is happening</th>
+          <th>Fix &amp; action required</th>
+          <th>Owner (Sri Lanka)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-category="ownership" data-priority="critical">
+          <td><span class="badge badge-critical">Critical</span></td>
+          <td><strong>Manual orders — no single owner</strong></td>
+          <td class="issue-text">Nanthi Akka is repeatedly asked to add picklists for manual orders. Nobody has been assigned to approve, verify payment, pack, and follow up. Every step is unclear, creating constant contact with the UK warehouse.</td>
+          <td class="fix-text">Appoint one named person in SL to own manual orders end-to-end: receive → verify payment (accounts team) → raise picklist → confirm to warehouse → follow up delivery. Document each step. No manual order moves without this person's approval.</td>
+          <td><span class="owner-tag">👤 Accounts lead + SL coordinator</span></td>
+        </tr>
+        <tr data-category="ownership" data-priority="critical">
+          <td><span class="badge badge-critical">Critical</span></td>
+          <td><strong>No backup when key staff are on leave</strong></td>
+          <td class="issue-text">If Mano Ranjini, Varmen, Lakshi, or Sanju are absent, work stops and Nanthi Akka is contacted. There is no documented handover or backup allocation. Information exists only in individual heads.</td>
+          <td class="fix-text">Create a leave-backup matrix: for each role, name who covers which tasks. Before any leave, a mandatory 30-min handover briefing. All active task status stored in a shared tracker. MD to enforce as a non-negotiable standard.</td>
+          <td><span class="owner-tag">👤 Team leads + MD to enforce</span></td>
+        </tr>
+        <tr data-category="ownership" data-priority="critical">
+          <td><span class="badge badge-critical">Critical</span></td>
+          <td><strong>Return parcels — no named responsible person</strong></td>
+          <td class="issue-text">Nyasha example: £225 chandelier with missing parts. No one followed up. DPD did not collect but nobody escalated. Return labels not being booked correctly. Seriousness of customer issues is not being treated properly.</td>
+          <td class="fix-text">Assign a "Returns Owner" for every return case: log it, book the label, confirm collection, and close the loop with the customer within 24–48 hrs. Use a simple returns tracker. Nanthi Akka contacted only if courier refuses — not for first-step actions.</td>
+          <td><span class="owner-tag">👤 Named customer service lead in SL</span></td>
+        </tr>
+        <tr data-category="ownership" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Warehouse supply orders — no cost controller</strong></td>
+          <td class="issue-text">Wrong items delivered to wrong unit (Unit 4 / Unit 3 / Unit 18 address confusion). No one accountable for cost control, correct ordering, and confirming delivery to the right location.</td>
+          <td class="fix-text">One named person owns all warehouse supply orders: raises the PO, confirms delivery address, checks on arrival. Any unit exchange pre-approved and documented. Monthly cost review by accounts team.</td>
+          <td><span class="owner-tag">👤 Warehouse admin lead</span></td>
+        </tr>
+        <tr data-category="ownership" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Amazon / FBA returns — no weekly review meeting</strong></td>
+          <td class="issue-text">Wrong products received in returns (wrong bulb type, wattage — label swapped by Amazon). Pipe lighting returned that is not ours. 350 T185 spiral bulbs returned — root cause was wrong listing (dimmable issue). No weekly meeting to catch patterns early.</td>
+          <td class="fix-text">Hold a 30-min weekly returns review. Compare return slip vs original order. Flag Amazon label-swap cases via Seller Central immediately. Track by SKU — if same product returns repeatedly, escalate listing/barcode audit. Nanthi Akka attends only if pattern unresolved after 2 weeks.</td>
+          <td><span class="owner-tag">👤 SL e-commerce + accounts team</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── SECTION 2: LISTING & PRODUCT ── -->
+  <div class="section" data-section="listing">
+    <div class="section-header">
+      <div class="section-icon icon-listing">🏷</div>
+      <span class="section-title-text">Listing &amp; Product Issues</span>
+      <span class="section-count">4 issues</span>
+    </div>
+
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Issue</th>
+          <th>What is happening</th>
+          <th>Fix &amp; action required</th>
+          <th>Owner (Sri Lanka)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-category="listing" data-priority="critical">
+          <td><span class="badge badge-critical">Critical</span></td>
+          <td><strong>Pick-list images don't match listing images</strong></td>
+          <td class="issue-text">Nanthi Akka has raised this repeatedly — bulb pick-list image and listing image are different. This causes warehouse picking errors and customer complaints. The issue spans general products and bulbs specifically.</td>
+          <td class="fix-text">SL listing team to audit all active listings vs pick-list images this week. Checklist rule: listing image = pick-list image = actual product. Any mismatch corrected before listing stays live. Nanthi Akka approves the final audit result — one interaction, not repeated queries.</td>
+          <td><span class="owner-tag">👤 SL listing team lead</span></td>
+        </tr>
+        <tr data-category="listing" data-priority="critical">
+          <td><span class="badge badge-critical">Critical</span></td>
+          <td><strong>Cable listing — cut pieces sold as full length</strong></td>
+          <td class="issue-text">5m cable listing: customers buy 3× thinking they will receive 15m continuous cable, but receive 3 separate cut pieces. The listing does not clearly state this. Causes customer complaints and returns that reach Nanthi Akka. Affects 1m, 5m, and 15m variants.</td>
+          <td class="fix-text">Update all cable listings immediately: clearly state "sold as individual cut lengths — not a continuous full-length cable" in title, bullet points, and description. SL listing team owns this. Review all length variants for the same issue across all cable SKUs.</td>
+          <td><span class="owner-tag">👤 SL listing team — reviewed by Nanthi Akka once</span></td>
+        </tr>
+        <tr data-category="listing" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Pricing errors — products below profitable price</strong></td>
+          <td class="issue-text">Some products listed below £5 — after postage costs, no profit is made. Price changes are also made without notifying the warehouse team, causing confusion at the packing stage. Morning pricing decisions don't reach evening team.</td>
+          <td class="fix-text">(1) Set a minimum price floor — no product live below cost + postage + margin. Accounts team calculates and maintains this floor per SKU. (2) Any price change must be communicated to warehouse in writing (WhatsApp group or shared doc) before going live. Nanthi Akka should not discover pricing errors after the fact.</td>
+          <td><span class="owner-tag">👤 SL accounts + listing team</span></td>
+        </tr>
+        <tr data-category="listing" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Stock count inaccurate — orders placed against phantom stock</strong></td>
+          <td class="issue-text">System shows 50 stock but actual count is different. Ceiling rose example: 8 physically in stock, 11 orders placed. Prime orders and first-class orders affected. No physical count reconciliation process in place.</td>
+          <td class="fix-text">Weekly cycle count for fast-moving SKUs. Before any bulk order or prime listing, confirm physical count. Any discrepancy above 10% flagged and investigated same day. SL warehouse admin updates the count — not Nanthi Akka's job to discover this mismatch.</td>
+          <td><span class="owner-tag">👤 Warehouse team lead</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── SECTION 3: OPERATIONS ── -->
+  <div class="section" data-section="ops">
+    <div class="section-header">
+      <div class="section-icon icon-ops">🚚</div>
+      <span class="section-title-text">Operational Issues</span>
+      <span class="section-count">4 issues</span>
+    </div>
+
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Issue</th>
+          <th>What is happening</th>
+          <th>Fix &amp; action required</th>
+          <th>Owner (Sri Lanka)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-category="ops" data-priority="critical">
+          <td><span class="badge badge-critical">Critical</span></td>
+          <td><strong>Royal Mail size violations</strong></td>
+          <td class="issue-text">Items over 60cm length booked on Royal Mail instead of courier. Pipe lighting must go on Every Courier international pack. Once booked incorrectly, labels cannot be cancelled and parcel returns are uncertain. Nanthi Akka is finding these errors after the fact.</td>
+          <td class="fix-text">Post a size-to-carrier rule card in the packing area: "Over 60cm → Every Courier / International Pack. Pipe lighting → Always Every Courier international." Anyone booking a label checks this before confirming. SL team enforces this — no exceptions.</td>
+          <td><span class="owner-tag">👤 Warehouse packing lead</span></td>
+        </tr>
+        <tr data-category="ops" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Collection orders — no fixed time or communication process</strong></td>
+          <td class="issue-text">Customers arrive without the warehouse knowing. No standard message is sent to confirm collection is ready or to set a collection window. Nanthi Akka has to intervene to coordinate between the customer and warehouse.</td>
+          <td class="fix-text">(1) Order packed → send customer confirmation with fixed collection window (e.g. "ready 10am–4pm Mon–Fri"). (2) Same forwarded to warehouse WhatsApp group. (3) When collection confirmed ready, second message to customer. SL customer service owns all steps — Nanthi Akka removed from this loop entirely.</td>
+          <td><span class="owner-tag">👤 SL customer service rep</span></td>
+        </tr>
+        <tr data-category="ops" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Amazon courier missed — no escalation process</strong></td>
+          <td class="issue-text">When Amazon collection is missed, no one sends the follow-up email to the courier. The email is missed, resulting in charges or delays. This is a routine task that repeatedly falls through because no one owns it.</td>
+          <td class="fix-text">If Amazon courier does not collect by cut-off time, designated SL staff sends escalation email within 1 hour using a saved template. Response confirmed in shared tracking doc. This is a routine SL task — not a Nanthi Akka task.</td>
+          <td><span class="owner-tag">👤 SL dispatch coordinator</span></td>
+        </tr>
+        <tr data-category="ops" data-priority="process">
+          <td><span class="badge badge-process">Process</span></td>
+          <td><strong>Slow-moving products — no proactive identification</strong></td>
+          <td class="issue-text">Slow movers are only discovered during picking. No review system exists to flag and action them before they pile up as overstock. 350 T185 spiral bulb return case was partly caused by this — listed as overstock but the real issue was wrong listing detail (dimmable).</td>
+          <td class="fix-text">Monthly slow-mover report from e-commerce/accounts team. Review in weekly meeting. Options: price reduction, bundle, or remove listing. Nanthi Akka receives a summary only — not individual product queries per item.</td>
+          <td><span class="owner-tag">👤 SL e-commerce lead</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── SECTION 4: COMMUNICATION ── -->
+  <div class="section" data-section="comms">
+    <div class="section-header">
+      <div class="section-icon icon-comms">💬</div>
+      <span class="section-title-text">Communication &amp; Information Flow</span>
+      <span class="section-count">4 issues</span>
+    </div>
+
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>Priority</th>
+          <th>Issue</th>
+          <th>What is happening</th>
+          <th>Fix &amp; action required</th>
+          <th>Owner (Sri Lanka)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr data-category="comms" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Evening team unaware of morning decisions</strong></td>
+          <td class="issue-text">Decisions made in the morning (e.g. pricing changes, first-class order instructions) are not passed to the evening team. Orders get stuck or handled incorrectly because teams operate without shared context. This lack of shift handover causes Nanthi Akka to be contacted to clarify.</td>
+          <td class="fix-text">End-of-morning-shift handover note (5 lines max) sent to a shared WhatsApp group or doc: what changed today, what is pending, what evening team must know. Evening shift lead confirms receipt. Nanthi Akka removed from this loop entirely.</td>
+          <td><span class="owner-tag">👤 Morning shift lead → Evening shift lead</span></td>
+        </tr>
+        <tr data-category="comms" data-priority="high">
+          <td><span class="badge badge-high">High</span></td>
+          <td><strong>Issues broadcast to whole office before being resolved</strong></td>
+          <td class="issue-text">When one issue is found, it is immediately passed across the entire office — causing stop-work on listings and other tasks unnecessarily. This creates panic and confusion rather than controlled resolution.</td>
+          <td class="fix-text">Triage rule: the person who finds an issue owns the first response. They assess: does this need a full stop? If yes, escalate to team lead only — not broadcast. Team lead decides scope. Nanthi Akka contacted only when SL team lead cannot resolve internally.</td>
+          <td><span class="owner-tag">👤 All SL team leads</span></td>
+        </tr>
+        <tr data-category="comms" data-priority="process">
+          <td><span class="badge badge-process">Process</span></td>
+          <td><strong>Public Holiday &amp; Ad-Hoc holiday alerts — no standard system</strong></td>
+          <td class="issue-text">PH and AH dates are not consistently communicated across teams in advance. This causes unplanned gaps in coverage and last-minute contact with Nanthi Akka to cover or advise.</td>
+          <td class="fix-text">All PH and AH dates posted in shared calendar minimum 2 weeks in advance. Auto-reminder to all team leads 3 days before. Nanthi Akka receives a single weekly summary — not individual ad-hoc alerts each time.</td>
+          <td><span class="owner-tag">👤 HR / admin lead in SL</span></td>
+        </tr>
+        <tr data-category="comms" data-priority="process">
+          <td><span class="badge badge-process">Process</span></td>
+          <td><strong>Label inconsistency — 5–6 year ongoing issue</strong></td>
+          <td class="issue-text">Purchasing labels have been inconsistent for years with no enforced standard. Variation in label format causes confusion in the warehouse during picking, packing, and returns processing.</td>
+          <td class="fix-text">SL team creates a label template document with exact format, font, and required fields. All new labels checked against template before printing. One-time audit of existing labels. MD signs off the standard — and enforces it — so it does not keep drifting.</td>
+          <td><span class="owner-tag">👤 SL warehouse admin + MD approval</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── RECOMMENDED NEXT STEPS ── -->
+  <div class="section" id="next-steps-section">
+    <div class="section-header">
+      <div class="section-icon" style="background:#e8eaf6;">📋</div>
+      <span class="section-title-text">Recommended Next Steps for MD</span>
+    </div>
+
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th style="width:60px;">Step</th>
+          <th style="width:140px;">When</th>
+          <th>Action</th>
+          <th>Expected outcome</th>
+          <th style="width:160px;">Who leads</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>1</strong></td>
+          <td><strong>This week</strong></td>
+          <td>Hold a 1-hour meeting with SL team leads. Go through all 6 Critical items. Assign a named owner to each. Set a 2-week deadline.</td>
+          <td>Every critical issue has a named person — Nanthi Akka no longer receives first-contact queries on these items.</td>
+          <td><span class="owner-tag">👤 MD + SL team leads</span></td>
+        </tr>
+        <tr>
+          <td><strong>2</strong></td>
+          <td><strong>Within 1 week</strong></td>
+          <td>SL listing team completes pick-list image audit and cable listing update. Accounts team sets pricing floor per SKU.</td>
+          <td>Listing errors resolved. No more pick errors caused by image mismatch. No more unprofitable orders.</td>
+          <td><span class="owner-tag">👤 SL listing + accounts lead</span></td>
+        </tr>
+        <tr>
+          <td><strong>3</strong></td>
+          <td><strong>Within 2 weeks</strong></td>
+          <td>Create leave-backup matrix and shift handover process. Post Royal Mail size-to-carrier rule card in packing area.</td>
+          <td>Work continues uninterrupted during absences. Courier booking errors eliminated.</td>
+          <td><span class="owner-tag">👤 SL operations lead</span></td>
+        </tr>
+        <tr>
+          <td><strong>4</strong></td>
+          <td><strong>Week 3–4</strong></td>
+          <td>Start weekly returns review meeting. Begin weekly stock cycle count for fast-moving SKUs. Launch shift handover note process.</td>
+          <td>Returns patterns caught early. Stock discrepancies identified before orders are placed. Shifts share context without relying on Nanthi Akka.</td>
+          <td><span class="owner-tag">👤 SL e-commerce + warehouse lead</span></td>
+        </tr>
+        <tr>
+          <td><strong>5</strong></td>
+          <td><strong>Month 2 review</strong></td>
+          <td>MD reviews with Nanthi Akka: which issues are still coming to her? These are the ones where ownership has not been adopted. Address the person, not the process.</td>
+          <td>Clear evidence of what is working and what still needs structural enforcement.</td>
+          <td><span class="owner-tag">👤 MD + Nanthi Akka</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</div><!-- /content -->
+
+<footer>
+  Prepared for <strong>MD Internal Review</strong> &nbsp;|&nbsp; Nanthi Akka Issue Analysis &nbsp;|&nbsp; Sri Lanka Office Accountability Fix Plan &nbsp;|&nbsp; July 2026
+</footer>
+
+<script>
+  function filterRows(type, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+
+    const allRows = document.querySelectorAll('tbody tr[data-category]');
+    const allSections = document.querySelectorAll('.section[data-section]');
+    const nextSteps = document.getElementById('next-steps-section');
+
+    if (type === 'all') {
+      allRows.forEach(r => r.classList.remove('row-hidden'));
+      allSections.forEach(s => s.style.display = '');
+      if (nextSteps) nextSteps.style.display = '';
+      return;
+    }
+
+    const priorityMap = { 'critical': 'critical', 'high': 'high' };
+    const categoryMap = { 'ownership': 'ownership', 'listing': 'listing', 'ops': 'ops', 'comms': 'comms' };
+
+    allRows.forEach(r => {
+      let show = false;
+      if (priorityMap[type] && r.dataset.priority === priorityMap[type]) show = true;
+      if (categoryMap[type] && r.dataset.category === categoryMap[type]) show = true;
+      r.classList.toggle('row-hidden', !show);
+    });
+
+    allSections.forEach(s => {
+      const visibleRows = s.querySelectorAll('tbody tr[data-category]:not(.row-hidden)');
+      s.style.display = visibleRows.length === 0 ? 'none' : '';
+    });
+
+    if (nextSteps) {
+      nextSteps.style.display = (type === 'critical' || type === 'high') ? 'none' : '';
+    }
+  }
+</script>
+
+</body>
+</html>
