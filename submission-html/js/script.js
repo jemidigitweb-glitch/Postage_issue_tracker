@@ -71,7 +71,8 @@ function initNav() {
    OPEN ISSUES — filter + search
    ================================================================ */
 
-let activeFilter = "all";
+let activeDomain = "all";
+let activeStatus = "all";
 let activeSearch = "";
 
 function applyIssueFilters() {
@@ -82,25 +83,28 @@ function applyIssueFilters() {
     const classification = row.dataset.classification || "";
     const priority       = row.dataset.priority       || "";
     const status         = row.dataset.status         || "";
+    const domain         = row.dataset.domain         || "";
     const text           = row.textContent.toLowerCase();
 
-    /* ---- Filter match ---- */
-    let filterMatch = false;
-    switch (activeFilter) {
-      case "all":          filterMatch = true;                         break;
-      case "daily-issue":  filterMatch = classification === "daily-issue"; break;
-      case "critical":     filterMatch = priority === "critical";      break;
-      case "high":         filterMatch = priority === "high";          break;
-      case "medium":       filterMatch = priority === "medium";        break;
-      case "investigation":filterMatch = status === "investigation";   break;
-      case "resolved":     filterMatch = status === "resolved";        break;
-      default:             filterMatch = true;
+    /* ---- Domain match ---- */
+    const domainMatch = activeDomain === "all" || domain === activeDomain;
+
+    /* ---- Status / priority match ---- */
+    let statusMatch = false;
+    switch (activeStatus) {
+      case "all":           statusMatch = true;                        break;
+      case "critical":      statusMatch = priority === "critical";     break;
+      case "high":          statusMatch = priority === "high";         break;
+      case "medium":        statusMatch = priority === "medium";       break;
+      case "investigation": statusMatch = status === "investigation";  break;
+      case "resolved":      statusMatch = status === "resolved";       break;
+      default:              statusMatch = true;
     }
 
     /* ---- Search match ---- */
     const searchMatch = activeSearch === "" || text.includes(activeSearch);
 
-    const show = filterMatch && searchMatch;
+    const show = domainMatch && statusMatch && searchMatch;
     row.classList.toggle("issue-row-hidden", !show);
     if (show) visible++;
   });
@@ -116,12 +120,22 @@ function applyIssueFilters() {
 }
 
 function initIssueFilters() {
-  /* Filter pills */
-  document.querySelectorAll(".filter-pill").forEach((btn) => {
+  /* Domain filter pills */
+  document.querySelectorAll(".domain-pill").forEach((btn) => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".filter-pill").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".domain-pill").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      activeFilter = btn.dataset.filter;
+      activeDomain = btn.dataset.domainFilter;
+      applyIssueFilters();
+    });
+  });
+
+  /* Status / priority filter pills */
+  document.querySelectorAll(".status-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".status-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeStatus = btn.dataset.statusFilter;
       applyIssueFilters();
     });
   });
@@ -136,9 +150,60 @@ function initIssueFilters() {
   }
 }
 
+/* ================================================================
+   RESOLUTION TOGGLE — two-option manual field per issue
+   localStorage key : issue-resolution-ISSUE-001 … ISSUE-013
+   Stored values    : "solved" | "not-solved" | (absent = empty)
+   Rules:
+     - Only one option selected at a time (radio behaviour)
+     - Clicking selected option again clears both (deselect)
+     - Solved  → green  (aria-pressed="true" on res-solved btn)
+     - Not Solved → red (aria-pressed="true" on res-not btn)
+   ================================================================ */
+
+const RES_ICON_OFF = "&#x2610;"; // ☐
+const RES_ICON_ON  = "&#x2611;"; // ☑
+
+function applyResolution(group, value) {
+  group.querySelectorAll(".res-btn").forEach((btn) => {
+    const isSelected = btn.dataset.value === value;
+    btn.setAttribute("aria-pressed", isSelected ? "true" : "false");
+    btn.querySelector(".res-icon").innerHTML = isSelected ? RES_ICON_ON : RES_ICON_OFF;
+  });
+}
+
+function initResolutionToggles() {
+  document.querySelectorAll(".resolution-group").forEach((group) => {
+    const issueId = group.dataset.issue;
+    const lsKey   = "issue-resolution-" + issueId;
+
+    // Restore persisted selection
+    const stored = localStorage.getItem(lsKey) || "";
+    applyResolution(group, stored);
+
+    // Wire each button
+    group.querySelectorAll(".res-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const isAlreadySelected = btn.getAttribute("aria-pressed") === "true";
+
+        if (isAlreadySelected) {
+          // Click on already-selected → clear both
+          applyResolution(group, "");
+          localStorage.removeItem(lsKey);
+        } else {
+          // Select clicked, deselect the other
+          applyResolution(group, btn.dataset.value);
+          localStorage.setItem(lsKey, btn.dataset.value);
+        }
+      });
+    });
+  });
+}
+
 /* ---- Boot ---- */
 document.addEventListener("DOMContentLoaded", () => {
   renderDate();
   initNav();
   initIssueFilters();
+  initResolutionToggles();
 });

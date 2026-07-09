@@ -338,15 +338,15 @@
         <!-- Stats bar -->
         <div class="issues-stats">
           <div class="issues-stat">
-            <span class="issues-stat-num num-total">13</span>
+            <span class="issues-stat-num num-total">15</span>
             <span class="issues-stat-label">Total Issues</span>
           </div>
           <div class="issues-stat">
-            <span class="issues-stat-num num-open">2</span>
+            <span class="issues-stat-num num-open">3</span>
             <span class="issues-stat-label">Critical — fix immediately</span>
           </div>
           <div class="issues-stat">
-            <span class="issues-stat-num num-invest">6</span>
+            <span class="issues-stat-num num-invest">7</span>
             <span class="issues-stat-label">High — fix this week</span>
           </div>
           <div class="issues-stat">
@@ -361,15 +361,24 @@
 
         <!-- Toolbar: filters + search -->
         <div class="issues-toolbar">
-          <div class="issues-filter-group">
-            <span class="issues-filter-label">Filter:</span>
-            <button class="filter-pill active" data-filter="all">All</button>
-            <button class="filter-pill" data-filter="daily-issue">Daily Issues</button>
-            <button class="filter-pill" data-filter="critical">Critical</button>
-            <button class="filter-pill" data-filter="high">High</button>
-            <button class="filter-pill" data-filter="medium">Medium</button>
-            <button class="filter-pill" data-filter="investigation">Investigation</button>
-            <button class="filter-pill" data-filter="resolved">Resolved</button>
+          <div class="issues-filters-wrap">
+            <div class="issues-filter-group">
+              <span class="issues-filter-label">Domain:</span>
+              <button class="filter-pill domain-pill active" data-domain-filter="all">All Domains</button>
+              <button class="filter-pill domain-pill" data-domain-filter="postage">Postage AIOS Daily Issues</button>
+              <button class="filter-pill domain-pill" data-domain-filter="listing">Listing AIOS Daily Issues</button>
+              <button class="filter-pill domain-pill" data-domain-filter="purchase">Purchase AIOS Daily Issues</button>
+              <button class="filter-pill domain-pill" data-domain-filter="pricing">Pricing AIOS Daily Issues</button>
+            </div>
+            <div class="issues-filter-group">
+              <span class="issues-filter-label">Status:</span>
+              <button class="filter-pill status-pill active" data-status-filter="all">All</button>
+              <button class="filter-pill status-pill" data-status-filter="critical">Critical</button>
+              <button class="filter-pill status-pill" data-status-filter="high">High</button>
+              <button class="filter-pill status-pill" data-status-filter="medium">Medium</button>
+              <button class="filter-pill status-pill" data-status-filter="investigation">Investigation</button>
+              <button class="filter-pill status-pill" data-status-filter="resolved">Resolved</button>
+            </div>
           </div>
           <div class="issues-search">
             <input class="search-input" id="issues-search" type="search" placeholder="Search issues…" autocomplete="off" />
@@ -383,7 +392,7 @@
         <div class="issues-section-hdr">
           <div class="issues-section-icon">📋</div>
           <span class="issues-section-title">Postage AIOS Daily Issues</span>
-          <span class="issues-section-count" id="section-count-label">13 issues</span>
+          <span class="issues-section-count" id="section-count-label">15 issues</span>
         </div>
 
         <!-- Issue table — columns match nanthi_akka_issue_report.html exactly -->
@@ -400,13 +409,14 @@
                   <th style="width:155px;">Document Gap</th>
                   <th style="min-width:240px;">Fix &amp; action required</th>
                   <th style="width:160px;">Owner (Sri Lanka)</th>
+                  <th style="width:130px;">Solved / Not Solved</th>
                   <th style="min-width:200px;">Evidence Images</th>
                 </tr>
               </thead>
               <tbody id="issues-tbody">
 
                 <!-- ISSUE-001 -->
-                <tr data-classification="daily-issue" data-priority="critical" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="critical" data-status="investigation">
                   <td class="col-date">2026-06-23</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-001</span></td>
                   <td class="col-priority"><span class="badge badge-critical">Critical</span></td>
@@ -415,11 +425,13 @@
                   <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-001</span><span class="gap-badge-title">Return Parcel Handling</span></span></td>
                   <td class="col-fix"><p class="fix-text">Establish a documented return parcel handling process. Confirm who owns returned stock decisions — hold, restock, write-off, or dispose. Assign one named person to review and action all incoming returns within 24 hours of receipt.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-001"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issue1/warehouse-image-001.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issue1/warehouse-image-001.png" class="evidence-thumb" alt="ISSUE-001 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-002 -->
-                <tr data-classification="daily-issue" data-priority="critical" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="critical" data-status="investigation">
                   <td class="col-date">2026-06-26</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-002</span></td>
                   <td class="col-priority"><span class="badge badge-critical">Critical</span></td>
@@ -428,11 +440,13 @@
                   <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-002</span><span class="gap-badge-title">Order Collection Status</span></span></td>
                   <td class="col-fix"><p class="fix-text">Investigate the system trigger that sets the "Collected" status. Determine whether it is set manually or automatically and at which workflow step. Prevent the status from updating until physical courier collection is confirmed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Operations Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-002"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issue%203/warehouse-image-003.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issue%203/warehouse-image-003.png" class="evidence-thumb" alt="ISSUE-002 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-003 -->
-                <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="high" data-status="investigation">
                   <td class="col-date">2026-06-26</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-003</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
@@ -441,11 +455,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Initiate a structured root cause investigation. Review return reason codes, customer feedback, and product specifications. Determine whether the cause is product quality, packaging, listing accuracy, or customer expectation. No documentation or procedure changes until root cause is confirmed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-003"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%204/warehouse-image-004.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%204/warehouse-image-004.png" class="evidence-thumb" alt="ISSUE-003 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-004 -->
-                <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="high" data-status="investigation">
                   <td class="col-date">2026-06-29</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-004</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
@@ -454,11 +470,13 @@
                   <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-003</span><span class="gap-badge-title">Labour Pricing Guidelines</span></span></td>
                   <td class="col-fix"><p class="fix-text">Conduct a fulfilment time study to measure actual pick, assemble, pack, and dispatch time for the most labour-intensive SKUs. Share results with the procurement and pricing team. Review pricing or product range decisions based on confirmed data only.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-004"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%205/warehouse-image-005.1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%205/warehouse-image-005.1.png" class="evidence-thumb" alt="ISSUE-004 evidence image 1" loading="lazy"></a><a href="Phase2-inputs/issues%205/warehouse-image-005.2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%205/warehouse-image-005.2.png" class="evidence-thumb" alt="ISSUE-004 evidence image 2" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-005 -->
-                <tr data-classification="daily-issue" data-priority="medium" data-status="monitoring">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="medium" data-status="monitoring">
                   <td class="col-date">2026-07-01</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-005</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
@@ -467,11 +485,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Observe the morning counting process directly to identify where breakdowns occur. Introduce a two-person verification count before each courier handover. Post a visual sorting guide at the dispatch area with courier colour coding.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-005"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%206/warehouse-image-006.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%206/warehouse-image-006.png" class="evidence-thumb" alt="ISSUE-005 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-006 -->
-                <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="high" data-status="investigation">
                   <td class="col-date">2026-07-02</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-006</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
@@ -480,11 +500,13 @@
                   <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-004</span><span class="gap-badge-title">Return Address Protocol</span></span></td>
                   <td class="col-fix"><p class="fix-text">Audit the postage booking system to identify all return addresses currently configured. Remove all non-standard entries. Standardise to a single confirmed return address. Confirm the correct address with Laksika before any system change is made.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Postage Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-006"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%207/warehouse-image-007.1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.1.png" class="evidence-thumb" alt="ISSUE-006 evidence image 1" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.2.png" class="evidence-thumb" alt="ISSUE-006 evidence image 2" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.3.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.3.png" class="evidence-thumb" alt="ISSUE-006 evidence image 3" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.4.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.4.png" class="evidence-thumb" alt="ISSUE-006 evidence image 4" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.5.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.5.png" class="evidence-thumb" alt="ISSUE-006 evidence image 5" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.6.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.6.png" class="evidence-thumb" alt="ISSUE-006 evidence image 6" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.7.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.7.png" class="evidence-thumb" alt="ISSUE-006 evidence image 7" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-007 -->
-                <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="high" data-status="investigation">
                   <td class="col-date">2026-07-03</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-007</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
@@ -493,11 +515,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Conduct a full physical count of CGSRBM across Unit 4 and all other warehouse locations. Reconcile the physical count against the system record. Investigate the source of the discrepancy — whether items were moved, consumed, or never received. Correct the system record only after physical confirmation.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Inventory Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-007"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%208/warehouse-image-008.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%208/warehouse-image-008.png" class="evidence-thumb" alt="ISSUE-007 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-008 -->
-                <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="high" data-status="investigation">
                   <td class="col-date">2026-07-03</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-008</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
@@ -506,11 +530,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Replace the picking image for CODL632AGYAPK with the correct "without hole" image immediately — before any further orders are processed for this SKU. Audit other wire connector SKUs for the same type of image mismatch.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-008"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%209/warehouse-image-009.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%209/warehouse-image-009.png" class="evidence-thumb" alt="ISSUE-008 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-009 -->
-                <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="medium" data-status="investigation">
                   <td class="col-date">2026-07-06</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-009</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
@@ -519,11 +545,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Verify the full Assemble Pack specification for LHRUE27WH. Update the warehouse packing instruction for this SKU to include all required components. Confirm the specification with the operations team before the next dispatch run for this SKU.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Packaging Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-009"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2011/warehouse-image-011.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2011/warehouse-image-011.png" class="evidence-thumb" alt="ISSUE-009 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-010 -->
-                <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="medium" data-status="investigation">
                   <td class="col-date">2026-07-07</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-010</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
@@ -532,11 +560,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Review the shipping manifest for the most recent delivery to confirm whether the missing variants were included. If not shipped, raise with the procurement team to confirm order status and expected delivery date. Hold any orders for these variants until stock is confirmed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Procurement Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-010"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2012/warehouse-image-012.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2012/warehouse-image-012.png" class="evidence-thumb" alt="ISSUE-010 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-011 -->
-                <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="medium" data-status="investigation">
                   <td class="col-date">2026-07-07</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-011</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
@@ -545,11 +575,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Update the product listing for WC SLBM to specify a full-thin fitting with 2m cable. Correct the back list to match. Instruct warehouse staff to use the correct hardware immediately for all current and future WC SLBM assemblies.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-011"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2013/warehouse-image-013.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2013/warehouse-image-013.png" class="evidence-thumb" alt="ISSUE-011 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-012 -->
-                <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="medium" data-status="investigation">
                   <td class="col-date">2026-07-07</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-012</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
@@ -558,11 +590,13 @@
                   <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Formally specify that grey range cable components are required for all ceiling roses with four or more outlets. Update the assembly instruction and product listing to reflect this requirement. Confirm with the operations team which SKUs are affected before updating documentation.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-012"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2014/warehouse-image-014.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2014/warehouse-image-014.png" class="evidence-thumb" alt="ISSUE-012 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
                 <!-- ISSUE-013 -->
-                <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="high" data-status="investigation">
                   <td class="col-date">2026-07-07</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-013</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
@@ -571,9 +605,38 @@
                   <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-005</span><span class="gap-badge-title">Component Pairing Procedure</span></span></td>
                   <td class="col-fix"><p class="fix-text">Contact the supplier to confirm the cause of the assembly delay and the expected resolution date. Create an interim manual pairing SOP for warehouse staff to follow while the delay continues. Add a pre-dispatch verification step to confirm pairing before each unit is packed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Procurement Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-013"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+
                                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/Issues%2015/warehouse-image-015.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/Issues%2015/warehouse-image-015.png" class="evidence-thumb" alt="ISSUE-013 evidence image 1" loading="lazy"></a></div></td>
 </tr>
 
+
+                <!-- ISSUE-014 -->
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="critical" data-status="investigation">
+                  <td class="col-date">—</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-014</span></td>
+                  <td class="col-priority"><span class="badge badge-critical">Critical</span></td>
+                  <td class="col-issue"><strong>ISSUE-014 — Royal Mail size violations</strong></td>
+                  <td class="col-what">Items over 60cm length booked on Royal Mail instead of courier. Pipe lighting must go on Every Courier international pack. Once booked incorrectly, labels cannot be cancelled and parcel returns are uncertain.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
+                  <td class="col-fix"><p class="fix-text">Post a size-to-carrier rule card in the packing area: "Over 60cm → Every Courier / International Pack. Pipe lighting → Always Every Courier international." Anyone booking a label checks this before confirming. SL team enforces this — no exceptions.</p></td>
+                  <td class="col-owner"><span class="owner-tag">👤 Postage Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-014"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+                  <td class="col-evidence"><span class="evidence-none">No Evidence Available</span></td>
+                </tr>
+                <!-- ISSUE-015 -->
+                <tr data-classification="daily-issue" data-domain="postage" data-priority="high" data-status="investigation">
+                  <td class="col-date">—</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-015</span></td>
+                  <td class="col-priority"><span class="badge badge-high">High</span></td>
+                  <td class="col-issue"><strong>ISSUE-015 — Amazon courier missed — no escalation process</strong></td>
+                  <td class="col-what">When Amazon collection is missed, no one sends the follow-up email to the courier. The email is missed, resulting in charges or delays. This is a routine task that repeatedly falls through because no one owns it.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
+                  <td class="col-fix"><p class="fix-text">If Amazon courier does not collect by cut-off time, designated SL staff sends escalation email within 1 hour using a saved template. Response confirmed in shared tracking doc.</p></td>
+                  <td class="col-owner"><span class="owner-tag">👤 Postage Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-015"><button class="res-btn res-solved"  data-value="solved"     aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not"     data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+                  <td class="col-evidence"><span class="evidence-none">No Evidence Available</span></td>
+                </tr>
               </tbody>
             </table>
           </div>

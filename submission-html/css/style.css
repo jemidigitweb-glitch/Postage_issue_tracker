@@ -599,6 +599,14 @@ body {
   margin-bottom: 20px;
 }
 
+.issues-filters-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
 .issues-filter-group {
   display: flex;
   align-items: center;
@@ -761,6 +769,85 @@ body {
   transform: scale(1.07);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
   cursor: pointer;
+}
+
+/* Solved / Not Solved column */
+/* Solved / Not Solved — manual two-option resolution column */
+.issues-table-wrap .data-table td.col-solved {
+  width: 150px;
+  vertical-align: middle;
+  text-align: left;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.resolution-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.res-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-sub);
+  background: transparent;
+  border: 1.5px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  user-select: none;
+  width: 100%;
+  text-align: left;
+}
+
+.res-btn:hover {
+  border-color: #94a3b8;
+}
+
+/* Solved — selected state: green */
+.res-btn.res-solved[aria-pressed="true"] {
+  color: #166534;
+  background: #dcfce7;
+  border-color: #86efac;
+}
+
+/* Not Solved — selected state: red */
+.res-btn.res-not[aria-pressed="true"] {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: #fca5a5;
+}
+
+@media (prefers-color-scheme: dark) {
+  .res-btn.res-solved[aria-pressed="true"] {
+    color: #4ade80;
+    background: #14532d;
+    border-color: #166534;
+  }
+  .res-btn.res-not[aria-pressed="true"] {
+    color: #f87171;
+    background: #450a0a;
+    border-color: #991b1b;
+  }
+}
+
+:root[data-theme="dark"] .res-btn.res-solved[aria-pressed="true"] {
+  color: #4ade80;
+  background: #14532d;
+  border-color: #166534;
+}
+
+:root[data-theme="dark"] .res-btn.res-not[aria-pressed="true"] {
+  color: #f87171;
+  background: #450a0a;
+  border-color: #991b1b;
 }
 
 .evidence-none {
