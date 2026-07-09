@@ -392,131 +392,187 @@
             <table class="data-table" id="issues-table">
               <thead>
                 <tr>
+                  <th style="width:120px;">Date</th>
+                  <th style="width:105px;">Issue ID</th>
                   <th style="width:90px;">Priority</th>
                   <th style="width:200px;">Issue</th>
                   <th style="min-width:220px;">What is happening</th>
+                  <th style="width:155px;">Document Gap</th>
                   <th style="min-width:240px;">Fix &amp; action required</th>
                   <th style="width:160px;">Owner (Sri Lanka)</th>
+                  <th style="min-width:200px;">Evidence Images</th>
                 </tr>
               </thead>
               <tbody id="issues-tbody">
 
                 <!-- ISSUE-001 -->
                 <tr data-classification="daily-issue" data-priority="critical" data-status="investigation">
+                  <td class="col-date">2026-06-23</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-001</span></td>
                   <td class="col-priority"><span class="badge badge-critical">Critical</span></td>
                   <td class="col-issue"><strong>ISSUE-001 — Return parcel accumulation — no documented handling process</strong></td>
                   <td class="col-what">Approximately three pallets of returned parcels have accumulated in the warehouse with no confirmed ownership or handling process. It is not documented what happens to returned parcels after arrival. Higher-value returns will compound the problem if left unresolved.</td>
-                  <td class="col-fix"><p class="fix-text">Establish a documented return parcel handling process. Confirm who owns returned stock decisions — hold, restock, write-off, or dispose. Assign one named person to review and action all incoming returns within 24 hours of receipt.<span class="doc-gap-note">Document Gap: Gap-001 – Missing Return Parcel Handling Documentation</span></p></td>
-                  <td class="col-owner"><span class="owner-tag">👤 Postage Team</span></td>
-                </tr>
+                  <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-001</span><span class="gap-badge-title">Return Parcel Handling</span></span></td>
+                  <td class="col-fix"><p class="fix-text">Establish a documented return parcel handling process. Confirm who owns returned stock decisions — hold, restock, write-off, or dispose. Assign one named person to review and action all incoming returns within 24 hours of receipt.</p></td>
+                  <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issue1/warehouse-image-001.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issue1/warehouse-image-001.png" class="evidence-thumb" alt="ISSUE-001 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-002 -->
                 <tr data-classification="daily-issue" data-priority="critical" data-status="investigation">
+                  <td class="col-date">2026-06-26</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-002</span></td>
                   <td class="col-priority"><span class="badge badge-critical">Critical</span></td>
                   <td class="col-issue"><strong>ISSUE-002 — Website orders showing "Collected" before physical collection has occurred</strong></td>
                   <td class="col-what">Customers are seeing a "Collected" status on their website orders before the courier has physically collected the parcel. The same issue was reported approximately one month earlier. A customer reported it again on 2026-06-26, confirming it is recurring.</td>
-                  <td class="col-fix"><p class="fix-text">Investigate the system trigger that sets the "Collected" status. Determine whether it is set manually or automatically and at which workflow step. Prevent the status from updating until physical courier collection is confirmed.<span class="doc-gap-note">Document Gap: Gap-002 – Missing Website Order Collection Status Process Documentation</span></p></td>
+                  <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-002</span><span class="gap-badge-title">Order Collection Status</span></span></td>
+                  <td class="col-fix"><p class="fix-text">Investigate the system trigger that sets the "Collected" status. Determine whether it is set manually or automatically and at which workflow step. Prevent the status from updating until physical courier collection is confirmed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Operations Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issue%203/warehouse-image-003.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issue%203/warehouse-image-003.png" class="evidence-thumb" alt="ISSUE-002 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-003 -->
                 <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                  <td class="col-date">2026-06-26</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-003</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
                   <td class="col-issue"><strong>ISSUE-003 — Recurring weekly returns of Crystal 120 and Crystal 160 fixtures</strong></td>
                   <td class="col-what">Approximately 10–15 Crystal 120 and Crystal 160 units are returned every week. Inventory is manually adjusted each time. No root cause investigation has been initiated. The same products continue to be returned week after week, creating a recurring and unresolved workload.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Initiate a structured root cause investigation. Review return reason codes, customer feedback, and product specifications. Determine whether the cause is product quality, packaging, listing accuracy, or customer expectation. No documentation or procedure changes until root cause is confirmed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%204/warehouse-image-004.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%204/warehouse-image-004.png" class="evidence-thumb" alt="ISSUE-003 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-004 -->
                 <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                  <td class="col-date">2026-06-29</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-004</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
                   <td class="col-issue"><strong>ISSUE-004 — Fulfilment labour cost exceeds product pricing on selected SKUs</strong></td>
                   <td class="col-what">Certain SKUs require excessive picking time and manual assembly relative to their selling price. Warehouse staff are spending significantly more time fulfilling these products than is economically viable. The labour cost per unit is not reflected in current pricing decisions.</td>
-                  <td class="col-fix"><p class="fix-text">Conduct a fulfilment time study to measure actual pick, assemble, pack, and dispatch time for the most labour-intensive SKUs. Share results with the procurement and pricing team. Review pricing or product range decisions based on confirmed data only.<span class="doc-gap-note">Document Gap: Gap-003 – Labor-Inclusive Pricing and Assembly Guidelines</span></p></td>
-                  <td class="col-owner"><span class="owner-tag">👤 Procurement Team</span></td>
-                </tr>
+                  <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-003</span><span class="gap-badge-title">Labour Pricing Guidelines</span></span></td>
+                  <td class="col-fix"><p class="fix-text">Conduct a fulfilment time study to measure actual pick, assemble, pack, and dispatch time for the most labour-intensive SKUs. Share results with the procurement and pricing team. Review pricing or product range decisions based on confirmed data only.</p></td>
+                  <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%205/warehouse-image-005.1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%205/warehouse-image-005.1.png" class="evidence-thumb" alt="ISSUE-004 evidence image 1" loading="lazy"></a><a href="Phase2-inputs/issues%205/warehouse-image-005.2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%205/warehouse-image-005.2.png" class="evidence-thumb" alt="ISSUE-004 evidence image 2" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-005 -->
                 <tr data-classification="daily-issue" data-priority="medium" data-status="monitoring">
+                  <td class="col-date">2026-07-01</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-005</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
                   <td class="col-issue"><strong>ISSUE-005 — DPD, EVRi, and Royal Mail parcels miscounted or mixed during morning dispatch</strong></td>
                   <td class="col-what">Morning dispatch preparation produces inaccurate parcel counts and occasional mixing of parcels between courier groups. The issue affects the accuracy of handover records to each courier and creates a risk of misdirected or uncollected parcels and courier disputes.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Observe the morning counting process directly to identify where breakdowns occur. Introduce a two-person verification count before each courier handover. Post a visual sorting guide at the dispatch area with courier colour coding.</p></td>
-                  <td class="col-owner"><span class="owner-tag">👤 Courier Team</span></td>
-                </tr>
+                  <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%206/warehouse-image-006.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%206/warehouse-image-006.png" class="evidence-thumb" alt="ISSUE-005 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-006 -->
                 <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                  <td class="col-date">2026-07-02</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-006</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
                   <td class="col-issue"><strong>ISSUE-006 — Multiple return addresses appearing on postage labels</strong></td>
                   <td class="col-what">Postage labels are being generated with different return addresses instead of a single standardised address. Returned parcels may be directed to incorrect locations depending on which address was active at the time of booking. The inconsistency has been identified across multiple bookings.</td>
-                  <td class="col-fix"><p class="fix-text">Audit the postage booking system to identify all return addresses currently configured. Remove all non-standard entries. Standardise to a single confirmed return address. Confirm the correct address with Laksika before any system change is made.<span class="doc-gap-note">Document Gap: Gap-004 – Return Address Selection and Verification Protocol</span></p></td>
+                  <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-004</span><span class="gap-badge-title">Return Address Protocol</span></span></td>
+                  <td class="col-fix"><p class="fix-text">Audit the postage booking system to identify all return addresses currently configured. Remove all non-standard entries. Standardise to a single confirmed return address. Confirm the correct address with Laksika before any system change is made.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Postage Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%207/warehouse-image-007.1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.1.png" class="evidence-thumb" alt="ISSUE-006 evidence image 1" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.2.png" class="evidence-thumb" alt="ISSUE-006 evidence image 2" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.3.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.3.png" class="evidence-thumb" alt="ISSUE-006 evidence image 3" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.4.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.4.png" class="evidence-thumb" alt="ISSUE-006 evidence image 4" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.5.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.5.png" class="evidence-thumb" alt="ISSUE-006 evidence image 5" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.6.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.6.png" class="evidence-thumb" alt="ISSUE-006 evidence image 6" loading="lazy"></a><a href="Phase2-inputs/issues%207/warehouse-image-007.7.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%207/warehouse-image-007.7.png" class="evidence-thumb" alt="ISSUE-006 evidence image 7" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-007 -->
                 <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                  <td class="col-date">2026-07-03</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-007</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
                   <td class="col-issue"><strong>ISSUE-007 — Approximately 1,495 Metal Cord Clips (SKU: CGSRBM) recorded in Unit 4 cannot be physically located</strong></td>
                   <td class="col-what">The inventory system shows 1,495 Metal Cord Clips assigned to Unit 4. When warehouse staff attempt to pick against orders, the stock is not physically present. Orders for this SKU cannot be fulfilled. The location record does not match physical warehouse reality.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Conduct a full physical count of CGSRBM across Unit 4 and all other warehouse locations. Reconcile the physical count against the system record. Investigate the source of the discrepancy — whether items were moved, consumed, or never received. Correct the system record only after physical confirmation.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Inventory Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%208/warehouse-image-008.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%208/warehouse-image-008.png" class="evidence-thumb" alt="ISSUE-007 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-008 -->
                 <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                  <td class="col-date">2026-07-03</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-008</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
                   <td class="col-issue"><strong>ISSUE-008 — Picking image for SKU CODL632AGYAPK shows the wrong product variant</strong></td>
                   <td class="col-what">The picking image for wire connector SKU CODL632AGYAPK displays the "with hole" variant. The product listing sells the "without hole" standard variant. Every order processed against this image carries a mispick risk until the image is corrected.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Replace the picking image for CODL632AGYAPK with the correct "without hole" image immediately — before any further orders are processed for this SKU. Audit other wire connector SKUs for the same type of image mismatch.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%209/warehouse-image-009.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%209/warehouse-image-009.png" class="evidence-thumb" alt="ISSUE-008 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-009 -->
                 <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                  <td class="col-date">2026-07-06</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-009</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
                   <td class="col-issue"><strong>ISSUE-009 — White Light Socket (SKU: LHRUE27WH) dispatched without required packaging or components</strong></td>
                   <td class="col-what">SKU LHRUE27WH is currently being dispatched without meeting the Assemble Pack requirement. The exact specification for what must be included with each unit has not been confirmed and is not being applied consistently during dispatch.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Verify the full Assemble Pack specification for LHRUE27WH. Update the warehouse packing instruction for this SKU to include all required components. Confirm the specification with the operations team before the next dispatch run for this SKU.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Packaging Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2011/warehouse-image-011.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2011/warehouse-image-011.png" class="evidence-thumb" alt="ISSUE-009 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-010 -->
                 <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                  <td class="col-date">2026-07-07</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-010</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
                   <td class="col-issue"><strong>ISSUE-010 — Twisted and hook variants of E27 Vintage Industrial Lamp Holder not received in delivery</strong></td>
                   <td class="col-what">The twisted and hook variants of the E27 Vintage Industrial Lamp Holder have not been received in the most recent delivery, despite the standard copper variant (SKU LHNHE27YB) being in stock. Orders requiring the missing variants cannot be fulfilled until stock arrives.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Review the shipping manifest for the most recent delivery to confirm whether the missing variants were included. If not shipped, raise with the procurement team to confirm order status and expected delivery date. Hold any orders for these variants until stock is confirmed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Procurement Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2012/warehouse-image-012.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2012/warehouse-image-012.png" class="evidence-thumb" alt="ISSUE-010 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-011 -->
                 <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                  <td class="col-date">2026-07-07</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-011</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
                   <td class="col-issue"><strong>ISSUE-011 — Half-thin fitting specified for WC SLBM small diamond cage is incompatible</strong></td>
                   <td class="col-what">The small diamond cage (Part No: WC SLBM) is listed and assembled using a half-thin fitting. The half-thin fitting is too narrow for the cage and produces an incorrect assembly. The correct configuration is a full-thin fitting paired with a 2m cable. Both the product listing and back list currently specify the wrong hardware.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Update the product listing for WC SLBM to specify a full-thin fitting with 2m cable. Correct the back list to match. Instruct warehouse staff to use the correct hardware immediately for all current and future WC SLBM assemblies.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2013/warehouse-image-013.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2013/warehouse-image-013.png" class="evidence-thumb" alt="ISSUE-011 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-012 -->
                 <tr data-classification="daily-issue" data-priority="medium" data-status="investigation">
+                  <td class="col-date">2026-07-07</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-012</span></td>
                   <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
                   <td class="col-issue"><strong>ISSUE-012 — Standard cable configuration causes crowding in ceiling roses with 4+ outlets</strong></td>
                   <td class="col-what">Ceiling roses with more than four outlets do not provide sufficient internal space to accommodate standard cables without crowding and cable curl. Using grey range cable components resolves the issue, but this requirement is not standardised in the product listing or assembly instructions for affected SKUs.</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
                   <td class="col-fix"><p class="fix-text">Formally specify that grey range cable components are required for all ceiling roses with four or more outlets. Update the assembly instruction and product listing to reflect this requirement. Confirm with the operations team which SKUs are affected before updating documentation.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Warehouse Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2014/warehouse-image-014.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2014/warehouse-image-014.png" class="evidence-thumb" alt="ISSUE-012 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
                 <!-- ISSUE-013 -->
                 <tr data-classification="daily-issue" data-priority="high" data-status="investigation">
+                  <td class="col-date">2026-07-07</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-013</span></td>
                   <td class="col-priority"><span class="badge badge-high">High</span></td>
                   <td class="col-issue"><strong>ISSUE-013 — SPUPBM black metal mounts and 2m cables arriving separately; manual pairing performed without a documented procedure</strong></td>
                   <td class="col-what">For approximately one month, black metal base plate mounts (SKU: SPUPBM) have been received without their paired 2m cable components already assembled by the supplier. Warehouse staff are manually combining the mount and cable for every order. This is being performed without a documented SOP, a verification step, or a formally assigned responsibility.</td>
-                  <td class="col-fix"><p class="fix-text">Contact the supplier to confirm the cause of the assembly delay and the expected resolution date. Create an interim manual pairing SOP for warehouse staff to follow while the delay continues. Add a pre-dispatch verification step to confirm pairing before each unit is packed.<span class="doc-gap-note">Document Gap: Gap-005 – Dependent Component Pairing and Kitting Procedure</span></p></td>
+                  <td class="col-gap"><span class="gap-badge"><span class="gap-badge-id">Gap-005</span><span class="gap-badge-title">Component Pairing Procedure</span></span></td>
+                  <td class="col-fix"><p class="fix-text">Contact the supplier to confirm the cause of the assembly delay and the expected resolution date. Create an interim manual pairing SOP for warehouse staff to follow while the delay continues. Add a pre-dispatch verification step to confirm pairing before each unit is packed.</p></td>
                   <td class="col-owner"><span class="owner-tag">👤 Procurement Team</span></td>
-                </tr>
+                                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/Issues%2015/warehouse-image-015.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/Issues%2015/warehouse-image-015.png" class="evidence-thumb" alt="ISSUE-013 evidence image 1" loading="lazy"></a></div></td>
+</tr>
 
               </tbody>
             </table>
