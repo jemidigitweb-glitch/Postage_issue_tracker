@@ -330,9 +330,36 @@
       <section id="section-issues" hidden>
 
         <!-- Page heading -->
-        <div class="page-header">
-          <h1 class="page-title">Open Issues</h1>
-          <p class="page-subtitle">Postage AIOS daily issues — logged, classified, and tracked by the operational intelligence workflow.</p>
+        <div class="page-header issues-page-header">
+          <div>
+            <h1 class="page-title">Open Issues</h1>
+            <p class="page-subtitle">Postage AIOS daily issues — logged, classified, and tracked by the operational intelligence workflow.</p>
+          </div>
+          <button class="btn-add-issues" id="btn-add-latest" title="Import new issues from intelligence-inbox/daily-issues/">&#43; Add Latest Issues</button>
+        </div>
+
+        <!-- Add Latest Issues modal/panel -->
+        <div class="add-issues-panel" id="add-issues-panel" hidden>
+          <div class="add-issues-panel-inner">
+            <div class="add-issues-panel-header">
+              <strong>Add Latest Issues — Import Workflow</strong>
+              <button class="add-issues-close" id="add-issues-close" aria-label="Close">&times;</button>
+            </div>
+            <div class="add-issues-panel-body" id="add-issues-body">
+              <p>This dashboard is a static HTML file. New issues are imported using a local Python script.</p>
+              <p><strong>Run this command from the project root:</strong></p>
+              <code class="add-issues-cmd">python3 tools/import-issues.py</code>
+              <p>The script will:</p>
+              <ul>
+                <li>Read all <code>intelligence-inbox/daily-issues/*.md</code> files</li>
+                <li>Compare against issues already in this dashboard</li>
+                <li>Add only new issues — never duplicates</li>
+                <li>Verify evidence images before attaching them</li>
+                <li>Report what was added and what was skipped</li>
+              </ul>
+              <p class="add-issues-note">After running the script, reload this page to see new issues.</p>
+            </div>
+          </div>
         </div>
 
         <!-- Stats bar -->
@@ -379,6 +406,12 @@
               <button class="filter-pill status-pill" data-status-filter="investigation">Investigation</button>
               <button class="filter-pill status-pill" data-status-filter="resolved">Resolved</button>
             </div>
+            <div class="issues-filter-group">
+              <span class="issues-filter-label">Person:</span>
+              <button class="filter-pill person-pill active" data-person-filter="all">All</button>
+              <button class="filter-pill person-pill" data-person-filter="sasi">Sasi</button>
+              <button class="filter-pill person-pill" data-person-filter="nivarnan">Nivarnan</button>
+            </div>
           </div>
           <div class="issues-search">
             <input class="search-input" id="issues-search" type="search" placeholder="Search issues…" autocomplete="off" />
@@ -386,7 +419,7 @@
         </div>
 
         <!-- Visible count -->
-        <p class="issues-count-line" id="issues-count">Showing all 13 issues</p>
+        <p class="issues-count-line" id="issues-count">Showing all 15 issues</p>
 
         <!-- Section header (matches reference styling) -->
         <div class="issues-section-hdr">

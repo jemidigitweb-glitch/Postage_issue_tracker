@@ -73,6 +73,7 @@ function initNav() {
 
 let activeDomain = "all";
 let activeStatus = "all";
+let activePerson = "all";
 let activeSearch = "";
 
 function applyIssueFilters() {
@@ -101,10 +102,14 @@ function applyIssueFilters() {
       default:              statusMatch = true;
     }
 
+    /* ---- Person match ---- */
+    const person      = (row.dataset.person || "").toLowerCase();
+    const personMatch = activePerson === "all" || person === activePerson;
+
     /* ---- Search match ---- */
     const searchMatch = activeSearch === "" || text.includes(activeSearch);
 
-    const show = domainMatch && statusMatch && searchMatch;
+    const show = domainMatch && statusMatch && personMatch && searchMatch;
     row.classList.toggle("issue-row-hidden", !show);
     if (show) visible++;
   });
@@ -140,6 +145,16 @@ function initIssueFilters() {
     });
   });
 
+  /* Person filter pills */
+  document.querySelectorAll(".person-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".person-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      activePerson = btn.dataset.personFilter;
+      applyIssueFilters();
+    });
+  });
+
   /* Search box */
   const searchInput = document.getElementById("issues-search");
   if (searchInput) {
@@ -148,6 +163,26 @@ function initIssueFilters() {
       applyIssueFilters();
     });
   }
+}
+
+/* ================================================================
+   ADD LATEST ISSUES — button toggles info panel
+   ================================================================ */
+function initAddIssuesPanel() {
+  const btn   = document.getElementById("btn-add-latest");
+  const panel = document.getElementById("add-issues-panel");
+  const close = document.getElementById("add-issues-close");
+  if (!btn || !panel || !close) return;
+
+  btn.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+  });
+  close.addEventListener("click", () => {
+    panel.hidden = true;
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") panel.hidden = true;
+  });
 }
 
 /* ================================================================
@@ -206,4 +241,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initNav();
   initIssueFilters();
   initResolutionToggles();
+  initAddIssuesPanel();
 });
