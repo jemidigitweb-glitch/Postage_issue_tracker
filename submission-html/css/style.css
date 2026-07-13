@@ -452,6 +452,17 @@ body {
   padding: 3px 8px;
 }
 
+.badge-tbd {
+  background: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+}
+
 .badge-resolved {
   background: var(--badge-res-bg);
   color: var(--badge-res-text);
@@ -814,6 +825,23 @@ body {
   outline: 3px solid #93c5fd;
   outline-offset: 2px;
 }
+
+.btn-do-import {
+  display: inline-block;
+  margin: 10px 0 6px;
+  padding: 8px 18px;
+  background: #16a34a;
+  color: #ffffff;
+  border: 1px solid #15803d;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1.4;
+  transition: background 0.15s;
+}
+
+.btn-do-import:hover { background: #15803d; }
 
 .add-issues-panel {
   margin-bottom: 20px;

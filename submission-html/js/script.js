@@ -166,20 +166,192 @@ function initIssueFilters() {
 }
 
 /* ================================================================
-   ADD LATEST ISSUES — button toggles info panel
+   STATISTICS — recalculate from all rows after import
    ================================================================ */
+function recalculateStats() {
+  const rows = document.querySelectorAll("#issues-tbody tr");
+  let total = 0, critical = 0, high = 0, medium = 0, resolved = 0;
+
+  rows.forEach((row) => {
+    total++;
+    const p = (row.dataset.priority || "").toLowerCase();
+    const s = (row.dataset.status   || "").toLowerCase();
+    if (p === "critical") critical++;
+    if (p === "high")     high++;
+    if (p === "medium")   medium++;
+    if (s === "resolved") resolved++;
+  });
+
+  const set = (cls, val) => {
+    const el = document.querySelector("." + cls);
+    if (el) el.textContent = val;
+  };
+  set("num-total",    total);
+  set("num-open",     critical);
+  set("num-invest",   high);
+  set("num-monitor",  medium);
+  set("num-resolved", resolved);
+}
+
+/* ================================================================
+   ADD LATEST ISSUES — real import from window.AIOS_ISSUES_DATA
+   ================================================================ */
+
+function getDomIssueIds() {
+  const ids = new Set();
+  document.querySelectorAll("#issues-tbody tr").forEach((row) => {
+    const badge = row.querySelector(".issue-id-badge");
+    if (badge) ids.add(badge.textContent.trim());
+  });
+  return ids;
+}
+
+function buildIssueRow(issue) {
+  const esc = (s) => String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const id   = issue.id;
+  const date = issue.date || "—";
+  const dom  = esc(issue.domain  || "");
+  const pri  = esc(issue.priority || "");
+  const sts  = esc(issue.status   || "investigation");
+
+  const resHtml =
+    `<div class="resolution-group" data-issue="${id}">` +
+    `<button class="res-btn res-solved" data-value="solved" aria-pressed="false">` +
+    `<span class="res-icon">&#x2610;</span> Solved</button>` +
+    `<button class="res-btn res-not" data-value="not-solved" aria-pressed="false">` +
+    `<span class="res-icon">&#x2610;</span> Not Solved</button></div>`;
+
+  const tr = document.createElement("tr");
+  tr.dataset.classification = "daily-issue";
+  tr.dataset.domain   = dom;
+  tr.dataset.priority = pri;
+  tr.dataset.status   = sts;
+
+  tr.innerHTML =
+    `<td class="col-date">${esc(date)}</td>` +
+    `<td class="col-id"><span class="issue-id-badge">${esc(id)}</span></td>` +
+    `<td class="col-priority">${issue.priorityBadge || "<span class='badge badge-tbd'>TBD</span>"}</td>` +
+    `<td class="col-issue"><strong>${esc(id)} — ${esc(issue.title || "")}</strong></td>` +
+    `<td class="col-what">${esc(issue.what || "")}</td>` +
+    `<td class="col-gap"><span class="${esc(issue.gapClass || "gap-none")}">${esc(issue.gapLabel || "—")}</span></td>` +
+    `<td class="col-fix"><p class="fix-text">${esc(issue.fix || "")}</p></td>` +
+    `<td class="col-owner"><span class="owner-tag">&#128100; ${esc(issue.owner || "—")}</span></td>` +
+    `<td class="col-solved">${resHtml}</td>` +
+    `<td class="col-evidence">${issue.evidenceHtml || '<span class="evidence-none">No Evidence Available</span>'}</td>`;
+
+  return tr;
+}
+
+function wireNewRow(tr) {
+  const group   = tr.querySelector(".resolution-group");
+  if (!group) return;
+  const issueId = group.dataset.issue;
+  const lsKey   = "issue-resolution-" + issueId;
+  const stored  = localStorage.getItem(lsKey) || "";
+  applyResolution(group, stored);
+  group.querySelectorAll(".res-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const already = btn.getAttribute("aria-pressed") === "true";
+      if (already) {
+        applyResolution(group, "");
+        localStorage.removeItem(lsKey);
+      } else {
+        applyResolution(group, btn.dataset.value);
+        localStorage.setItem(lsKey, btn.dataset.value);
+      }
+    });
+  });
+}
+
+function showPanelMessage(bodyEl, html) {
+  bodyEl.innerHTML = html;
+}
+
 function initAddIssuesPanel() {
   const btn   = document.getElementById("btn-add-latest");
   const panel = document.getElementById("add-issues-panel");
   const close = document.getElementById("add-issues-close");
-  if (!btn || !panel || !close) return;
+  const body  = document.getElementById("add-issues-body");
+  if (!btn || !panel || !close || !body) return;
+
+  function refreshPanelContent() {
+    const data = window.AIOS_ISSUES_DATA;
+
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      showPanelMessage(body,
+        `<p>No import data available.</p>
+         <p>Run the following command from the project root, then reload the page:</p>
+         <code class="add-issues-cmd">python3 tools/import-issues.py --generate</code>`
+      );
+      return;
+    }
+
+    const domIds    = getDomIssueIds();
+    const toImport  = data.filter((issue) => !domIds.has(issue.id));
+    const alreadyIn = data.filter((issue) =>  domIds.has(issue.id));
+
+    if (toImport.length === 0) {
+      const list = alreadyIn.map((i) => `<li>${i.id}</li>`).join("");
+      showPanelMessage(body,
+        `<p><strong>&#10003; All available issues are already in the dashboard.</strong></p>
+         <ul>${list}</ul>
+         <p class="add-issues-note">To add future issues: update the inbox, then re-run
+         <code>python3 tools/import-issues.py --generate</code> and reload.</p>`
+      );
+      return;
+    }
+
+    const listHtml = toImport.map((i) =>
+      `<li><strong>${i.id}</strong> — ${i.domain} — ${i.date || "no date"}</li>`
+    ).join("");
+
+    showPanelMessage(body,
+      `<p><strong>${toImport.length} new issue(s) ready to import:</strong></p>
+       <ul>${listHtml}</ul>
+       <button class="btn-do-import" id="btn-do-import">&#43; Import ${toImport.length} issue(s)</button>
+       <p class="add-issues-note">Import adds rows to the current page only.
+       For permanent persistence, run
+       <code>python3 tools/import-issues.py --apply</code> and reload.</p>`
+    );
+
+    const doBtn = document.getElementById("btn-do-import");
+    if (doBtn) {
+      doBtn.addEventListener("click", () => {
+        const tbody = document.getElementById("issues-tbody");
+        if (!tbody) return;
+
+        toImport.forEach((issue) => {
+          const tr = buildIssueRow(issue);
+          tbody.appendChild(tr);
+          wireNewRow(tr);
+        });
+
+        recalculateStats();
+        applyIssueFilters();
+
+        const imported = toImport.map((i) => `<li>${i.id}</li>`).join("");
+        showPanelMessage(body,
+          `<p><strong>&#10003; ${toImport.length} issue(s) imported successfully.</strong></p>
+           <ul>${imported}</ul>
+           <p class="add-issues-note">These rows exist in the current page session.
+           Reload the page and click this button again to re-import,
+           or run <code>python3 tools/import-issues.py --apply</code>
+           for permanent persistence.</p>`
+        );
+      });
+    }
+  }
 
   btn.addEventListener("click", () => {
-    panel.hidden = !panel.hidden;
+    const opening = panel.hidden;
+    panel.hidden  = !panel.hidden;
+    if (opening) refreshPanelContent();
   });
-  close.addEventListener("click", () => {
-    panel.hidden = true;
-  });
+
+  close.addEventListener("click", () => { panel.hidden = true; });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") panel.hidden = true;
   });
