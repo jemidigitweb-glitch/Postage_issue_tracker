@@ -3,9 +3,10 @@
 AIOS — Daily Issue Importer
 ============================
 Modes:
-  python3 tools/import-issues.py            → report only, no files changed
-  python3 tools/import-issues.py --generate → report + generate issues-data.js
-  python3 tools/import-issues.py --apply    → generate + patch index.html with new rows
+  python3 tools/import-issues.py                        → report only, no files changed
+  python3 tools/import-issues.py --generate             → report + generate issues-data.js
+  python3 tools/import-issues.py --apply                → generate + patch index.html with new rows
+  python3 tools/import-issues.py --repair-evidence NNN  → repair evidence for an already-imported issue
 
 Safety rules enforced:
   - Duplicate checking by Issue ID (ISSUE-NNN pattern in filename)
@@ -18,10 +19,13 @@ Safety rules enforced:
 Run from the project root (postage-aios/).
 """
 
+import json
 import os
 import re
 import sys
+import tempfile
 import html as html_module
+from urllib.parse import unquote
 
 # ── Paths ─────────────────────────────────────────────────────────────────
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -97,6 +101,18 @@ def parse_issue_md(path):
         ["## Fix and Action Required", "## Fix & Action Required",
          "## Fix / Action Required", "## Proposed Fix"])
 
+    # Parse evidence paths from the ## Evidence section.
+    # Targets lines of the form:  - `Phase2-inputs/path/to/file.ext`
+    # Paths are URL-encoded in the MD; unquote() restores the filesystem name.
+    evidence_block = _extract_raw_section(content, ["## Evidence"])
+    for line in evidence_block.splitlines():
+        m = re.match(r"\s*-\s+`(Phase2-inputs/[^`]+)`", line)
+        if m:
+            url_path = m.group(1)
+            fs_rel   = unquote(url_path)
+            abs_path = os.path.join(PROJECT_ROOT, "submission-html", fs_rel)
+            issue["evidence_paths"].append(abs_path)
+
     # Normalise priority to lowercase, remove TBD as a real priority level
     p = issue["priority"].lower()
     if p in ("tbd", "unknown", ""):
@@ -136,6 +152,18 @@ def _extract_section(content, headings):
         # Take first meaningful paragraph
         paras = [p.strip() for p in text.split("\n\n") if p.strip() and not p.strip().startswith("|")]
         return paras[0][:600] if paras else ""
+    return ""
+
+
+def _extract_raw_section(content, headings):
+    """Return raw (unprocessed) text block under the first matching heading, or ''."""
+    for heading in headings:
+        idx = content.find(heading)
+        if idx == -1:
+            continue
+        rest = content[idx + len(heading):]
+        m = re.search(r"\n## ", rest)
+        return rest[:m.start()] if m else rest
     return ""
 
 
@@ -270,8 +298,6 @@ def build_row_html(issue):
 
 def build_js_entry(issue):
     """Return a JS object literal string for issues-data.js."""
-    import json
-
     issue_id = "ISSUE-" + re.sub(r"^ISSUE-?", "", issue["id"], flags=re.IGNORECASE).zfill(3)
 
     gap_label, _ = build_gap_display(issue.get("gap_file", ""))
@@ -358,6 +384,169 @@ def get_inbox_issues():
             continue
         issues.append((num, fname, os.path.join(INBOX_DIR, fname)))
     return issues
+
+
+# ── Evidence repair ───────────────────────────────────────────────────────
+
+def repair_evidence(issue_ref):
+    """
+    Repair the evidence display for an already-imported issue.
+
+    Accepts: ISSUE-019 | issue-019 | 019 | 19
+    Uses existing parse_issue_md(), validate_issue(), build_evidence_html().
+    Writes are atomic (tempfile + os.replace()). Idempotent.
+    Exits with code 1 on any safety check failure.
+    """
+    # Normalize to 3-digit zero-padded number
+    digits = re.sub(r"\D", "", str(issue_ref))
+    if not digits:
+        print(f"ERROR: Cannot parse issue number from '{issue_ref}'.", file=sys.stderr)
+        sys.exit(1)
+    num      = digits.zfill(3)
+    issue_id = f"ISSUE-{num}"
+
+    print("=" * 62)
+    print(f"AIOS — Evidence Repair: {issue_id}")
+    print("=" * 62)
+
+    # 1. Find exactly one MD file for this issue number
+    matches = [
+        os.path.join(INBOX_DIR, fname)
+        for fname in sorted(os.listdir(INBOX_DIR))
+        if fname.endswith(".md") and extract_issue_number(fname) == num
+    ]
+    if len(matches) == 0:
+        print(f"ERROR: No MD file found for {issue_id} in intelligence-inbox/daily-issues/.", file=sys.stderr)
+        sys.exit(1)
+    if len(matches) > 1:
+        print(f"ERROR: Multiple MD files found for {issue_id}: {matches}", file=sys.stderr)
+        sys.exit(1)
+
+    md_path = matches[0]
+    print(f"  Source MD: {os.path.relpath(md_path, PROJECT_ROOT)}")
+
+    # 2. Parse and validate — no second parser, no invented values
+    issue  = parse_issue_md(md_path)
+    errors = validate_issue(issue, os.path.basename(md_path), GAPS_DIR)
+    if errors:
+        print(f"ERROR: {issue_id} failed validation:", file=sys.stderr)
+        for e in errors:
+            print(f"  ✗  {e}", file=sys.stderr)
+        sys.exit(1)
+
+    # 3. Confirm the parsed Issue ID matches what was requested
+    parsed_num = re.sub(r"^ISSUE-?", "", issue.get("id", ""), flags=re.IGNORECASE).zfill(3)
+    if parsed_num != num:
+        print(
+            f"ERROR: MD file declares Issue ID '{issue.get('id')}' "
+            f"but '{issue_id}' was requested.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    print(f"  Evidence paths found: {len(issue['evidence_paths'])}")
+    for ep in issue["evidence_paths"]:
+        print(f"    {os.path.relpath(ep, PROJECT_ROOT)}")
+
+    # 4. Build new evidence HTML — no second gallery builder
+    new_ev_html = build_evidence_html(issue["evidence_paths"])
+
+    # ── Repair index.html ───────────────────────────────────────────
+    with open(DASHBOARD, encoding="utf-8") as f:
+        html_content = f.read()
+
+    comment_marker = f"<!-- {issue_id} -->"
+    count = html_content.count(comment_marker)
+    if count == 0:
+        print(
+            f"ERROR: '{comment_marker}' not found in index.html. "
+            f"Is {issue_id} imported?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if count > 1:
+        print(
+            f"ERROR: '{comment_marker}' appears {count} times in index.html (expected 1).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # Scope to the row block only — from the comment to the closing </tr>
+    comment_pos = html_content.index(comment_marker)
+    tr_end_pos  = html_content.index("</tr>", comment_pos)
+    row_block   = html_content[comment_pos : tr_end_pos + 5]
+
+    ev_td_m = re.search(r'(<td class="col-evidence">)(.*?)(</td>)', row_block, re.DOTALL)
+    if not ev_td_m:
+        print(f"ERROR: col-evidence td not found in {issue_id} row.", file=sys.stderr)
+        sys.exit(1)
+
+    html_changed = False
+    if ev_td_m.group(2) == new_ev_html:
+        print(f"  index.html: {issue_id} evidence already correct — no change.")
+    else:
+        new_row  = row_block[: ev_td_m.start(2)] + new_ev_html + row_block[ev_td_m.end(2) :]
+        new_html = html_content[:comment_pos] + new_row + html_content[comment_pos + len(row_block) :]
+        html_dir = os.path.dirname(DASHBOARD)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=html_dir, suffix=".tmp", delete=False) as tf:
+            tf.write(new_html)
+            tmp_path = tf.name
+        os.replace(tmp_path, DASHBOARD)
+        print(f"  ✓  index.html: {issue_id} col-evidence updated.")
+        html_changed = True
+
+    # ── Repair issues-data.js if entry exists ───────────────────────
+    with open(DATA_JS, encoding="utf-8") as f:
+        js_content = f.read()
+
+    # Locate this issue's entry block by its id: "ISSUE-NNN" key
+    id_pattern  = r"id:\s+" + re.escape(json.dumps(issue_id))
+    id_match    = re.search(id_pattern, js_content)
+    js_changed  = False
+
+    if not id_match:
+        print(f"  issues-data.js: no entry for {issue_id} — skipping.")
+    else:
+        entry_slice = js_content[id_match.start():]
+        ev_js_m = re.search(
+            r"(evidenceHtml:\s+)(\"(?:[^\"\\]|\\.)*\")(,?\s*\n)",
+            entry_slice,
+        )
+        if not ev_js_m:
+            print(
+                f"  WARNING: evidenceHtml field not found in issues-data.js entry for {issue_id}.",
+                file=sys.stderr,
+            )
+        else:
+            # Absolute positions in js_content
+            g2_start  = id_match.start() + ev_js_m.start(2)
+            g2_end    = id_match.start() + ev_js_m.end(2)
+            new_ev_js = json.dumps(new_ev_html)
+
+            if js_content[g2_start:g2_end] == new_ev_js:
+                print(f"  issues-data.js: {issue_id} evidenceHtml already correct — no change.")
+            else:
+                new_js = js_content[:g2_start] + new_ev_js + js_content[g2_end:]
+                js_dir = os.path.dirname(DATA_JS)
+                with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=js_dir, suffix=".tmp", delete=False) as tf:
+                    tf.write(new_js)
+                    tmp_js_path = tf.name
+                os.replace(tmp_js_path, DATA_JS)
+                print(f"  ✓  issues-data.js: {issue_id} evidenceHtml updated.")
+                js_changed = True
+
+    print()
+    if html_changed or js_changed:
+        changed = []
+        if html_changed:
+            changed.append("index.html")
+        if js_changed:
+            changed.append("issues-data.js")
+        print(f"Repair complete. Files modified: {', '.join(changed)}")
+    else:
+        print(f"Repair complete. {issue_id} evidence was already correct — no files modified.")
+
+    print("=" * 62)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────
@@ -472,4 +661,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--repair-evidence" in sys.argv:
+        idx = sys.argv.index("--repair-evidence")
+        if idx + 1 >= len(sys.argv):
+            print(
+                "ERROR: --repair-evidence requires an issue reference argument "
+                "(e.g. ISSUE-019, 019, 19).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        repair_evidence(sys.argv[idx + 1])
+    else:
+        main()

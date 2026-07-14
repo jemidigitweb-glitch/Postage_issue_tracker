@@ -3,18 +3,18 @@
 /* DO NOT EDIT MANUALLY — re-run tools/import-issues.py   */
 window.AIOS_ISSUES_DATA = [
   {
-    id:            "ISSUE-016",
-    date:          "2026-07-08",
+    id:            "ISSUE-022",
+    date:          "2026-07-12",
     domain:        "listing",
     priority:      "",
     status:        "investigation",
-    title:         "Issue 016 – Assembly Instruction Component Quantity Discrepancy: DWC112025 3-Head Diamond Pendant Lamp",
-    what:          "The printed assembly instructions for the LEDSone 3-head diamond pendant lamp (SKU: DWC112025)\nlist Component G (nuts) as \"x5Pcs\". Customers receive the product, refer to the instruction\nmanual, count fewer nuts than stated, and contact the business believing hardware is missing.\nThis generates avoidable replacement requests and operational cost.",
-    gapLabel:      "Gap-006",
-    gapClass:      "gap-ref",
-    fix:           "1. Physical product check — DWC112025: Confirm the correct quantity of Component G (nuts)\n   for the 3-head diamond pendant lamp by counting the nuts included in a physical unit.\n2. Compare to printed instructions: Verify whether the printed \"x5Pcs\" matches the actual\n   quantity or is incorrect.\n3. If instructions are wrong: Request corrected instructions from the supplier. Update the\n   product listing with the corrected assembly guide before further units are dispatched.\n4. Customer communication: Identify whether any currently open replacement requests were\n   triggered by this instruction discrepancy and resolve accordingly.\n5. Introduce sign-off step: Implement the assembly instruction verification control described\n   in gap-006 for all future instruction approvals before mass printing.",
+    title:         "Issue 022 \u2013 SKU Overlap: PVC and Rubber Cable Descriptions Sharing PHSHF1PBRYB with Negative Inventory in UK Unit3",
+    what:          "The warehouse picking interface (order.vintageinterior.co.uk) shows two pick cards at\nwarehouse location 1-F-05-D for Yellow Brass pendant light fittings:",
+    gapLabel:      "\u2014",
+    gapClass:      "gap-none",
+    fix:           "The following actions are recommended based on the BI report. They are not approved\noperational procedures. Management and business validation is required before any action\nis treated as a confirmed operational step.",
     owner:         "SL Listing Team",
     priorityBadge: "<span class=\"badge badge-tbd\">TBD</span>",
-    evidenceHtml:  "<div class=\"evidence-gallery\"><a href=\"Phase2-inputs/issues%2016/warehouse-image-016_1.png\" target=\"_blank\" class=\"evidence-link\"><img src=\"Phase2-inputs/issues%2016/warehouse-image-016_1.png\" class=\"evidence-thumb\" alt=\"ISSUE-016 DWC112025 assembly instruction evidence image 1\" loading=\"lazy\"></a><a href=\"Phase2-inputs/issues%2016/warehouse-image-016_2.png\" target=\"_blank\" class=\"evidence-link\"><img src=\"Phase2-inputs/issues%2016/warehouse-image-016_2.png\" class=\"evidence-thumb\" alt=\"ISSUE-016 DWC112025 assembly instruction evidence image 2\" loading=\"lazy\"></a></div>",
+    evidenceHtml:  "<div class=\"evidence-gallery\"><a href=\"Phase2-inputs/issues%2022/2026_07_12_p1.png\" target=\"_blank\" class=\"evidence-link\"><img src=\"Phase2-inputs/issues%2022/2026_07_12_p1.png\" class=\"evidence-thumb\" alt=\"evidence image\" loading=\"lazy\"></a><a href=\"Phase2-inputs/issues%2022/2026_07_12_p2.png\" target=\"_blank\" class=\"evidence-link\"><img src=\"Phase2-inputs/issues%2022/2026_07_12_p2.png\" class=\"evidence-thumb\" alt=\"evidence image\" loading=\"lazy\"></a></div>",
   }
 ];

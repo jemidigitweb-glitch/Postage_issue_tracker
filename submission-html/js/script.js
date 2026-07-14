@@ -194,8 +194,12 @@ function recalculateStats() {
 }
 
 /* ================================================================
-   ADD LATEST ISSUES — real import from window.AIOS_ISSUES_DATA
+   ADD LATEST ISSUES
+   Primary path : POST /api/import-issues → local server (persistent)
+   Fallback path: window.AIOS_ISSUES_DATA  → in-session only
    ================================================================ */
+
+const IMPORT_ENDPOINT = "/api/import-issues";
 
 function getDomIssueIds() {
   const ids = new Set();
@@ -277,29 +281,94 @@ function initAddIssuesPanel() {
   const body  = document.getElementById("add-issues-body");
   if (!btn || !panel || !close || !body) return;
 
-  function refreshPanelContent() {
-    const data = window.AIOS_ISSUES_DATA;
+  let importInFlight = false;
 
-    if (!data || !Array.isArray(data) || data.length === 0) {
+  /* ── Primary path: call local server ──────────────────────────── */
+  function runServerImport() {
+    if (importInFlight) return;
+    importInFlight = true;
+
+    showPanelMessage(body, `<p class="add-issues-checking">&#8987; Checking for new issues&hellip;</p>`);
+
+    fetch(IMPORT_ENDPOINT, { method: "POST" })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        return res.json();
+      })
+      .then((result) => {
+        importInFlight = false;
+        handleServerResult(result);
+      })
+      .catch(() => {
+        /* Server not running — fall back to in-memory (issues-data.js) */
+        importInFlight = false;
+        runFallbackImport();
+      });
+  }
+
+  /* ── Handle a successful server response ──────────────────────── */
+  function handleServerResult(result) {
+    if (!result.success) {
+      const rejHtml = result.rejected && result.rejected.length
+        ? "<ul>" + result.rejected.map((r) =>
+            `<li><strong>${r.id}</strong>: ${(r.errors || []).join("; ")}</li>`
+          ).join("") + "</ul>"
+        : "";
       showPanelMessage(body,
-        `<p>No import data available.</p>
-         <p>Run the following command from the project root, then reload the page:</p>
-         <code class="add-issues-cmd">python3 tools/import-issues.py --generate</code>`
+        `<p class="add-issues-error">&#10005; Import failed.</p>
+         <p>${result.message || "Unknown error."}</p>
+         ${rejHtml}`
       );
       return;
     }
 
-    const domIds    = getDomIssueIds();
-    const toImport  = data.filter((issue) => !domIds.has(issue.id));
-    const alreadyIn = data.filter((issue) =>  domIds.has(issue.id));
+    if (result.imported && result.imported.length > 0) {
+      const list = result.imported.map((id) => `<li>${id}</li>`).join("");
+      showPanelMessage(body,
+        `<p class="add-issues-success">&#10003; ${result.imported.length} issue(s) imported successfully.</p>
+         <ul>${list}</ul>
+         <p class="add-issues-note">Reloading dashboard&hellip;</p>`
+      );
+      /* Reload so the patched index.html rows are visible */
+      setTimeout(() => { window.location.reload(); }, 1200);
+      return;
+    }
+
+    /* No new issues */
+    const skipList = result.skipped && result.skipped.length
+      ? `<details class="add-issues-skip-details">
+           <summary>${result.skipped.length} issue(s) already present</summary>
+           <ul>${result.skipped.map((id) => `<li>${id}</li>`).join("")}</ul>
+         </details>`
+      : "";
+    showPanelMessage(body,
+      `<p class="add-issues-success">&#10003; Dashboard is already up to date. No new issues found.</p>
+       ${skipList}`
+    );
+  }
+
+  /* ── Fallback path: in-memory from window.AIOS_ISSUES_DATA ───── */
+  function runFallbackImport() {
+    const data = window.AIOS_ISSUES_DATA;
+
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      showPanelMessage(body,
+        `<p class="add-issues-error">&#10005; Local server is not running and no import data is available.</p>
+         <p>Start the dashboard server with:</p>
+         <code class="add-issues-cmd">python3 tools/serve.py</code>
+         <p class="add-issues-note">Or open the dashboard via <code>./start-dashboard.sh</code></p>`
+      );
+      return;
+    }
+
+    const domIds   = getDomIssueIds();
+    const toImport = data.filter((issue) => !domIds.has(issue.id));
 
     if (toImport.length === 0) {
-      const list = alreadyIn.map((i) => `<li>${i.id}</li>`).join("");
       showPanelMessage(body,
-        `<p><strong>&#10003; All available issues are already in the dashboard.</strong></p>
-         <ul>${list}</ul>
-         <p class="add-issues-note">To add future issues: update the inbox, then re-run
-         <code>python3 tools/import-issues.py --generate</code> and reload.</p>`
+        `<p class="add-issues-success">&#10003; Dashboard is already up to date. No new issues found.</p>
+         <p class="add-issues-note">&#9432; Running in offline mode (local server not detected).
+         Start the server for permanent importing.</p>`
       );
       return;
     }
@@ -309,12 +378,12 @@ function initAddIssuesPanel() {
     ).join("");
 
     showPanelMessage(body,
-      `<p><strong>${toImport.length} new issue(s) ready to import:</strong></p>
+      `<p><strong>${toImport.length} new issue(s) available (offline / session-only mode):</strong></p>
        <ul>${listHtml}</ul>
-       <button class="btn-do-import" id="btn-do-import">&#43; Import ${toImport.length} issue(s)</button>
-       <p class="add-issues-note">Import adds rows to the current page only.
-       For permanent persistence, run
-       <code>python3 tools/import-issues.py --apply</code> and reload.</p>`
+       <button class="btn-do-import" id="btn-do-import">&#43; Import for this session</button>
+       <p class="add-issues-note">&#9888; Local server not running. These rows will be added to
+       the current page only and will not persist after a browser refresh.<br>
+       For permanent importing, start the server: <code>./start-dashboard.sh</code></p>`
     );
 
     const doBtn = document.getElementById("btn-do-import");
@@ -323,7 +392,10 @@ function initAddIssuesPanel() {
         const tbody = document.getElementById("issues-tbody");
         if (!tbody) return;
 
-        toImport.forEach((issue) => {
+        const alreadyNow = getDomIssueIds();
+        const stillNew   = toImport.filter((issue) => !alreadyNow.has(issue.id));
+
+        stillNew.forEach((issue) => {
           const tr = buildIssueRow(issue);
           tbody.appendChild(tr);
           wireNewRow(tr);
@@ -332,23 +404,24 @@ function initAddIssuesPanel() {
         recalculateStats();
         applyIssueFilters();
 
-        const imported = toImport.map((i) => `<li>${i.id}</li>`).join("");
+        const imported = stillNew.map((i) => `<li>${i.id}</li>`).join("");
         showPanelMessage(body,
-          `<p><strong>&#10003; ${toImport.length} issue(s) imported successfully.</strong></p>
+          `<p class="add-issues-success">&#10003; ${stillNew.length} issue(s) added to this session.</p>
            <ul>${imported}</ul>
-           <p class="add-issues-note">These rows exist in the current page session.
-           Reload the page and click this button again to re-import,
-           or run <code>python3 tools/import-issues.py --apply</code>
-           for permanent persistence.</p>`
+           <p class="add-issues-note">&#9888; Session-only. Start the server for permanent imports.</p>`
         );
       });
     }
   }
 
+  /* ── Panel open/close wiring ──────────────────────────────────── */
   btn.addEventListener("click", () => {
     const opening = panel.hidden;
     panel.hidden  = !panel.hidden;
-    if (opening) refreshPanelContent();
+    if (opening) {
+      showPanelMessage(body, `<p class="add-issues-checking">&#8987; Checking for new issues&hellip;</p>`);
+      runServerImport();
+    }
   });
 
   close.addEventListener("click", () => { panel.hidden = true; });
@@ -414,4 +487,6 @@ document.addEventListener("DOMContentLoaded", () => {
   initIssueFilters();
   initResolutionToggles();
   initAddIssuesPanel();
+  recalculateStats();   /* counters reflect actual DOM rows, not hardcoded HTML values */
+  applyIssueFilters();  /* count-line and section-count-label correct on initial load */
 });
