@@ -72,25 +72,44 @@ function initNav() {
    ================================================================ */
 
 let activeDomain = "all";
+let activeBranch = "all";
 let activeStatus = "all";
 let activePerson = "all";
 let activeSearch = "";
 
 function applyIssueFilters() {
-  const rows = document.querySelectorAll("#issues-tbody tr");
-  let visible = 0;
+  const isPh = activeDomain === "ph";
 
-  rows.forEach((row) => {
-    const classification = row.dataset.classification || "";
-    const priority       = row.dataset.priority       || "";
-    const status         = row.dataset.status         || "";
-    const domain         = row.dataset.domain         || "";
-    const text           = row.textContent.toLowerCase();
+  /* ---- View toggle: legacy table vs PH member view ---- */
+  const phView     = document.getElementById("ph-member-view");
+  const legacyHdr  = document.getElementById("legacy-section-hdr");
+  const legacyWrap = document.getElementById("legacy-issues-table-wrap");
+  const countEl    = document.getElementById("issues-count");
+  const phCountEl  = document.getElementById("ph-member-count");
 
-    /* ---- Domain match ---- */
+  if (phView)     phView.hidden     = !isPh;
+  if (legacyHdr)  legacyHdr.hidden  =  isPh;
+  if (legacyWrap) legacyWrap.hidden =  isPh;
+  if (countEl)    countEl.hidden    =  isPh;
+
+  /* ---- Branch filter group visibility ---- */
+  const branchGroup = document.getElementById("branch-filter-group");
+  if (branchGroup) branchGroup.style.display = isPh ? "" : "none";
+
+  /* ---- Legacy Daily Issues rows ---- */
+  const legacyRows = document.querySelectorAll("#issues-tbody tr");
+  let legacyVisible = 0;
+
+  legacyRows.forEach((row) => {
+    const priority = row.dataset.priority || "";
+    const status   = row.dataset.status   || "";
+    const domain   = row.dataset.domain   || "";
+    const text     = row.textContent.toLowerCase();
+
+    /* Domain match */
     const domainMatch = activeDomain === "all" || domain === activeDomain;
 
-    /* ---- Status / priority match ---- */
+    /* Status / priority match */
     let statusMatch = false;
     switch (activeStatus) {
       case "all":           statusMatch = true;                        break;
@@ -102,25 +121,52 @@ function applyIssueFilters() {
       default:              statusMatch = true;
     }
 
-    /* ---- Person match ---- */
+    /* Person match */
     const person      = (row.dataset.person || "").toLowerCase();
     const personMatch = activePerson === "all" || person === activePerson;
 
-    /* ---- Search match ---- */
+    /* Search match */
     const searchMatch = activeSearch === "" || text.includes(activeSearch);
 
     const show = domainMatch && statusMatch && personMatch && searchMatch;
     row.classList.toggle("issue-row-hidden", !show);
-    if (show) visible++;
+    if (show) legacyVisible++;
   });
 
-  /* Update count line */
-  const total = rows.length;
-  const countEl = document.getElementById("issues-count");
-  if (countEl) {
-    countEl.textContent = visible === total
+  if (countEl && !isPh) {
+    const total = legacyRows.length;
+    countEl.textContent = legacyVisible === total
       ? `Showing all ${total} issues`
-      : `Showing ${visible} of ${total} issues`;
+      : `Showing ${legacyVisible} of ${total} issues`;
+  }
+
+  /* ---- PH member rows (AND: domain + branch + person + search) ---- */
+  const phRows = document.querySelectorAll("#ph-member-tbody tr");
+  let phVisible = 0;
+
+  phRows.forEach((row) => {
+    const domain  = row.dataset.domain  || "";
+    const branch  = row.dataset.branch  || "";
+    const person  = (row.dataset.person || "").toLowerCase();
+    const text    = row.textContent.toLowerCase();
+
+    const domainMatch = activeDomain === "all" || domain === activeDomain;
+    const branchMatch = activeBranch === "all"  || branch === activeBranch;
+    const personMatch = activePerson === "all"  || person === activePerson;
+    const searchMatch = activeSearch === ""     || text.includes(activeSearch);
+
+    const show = domainMatch && branchMatch && personMatch && searchMatch;
+    row.classList.toggle("issue-row-hidden", !show);
+    if (show) phVisible++;
+  });
+
+  if (phCountEl && isPh) {
+    const phTotal = phRows.length;
+    phCountEl.textContent = phVisible === 0
+      ? "No PH pain points match the selected filters."
+      : phVisible === phTotal
+        ? `Showing all ${phTotal} PH pain points`
+        : `Showing ${phVisible} of ${phTotal} PH pain points`;
   }
 }
 
@@ -131,6 +177,13 @@ function initIssueFilters() {
       document.querySelectorAll(".domain-pill").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       activeDomain = btn.dataset.domainFilter;
+      /* Reset branch when leaving PH domain */
+      if (activeDomain !== "ph") {
+        activeBranch = "all";
+        document.querySelectorAll(".branch-pill").forEach((b) => b.classList.remove("active"));
+        const allBranchPill = document.querySelector('[data-branch-filter="all"]');
+        if (allBranchPill) allBranchPill.classList.add("active");
+      }
       applyIssueFilters();
     });
   });
@@ -151,6 +204,16 @@ function initIssueFilters() {
       document.querySelectorAll(".person-pill").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       activePerson = btn.dataset.personFilter;
+      applyIssueFilters();
+    });
+  });
+
+  /* Branch filter pills */
+  document.querySelectorAll(".branch-pill").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".branch-pill").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      activeBranch = btn.dataset.branchFilter;
       applyIssueFilters();
     });
   });
@@ -199,7 +262,8 @@ function recalculateStats() {
    Fallback path: window.AIOS_ISSUES_DATA  → in-session only
    ================================================================ */
 
-const IMPORT_ENDPOINT = "/api/import-issues";
+const IMPORT_ENDPOINT       = "/api/import-issues";
+const SET_PRIORITY_ENDPOINT = "/api/set-priority";
 
 function getDomIssueIds() {
   const ids = new Set();
@@ -480,6 +544,99 @@ function initResolutionToggles() {
   });
 }
 
+/* ================================================================
+   TBD PRIORITY SELECTOR
+   Only Daily Issue rows (in #issues-tbody) whose current canonical
+   data-priority is "" (TBD) receive a selector.
+   Already-assigned rows and PH-NIV rows are never touched.
+   ================================================================ */
+
+function renderPriorityDropdowns() {
+  const rows = document.querySelectorAll("#issues-tbody tr");
+  rows.forEach((row) => {
+    /* Only rows with empty data-priority (TBD) are eligible */
+    if ((row.dataset.priority || "") !== "") return;
+
+    const cell = row.querySelector(".col-priority");
+    if (!cell) return;
+
+    /* Idempotent — skip if selector already rendered in this cell */
+    if (cell.querySelector(".priority-select")) return;
+
+    /* Resolve ISSUE-NNN from the id badge in this row */
+    const badge = row.querySelector(".issue-id-badge");
+    if (!badge) return;
+    const issueId = badge.textContent.trim();
+    if (!/^ISSUE-\d+$/.test(issueId)) return;
+
+    const sel = document.createElement("select");
+    sel.className = "priority-select";
+    sel.innerHTML =
+      '<option value="" selected disabled>Set priority…</option>' +
+      '<option value="critical">Critical</option>' +
+      '<option value="high">High</option>' +
+      '<option value="medium">Medium</option>';
+
+    sel.addEventListener("change", () => {
+      if (sel.value) setPriority(issueId, sel.value, sel);
+    });
+
+    cell.innerHTML = "";
+    cell.appendChild(sel);
+  });
+}
+
+function setPriority(issueId, priority, sel) {
+  if (!issueId || !priority) return;
+
+  /* Prevent duplicate submission while request is in flight */
+  sel.disabled = true;
+
+  fetch(SET_PRIORITY_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ issueId, priority }),
+  })
+    .then((res) => res.json())
+    .then((result) => {
+      if (result.success) {
+        /* Optimistic visual: replace selector with the correct badge while
+           the page reload loads (avoids a flash of TBD on reload start) */
+        const cap = priority.charAt(0).toUpperCase() + priority.slice(1);
+        const cell = sel.parentElement;
+        if (cell) {
+          cell.innerHTML =
+            `<span class="badge badge-${priority}">${cap}</span>` +
+            `<span class="priority-set-ok">✓ Saving…</span>`;
+        }
+        setTimeout(() => { window.location.reload(); }, 1200);
+      } else {
+        /* Failure: re-enable selector, keep selected value visible, show error */
+        sel.disabled = false;
+        const cell = sel.closest("td");
+        if (cell) {
+          const err = document.createElement("div");
+          err.className = "priority-set-error";
+          err.textContent = result.message || "Failed to set priority. Please try again.";
+          cell.appendChild(err);
+          setTimeout(() => { err.remove(); }, 6000);
+        }
+      }
+    })
+    .catch(() => {
+      /* Network error or server unavailable — keep selected value visible, show error */
+      sel.disabled = false;
+      const cell = sel.closest("td");
+      if (cell) {
+        const err = document.createElement("div");
+        err.className = "priority-set-error";
+        err.textContent = "Could not reach server. Priority not saved. Please try again.";
+        cell.appendChild(err);
+        setTimeout(() => { err.remove(); }, 6000);
+      }
+    });
+}
+
 /* ---- Boot ---- */
 document.addEventListener("DOMContentLoaded", () => {
   renderDate();
@@ -489,4 +646,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initAddIssuesPanel();
   recalculateStats();   /* counters reflect actual DOM rows, not hardcoded HTML values */
   applyIssueFilters();  /* count-line and section-count-label correct on initial load */
+  renderPriorityDropdowns(); /* TBD-only priority selectors for Daily Issues */
 });

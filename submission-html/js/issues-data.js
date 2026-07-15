@@ -3,18 +3,18 @@
 /* DO NOT EDIT MANUALLY — re-run tools/import-issues.py   */
 window.AIOS_ISSUES_DATA = [
   {
-    id:            "ISSUE-022",
+    id:            "ISSUE-023",
     date:          "2026-07-12",
-    domain:        "listing",
+    domain:        "purchase",
     priority:      "",
     status:        "investigation",
-    title:         "Issue 022 \u2013 SKU Overlap: PVC and Rubber Cable Descriptions Sharing PHSHF1PBRYB with Negative Inventory in UK Unit3",
-    what:          "The warehouse picking interface (order.vintageinterior.co.uk) shows two pick cards at\nwarehouse location 1-F-05-D for Yellow Brass pendant light fittings:",
+    title:         "Issue 023 \u2013 Vendor Box Inventory Discrepancy and Reported Calculation Method Concern (UNIT 3 / UNIT 4)",
+    what:          "Operational staff reportedly calculate the number of vendor boxes required for vendor\nshipments based on unit count. The supplied BI report states:",
     gapLabel:      "\u2014",
     gapClass:      "gap-none",
-    fix:           "The following actions are recommended based on the BI report. They are not approved\noperational procedures. Management and business validation is required before any action\nis treated as a confirmed operational step.",
-    owner:         "SL Listing Team",
+    fix:           "The following are recommendations based on the supplied BI report. They are not approved\noperational procedures. Each requires business and/or management validation before action.",
+    owner:         "Warehouse Operations Team",
     priorityBadge: "<span class=\"badge badge-tbd\">TBD</span>",
-    evidenceHtml:  "<div class=\"evidence-gallery\"><a href=\"Phase2-inputs/issues%2022/2026_07_12_p1.png\" target=\"_blank\" class=\"evidence-link\"><img src=\"Phase2-inputs/issues%2022/2026_07_12_p1.png\" class=\"evidence-thumb\" alt=\"evidence image\" loading=\"lazy\"></a><a href=\"Phase2-inputs/issues%2022/2026_07_12_p2.png\" target=\"_blank\" class=\"evidence-link\"><img src=\"Phase2-inputs/issues%2022/2026_07_12_p2.png\" class=\"evidence-thumb\" alt=\"evidence image\" loading=\"lazy\"></a></div>",
+    evidenceHtml:  "<div class=\"evidence-gallery\"><a href=\"Phase2-inputs/issues%2023/2026_07_12_p1.png\" target=\"_blank\" class=\"evidence-link\"><img src=\"Phase2-inputs/issues%2023/2026_07_12_p1.png\" class=\"evidence-thumb\" alt=\"evidence image\" loading=\"lazy\"></a></div>",
   }
 ];

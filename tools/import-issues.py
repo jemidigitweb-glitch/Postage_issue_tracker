@@ -7,6 +7,7 @@ Modes:
   python3 tools/import-issues.py --generate             → report + generate issues-data.js
   python3 tools/import-issues.py --apply                → generate + patch index.html with new rows
   python3 tools/import-issues.py --repair-evidence NNN  → repair evidence for an already-imported issue
+  python3 tools/import-issues.py --refresh-issue NNN   → refresh all source fields for an already-imported issue
 
 Safety rules enforced:
   - Duplicate checking by Issue ID (ISSUE-NNN pattern in filename)
@@ -49,6 +50,24 @@ FIELD_KEYS = {
 
 # ── Required fields for an issue to be accepted ───────────────────────────
 REQUIRED = ["id", "date", "domain"]
+
+# ── Accepted Markdown heading aliases for parsed dashboard content fields ──
+# Centralised here so parse_issue_md() and warn_issue_content() share one truth.
+# Adding a new alias here automatically expands both parsing and warning output.
+WHAT_HEADINGS = [
+    "## Issue Summary",
+    "## What is Happening",
+    "## What Is Happening",
+]
+
+FIX_HEADINGS = [
+    "## Fix and Action Required",
+    "## Fix & Action Required",
+    "## Fix / Action Required",
+    "## Proposed Fix",
+    "## Recommended Next Actions",
+    "## Recommended Investigation / Actions",
+]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
@@ -93,13 +112,10 @@ def parse_issue_md(path):
             break
 
     # Extract "What is happening" / Issue Summary section
-    issue["what"] = _extract_section(content,
-        ["## Issue Summary", "## What is Happening", "## What Is Happening"])
+    issue["what"] = _extract_section(content, WHAT_HEADINGS)
 
     # Extract Fix section
-    issue["fix"] = _extract_section(content,
-        ["## Fix and Action Required", "## Fix & Action Required",
-         "## Fix / Action Required", "## Proposed Fix"])
+    issue["fix"] = _extract_section(content, FIX_HEADINGS)
 
     # Parse evidence paths from the ## Evidence section.
     # Targets lines of the form:  - `Phase2-inputs/path/to/file.ext`
@@ -192,6 +208,57 @@ def validate_issue(issue, fname, gaps_dir):
             errors.append(f"Evidence path not found: {ep}")
 
     return errors
+
+
+def warn_issue_content(issue, filename, content):
+    """
+    Emit non-blocking content-completeness warnings when important dashboard
+    fields are empty after parsing.
+
+    A warning indicates a likely heading mismatch: the source MD may contain
+    the content under a heading not in the accepted alias list (WHAT_HEADINGS
+    or FIX_HEADINGS). The warning reports which field is empty, the accepted
+    aliases, and all H2 headings found in the source for diagnosis.
+
+    Does NOT parse field content independently.
+    Does NOT populate any issue field.
+    Does NOT block import (validate_issue() remains the blocking validator).
+    Returns a list of warning strings (also printed to stdout).
+    """
+    issue_label = issue.get("id") or filename
+    warnings    = []
+
+    # Discover H2 headings in source — diagnostic only, not used for parsing
+    h2_in_md = [ln.strip() for ln in content.splitlines() if ln.startswith("## ")]
+
+    checks = [
+        ("what", WHAT_HEADINGS),
+        ("fix",  FIX_HEADINGS),
+    ]
+
+    for field, accepted in checks:
+        if not issue.get(field):
+            unmatched = [h for h in h2_in_md if h not in accepted]
+            lines = [
+                f"  WARN [{issue_label}] '{field}' field is empty after parsing.",
+                f"    Accepted headings for '{field}':",
+            ]
+            for alias in accepted:
+                lines.append(f"      {alias}")
+            lines.append(f"    H2 headings found in source MD ({len(h2_in_md)}):")
+            for h in h2_in_md:
+                marker = "  ← not in accepted list" if h not in accepted else ""
+                lines.append(f"      {h}{marker}")
+            if unmatched:
+                lines.append(
+                    f"    Action: rename the relevant heading to a canonical alias, "
+                    f"or add a new alias to FIX_HEADINGS / WHAT_HEADINGS."
+                )
+            msg = "\n".join(lines)
+            warnings.append(msg)
+            print(msg)
+
+    return warnings
 
 
 def get_dashboard_issue_ids():
@@ -549,6 +616,164 @@ def repair_evidence(issue_ref):
     print("=" * 62)
 
 
+def refresh_issue(issue_ref):
+    """
+    Refresh all source fields for an already-imported issue.
+
+    Accepts: ISSUE-023 | issue-023 | 023 | 23
+    Replaces the complete existing row in index.html and the complete
+    existing entry in issues-data.js with the canonical output of
+    build_row_html() and build_js_entry(), both driven by parse_issue_md().
+    Writes are atomic (tempfile + os.replace()). Idempotent.
+    Exits with code 1 on any safety check failure.
+    """
+    # Normalise to 3-digit zero-padded number — reuse repair_evidence pattern
+    digits = re.sub(r"\D", "", str(issue_ref))
+    if not digits:
+        print(f"ERROR: Cannot parse issue number from '{issue_ref}'.", file=sys.stderr)
+        sys.exit(1)
+    num      = digits.zfill(3)
+    issue_id = f"ISSUE-{num}"
+
+    print("=" * 62)
+    print(f"AIOS — Issue Refresh: {issue_id}")
+    print("=" * 62)
+
+    # 1. Find exactly one MD file for this issue number
+    matches = [
+        os.path.join(INBOX_DIR, fname)
+        for fname in sorted(os.listdir(INBOX_DIR))
+        if fname.endswith(".md") and extract_issue_number(fname) == num
+    ]
+    if len(matches) == 0:
+        print(f"ERROR: No MD file found for {issue_id} in intelligence-inbox/daily-issues/.", file=sys.stderr)
+        sys.exit(1)
+    if len(matches) > 1:
+        print(f"ERROR: Multiple MD files found for {issue_id}: {matches}", file=sys.stderr)
+        sys.exit(1)
+
+    md_path = matches[0]
+    print(f"  Source MD: {os.path.relpath(md_path, PROJECT_ROOT)}")
+
+    # 2. Parse using existing parser — no second parser
+    issue = parse_issue_md(md_path)
+
+    # 3. Confirm parsed ID matches requested ID
+    parsed_num = re.sub(r"^ISSUE-?", "", issue.get("id", ""), flags=re.IGNORECASE).zfill(3)
+    if parsed_num != num:
+        print(
+            f"ERROR: MD file declares Issue ID '{issue.get('id')}' "
+            f"but '{issue_id}' was requested.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    # 4. Validate using existing validator — fail hard on any error
+    errors = validate_issue(issue, os.path.basename(md_path), GAPS_DIR)
+    if errors:
+        print(f"ERROR: {issue_id} failed validation:", file=sys.stderr)
+        for e in errors:
+            print(f"  ✗  {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"  Validation: 0 errors")
+    print(f"  Evidence paths: {len(issue['evidence_paths'])}")
+
+    # 4b. Content-completeness warnings — non-blocking, emitted before any write
+    with open(md_path, encoding="utf-8") as _f:
+        _md_content = _f.read()
+    warn_issue_content(issue, os.path.basename(md_path), _md_content)
+
+    # 5. Build canonical row and JS entry using existing builders — no second builders
+    new_row   = build_row_html(issue)    # complete <tr> block
+    new_entry = build_js_entry(issue)    # complete JS object literal
+
+    # ── Refresh index.html ─────────────────────────────────────────────
+    with open(DASHBOARD, encoding="utf-8") as f:
+        html_content = f.read()
+
+    comment_marker = f"<!-- {issue_id} -->"
+    count = html_content.count(comment_marker)
+    if count == 0:
+        print(
+            f"ERROR: '{comment_marker}' not found in index.html. "
+            f"Is {issue_id} imported?",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if count > 1:
+        print(
+            f"ERROR: '{comment_marker}' appears {count} times in index.html (expected 1).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    comment_pos = html_content.index(comment_marker)
+    # Walk back to the \n immediately before the comment's leading spaces
+    block_start = html_content.rindex('\n', 0, comment_pos)
+    tr_end_pos  = html_content.index("</tr>", comment_pos) + 5
+    old_row     = html_content[block_start:tr_end_pos]
+
+    html_changed = False
+    if old_row == new_row:
+        print(f"  index.html: {issue_id} row already current — no change.")
+    else:
+        new_html = html_content[:block_start] + new_row + html_content[tr_end_pos:]
+        html_dir = os.path.dirname(DASHBOARD)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=html_dir, suffix=".tmp", delete=False) as tf:
+            tf.write(new_html)
+            tmp_html_path = tf.name
+        os.replace(tmp_html_path, DASHBOARD)
+        print(f"  ✓  index.html: {issue_id} row refreshed.")
+        html_changed = True
+
+    # ── Refresh issues-data.js if entry exists ─────────────────────────
+    with open(DATA_JS, encoding="utf-8") as f:
+        js_content = f.read()
+
+    id_pattern = r"id:\s+" + re.escape(json.dumps(issue_id))
+    all_matches = list(re.finditer(id_pattern, js_content))
+    js_changed  = False
+
+    if len(all_matches) == 0:
+        print(f"  issues-data.js: no entry for {issue_id} — skipping.")
+    elif len(all_matches) > 1:
+        print(
+            f"ERROR: {issue_id} appears {len(all_matches)} times in issues-data.js (expected 1).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    else:
+        id_match    = all_matches[0]
+        entry_start = js_content.rindex("  {", 0, id_match.start())
+        entry_end   = js_content.index("  }", id_match.start()) + 3
+        old_entry   = js_content[entry_start:entry_end]
+
+        if old_entry == new_entry:
+            print(f"  issues-data.js: {issue_id} entry already current — no change.")
+        else:
+            new_js  = js_content[:entry_start] + new_entry + js_content[entry_end:]
+            js_dir  = os.path.dirname(DATA_JS)
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=js_dir, suffix=".tmp", delete=False) as tf:
+                tf.write(new_js)
+                tmp_js_path = tf.name
+            os.replace(tmp_js_path, DATA_JS)
+            print(f"  ✓  issues-data.js: {issue_id} entry refreshed.")
+            js_changed = True
+
+    print()
+    if html_changed or js_changed:
+        changed = []
+        if html_changed:
+            changed.append("index.html")
+        if js_changed:
+            changed.append("issues-data.js")
+        print(f"Refresh complete. Files modified: {', '.join(changed)}")
+    else:
+        print(f"Refresh complete. {issue_id} was already current — no files modified.")
+
+    print("=" * 62)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────
 
 def main():
@@ -618,6 +843,10 @@ def main():
             rejected.append((num, fname, errors))
         else:
             print(f"    Validation: PASS")
+            # Content-completeness warnings — non-blocking, before any write
+            with open(path, encoding="utf-8") as _f:
+                _md_content = _f.read()
+            warn_issue_content(issue, fname, _md_content)
             validated.append(issue)
 
     if not new_issues_raw:
@@ -671,5 +900,15 @@ if __name__ == "__main__":
             )
             sys.exit(1)
         repair_evidence(sys.argv[idx + 1])
+    elif "--refresh-issue" in sys.argv:
+        idx = sys.argv.index("--refresh-issue")
+        if idx + 1 >= len(sys.argv):
+            print(
+                "ERROR: --refresh-issue requires an issue reference argument "
+                "(e.g. ISSUE-023, 023, 23).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        refresh_issue(sys.argv[idx + 1])
     else:
         main()

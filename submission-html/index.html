@@ -396,6 +396,7 @@
               <button class="filter-pill domain-pill" data-domain-filter="listing">Listing AIOS Daily Issues</button>
               <button class="filter-pill domain-pill" data-domain-filter="purchase">Purchase AIOS Daily Issues</button>
               <button class="filter-pill domain-pill" data-domain-filter="pricing">Pricing AIOS Daily Issues</button>
+              <button class="filter-pill domain-pill" data-domain-filter="ph">PH</button>
             </div>
             <div class="issues-filter-group">
               <span class="issues-filter-label">Status:</span>
@@ -412,6 +413,13 @@
               <button class="filter-pill person-pill" data-person-filter="sasi">Sasi</button>
               <button class="filter-pill person-pill" data-person-filter="nivarnan">Nivarnan</button>
             </div>
+            <div class="issues-filter-group" id="branch-filter-group" style="display:none;">
+              <span class="issues-filter-label">Branch:</span>
+              <button class="filter-pill branch-pill active" data-branch-filter="all">All Branches</button>
+              <button class="filter-pill branch-pill" data-branch-filter="jaffna">Jaffna</button>
+              <button class="filter-pill branch-pill" data-branch-filter="nelliyady">Nelliyady</button>
+              <button class="filter-pill branch-pill" data-branch-filter="chankanai">Chankanai</button>
+            </div>
           </div>
           <div class="issues-search">
             <input class="search-input" id="issues-search" type="search" placeholder="Search issues…" autocomplete="off" />
@@ -422,14 +430,14 @@
         <p class="issues-count-line" id="issues-count">Showing all 15 issues</p>
 
         <!-- Section header (matches reference styling) -->
-        <div class="issues-section-hdr">
+        <div class="issues-section-hdr" id="legacy-section-hdr">
           <div class="issues-section-icon">📋</div>
           <span class="issues-section-title">Postage AIOS Daily Issues</span>
           <span class="issues-section-count" id="section-count-label">15 issues</span>
         </div>
 
         <!-- Issue table — columns match nanthi_akka_issue_report.html exactly -->
-        <div class="table-card issues-table-wrap">
+        <div class="table-card issues-table-wrap" id="legacy-issues-table-wrap">
           <div class="table-scroll">
             <table class="data-table" id="issues-table">
               <thead>
@@ -671,17 +679,27 @@
                   <td class="col-evidence"><span class="evidence-none">No Evidence Available</span></td>
                 </tr>
                 <!-- ISSUE-016 -->
-                <tr data-classification="daily-issue" data-domain="listing" data-priority="" data-status="investigation">
+                <tr data-classification="daily-issue" data-domain="listing" data-priority="medium" data-status="investigation">
                   <td class="col-date">2026-07-08</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-016</span></td>
-                  <td class="col-priority"><span class="badge badge-tbd">TBD</span></td>
-                  <td class="col-issue"><strong>ISSUE-016 — Assembly Instruction Component Quantity Discrepancy: DWC112025 3-Head Diamond Pendant Lamp</strong></td>
-                  <td class="col-what">The printed assembly instructions for the LEDSone 3-head diamond pendant lamp (SKU: DWC112025) list Component G (nuts) as "x5Pcs". Customers receive the product, refer to the instruction manual, count fewer nuts than stated, and contact the business believing hardware is missing. This generates avoidable replacement requests and operational cost.</td>
+                  <td class="col-priority"><span class="badge badge-medium">Medium</span></td>
+                  <td class="col-issue"><strong>ISSUE-016 — Issue 016 – Assembly Instruction Component Quantity Discrepancy: DWC112025 3-Head Diamond Pendant Lamp</strong></td>
+                  <td class="col-what">The printed assembly instructions for the LEDSone 3-head diamond pendant lamp (SKU: DWC112025)
+list Component G (nuts) as &quot;x5Pcs&quot;. Customers receive the product, refer to the instruction
+manual, count fewer nuts than stated, and contact the business believing hardware is missing.
+This generates avoidable replacement requests and operational cost.</td>
                   <td class="col-gap"><span class="gap-ref">Gap-006</span></td>
-                  <td class="col-fix"><p class="fix-text">1. Physical product check — DWC112025: Confirm the correct quantity of Component G (nuts) for the 3-head diamond pendant lamp by counting the nuts included in a physical unit. 2. Compare to printed instructions: Verify whether the printed "x5Pcs" matches the actual quantity or is incorrect. 3. If instructions are wrong: Request corrected instructions from the supplier. Update the product listing with the corrected assembly guide before further units are dispatched. 4. Customer communication: Identify whether any currently open replacement requests were triggered by this instruction discrepancy and resolve accordingly. 5. Introduce sign-off step: Implement the assembly instruction verification control described in gap-006 for all future instruction approvals before mass printing.</p></td>
+                  <td class="col-fix"><p class="fix-text">1. Physical product check — DWC112025: Confirm the correct quantity of Component G (nuts)
+   for the 3-head diamond pendant lamp by counting the nuts included in a physical unit.
+2. Compare to printed instructions: Verify whether the printed &quot;x5Pcs&quot; matches the actual
+   quantity or is incorrect.
+3. If instructions are wrong: Request corrected instructions from the supplier. Update the
+   product listing with the corrected assembly guide before further units are dispatched.
+4. Customer communication: Identify whether any currently open replacement requests were
+   triggered by this instruction</p></td>
                   <td class="col-owner"><span class="owner-tag">&#128100; SL Listing Team</span></td>
                   <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-016"><button class="res-btn res-solved" data-value="solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not" data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
-                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2016/warehouse-image-016_1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2016/warehouse-image-016_1.png" class="evidence-thumb" alt="ISSUE-016 DWC112025 assembly instruction evidence image 1" loading="lazy"></a><a href="Phase2-inputs/issues%2016/warehouse-image-016_2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2016/warehouse-image-016_2.png" class="evidence-thumb" alt="ISSUE-016 DWC112025 assembly instruction evidence image 2" loading="lazy"></a></div></td>
+                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2016/warehouse-image-016_1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2016/warehouse-image-016_1.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a><a href="Phase2-inputs/issues%2016/warehouse-image-016_2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2016/warehouse-image-016_2.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a></div></td>
                 </tr>
 
                 <!-- ISSUE-017 -->
@@ -689,13 +707,17 @@
                   <td class="col-date">2026-07-09</td>
                   <td class="col-id"><span class="issue-id-badge">ISSUE-017</span></td>
                   <td class="col-priority"><span class="badge badge-tbd">TBD</span></td>
-                  <td class="col-issue"><strong>ISSUE-017 — Pendant Light Fixture Brand and Socket Variation: LEDSone vs DC Voltage Packaging with Black and White Internal Socket Difference</strong></td>
-                  <td class="col-what">Two boxes of Pendant Light Fixture (Full Set) have been observed on the same warehouse shelf, one labelled LEDSone and one labelled DC Voltage. A warehouse team member photographed both boxes and annotated the image with the question "Same?" — indicating uncertainty about whether these are the same product under two different brands. A separate photograph shows two internal lamp sockets side by side: one with a black interior and one with a white interior, annotated with "?" — indicating the socket colour difference has been noticed and its significance is unresolved.</td>
+                  <td class="col-issue"><strong>ISSUE-017 — Issue 017 – Pendant Light Fixture Brand and Socket Variation: LEDSone vs DC Voltage Packaging with Black and White Internal Socket Difference</strong></td>
+                  <td class="col-what">Two boxes of Pendant Light Fixture (Full Set) have been observed on the same warehouse shelf, one
+labelled LEDSone and one labelled DC Voltage. A warehouse team member photographed both boxes and
+annotated the image with the question &quot;Same?&quot; — indicating uncertainty about whether these are the
+same product under two different brands.</td>
                   <td class="col-gap"><span class="gap-none">—</span></td>
-                  <td class="col-fix"><p class="fix-text">DECISION REQUIRED before action. 1. Inspect both branded boxes to confirm whether contents are physically identical. 2. Verify SKU assignment in LEDSone OMS — confirm whether both variants share one SKU or use separate SKUs. 3. Confirm whether black-interior and white-interior sockets are the same specification. 4. Await business decision before establishing any picking rule, segregation rule, or interchangeability policy. 5. Review recent orders and returns for the Pendant Light Fixture range for evidence of brand or socket confusion.</p></td>
+                  <td class="col-fix"><p class="fix-text">The following actions are recommended pending reviewer approval. They are not approved operational
+rules and must not be treated as confirmed procedures until confirmed by Varmen or Laksika.</p></td>
                   <td class="col-owner"><span class="owner-tag">&#128100; Warehouse Operations Team</span></td>
                   <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-017"><button class="res-btn res-solved" data-value="solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not" data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
-                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2017/2026_07_09_p1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2017/2026_07_09_p1.png" class="evidence-thumb" alt="ISSUE-017 LEDSone and DC Voltage branded Pendant Light Fixture boxes on warehouse shelf" loading="lazy"></a><a href="Phase2-inputs/issues%2017/2026_07_09_p2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2017/2026_07_09_p2.png" class="evidence-thumb" alt="ISSUE-017 copper E27 lamp holder components from Pendant Light Fixture" loading="lazy"></a><a href="Phase2-inputs/issues%2017/2026_07_09_p3.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2017/2026_07_09_p3.png" class="evidence-thumb" alt="ISSUE-017 black interior vs white interior internal socket comparison" loading="lazy"></a></div></td>
+                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2017/2026_07_09_p1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2017/2026_07_09_p1.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a><a href="Phase2-inputs/issues%2017/2026_07_09_p2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2017/2026_07_09_p2.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a><a href="Phase2-inputs/issues%2017/2026_07_09_p3.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2017/2026_07_09_p3.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a></div></td>
                 </tr>
 
                 <!-- ISSUE-018 -->
@@ -788,10 +810,149 @@ is treated as a confirmed operational step.</p></td>
                   <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-022"><button class="res-btn res-solved" data-value="solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not" data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
                   <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2022/2026_07_12_p1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2022/2026_07_12_p1.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a><a href="Phase2-inputs/issues%2022/2026_07_12_p2.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2022/2026_07_12_p2.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a></div></td>
                 </tr>
+
+                <!-- ISSUE-023 -->
+                <tr data-classification="daily-issue" data-domain="purchase" data-priority="" data-status="investigation">
+                  <td class="col-date">2026-07-12</td>
+                  <td class="col-id"><span class="issue-id-badge">ISSUE-023</span></td>
+                  <td class="col-priority"><span class="badge badge-tbd">TBD</span></td>
+                  <td class="col-issue"><strong>ISSUE-023 — Issue 023 – Vendor Box Inventory Discrepancy and Reported Calculation Method Concern (UNIT 3 / UNIT 4)</strong></td>
+                  <td class="col-what">Operational staff reportedly calculate the number of vendor boxes required for vendor
+shipments based on unit count. The supplied BI report states:</td>
+                  <td class="col-gap"><span class="gap-none">—</span></td>
+                  <td class="col-fix"><p class="fix-text">The following are recommendations based on the supplied BI report. They are not approved
+operational procedures. Each requires business and/or management validation before action.</p></td>
+                  <td class="col-owner"><span class="owner-tag">&#128100; Warehouse Operations Team</span></td>
+                  <td class="col-solved"><div class="resolution-group" data-issue="ISSUE-023"><button class="res-btn res-solved" data-value="solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Solved</button><button class="res-btn res-not" data-value="not-solved" aria-pressed="false"><span class="res-icon">&#x2610;</span> Not Solved</button></div></td>
+                  <td class="col-evidence"><div class="evidence-gallery"><a href="Phase2-inputs/issues%2023/2026_07_12_p1.png" target="_blank" class="evidence-link"><img src="Phase2-inputs/issues%2023/2026_07_12_p1.png" class="evidence-thumb" alt="evidence image" loading="lazy"></a></div></td>
+                </tr>
               </tbody>
             </table>
           </div>
         </div>
+
+        <!-- PH member pain-point view — shown only when Domain = PH is active -->
+        <div id="ph-member-view" hidden>
+          <div class="issues-section-hdr">
+            <div class="issues-section-icon">📋</div>
+            <span class="issues-section-title">PH Member Pain Points</span>
+          </div>
+          <p class="issues-count-line" id="ph-member-count">Showing all 14 PH pain points</p>
+          <div class="table-card">
+            <div class="table-scroll">
+              <table class="data-table" id="ph-member-table">
+                <thead>
+                  <tr>
+                    <th style="width:130px;">Issue ID</th>
+                    <th style="width:90px;">Priority</th>
+                    <th style="width:120px;">Date</th>
+                    <th>Issues</th>
+                  </tr>
+                </thead>
+                <tbody id="ph-member-tbody">
+                  <!-- PH-NIV-001 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="high">
+                    <td><span class="issue-id-badge">PH-NIV-001</span></td>
+                    <td><span class="badge badge-high">High</span></td>
+                    <td>2026-07-08</td>
+                    <td>FBA cannot send some products because of the parcel cost. If we increase the product price, can FBA send those products? Especially if the full hemp set is out of stock, would it be possible to send the separate combo instead?</td>
+                  </tr>
+                  <!-- PH-NIV-002 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="critical">
+                    <td><span class="issue-id-badge">PH-NIV-002</span></td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td>2026-07-08</td>
+                    <td>It is not possible to request the image editing team to update the main images for ASINs with low impressions.</td>
+                  </tr>
+                  <!-- PH-NIV-003 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="medium">
+                    <td><span class="issue-id-badge">PH-NIV-003</span></td>
+                    <td><span class="badge badge-medium">Medium</span></td>
+                    <td>2026-07-08</td>
+                    <td>In some cases, child ASINs under the same parent ASIN are assigned to different PH owners.</td>
+                  </tr>
+                  <!-- PH-NIV-004 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="medium">
+                    <td><span class="issue-id-badge">PH-NIV-004</span></td>
+                    <td><span class="badge badge-medium">Medium</span></td>
+                    <td>2026-07-08</td>
+                    <td>Our product is currently priced above our competitors. Considering its sales performance, could we reduce the price to improve product movement?</td>
+                  </tr>
+                  <!-- PH-NIV-005 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="critical">
+                    <td><span class="issue-id-badge">PH-NIV-005</span></td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td>2026-07-08</td>
+                    <td>In some cases, KPI performance is low due to the product being out of stock. This should be considered.</td>
+                  </tr>
+                  <!-- PH-NIV-006 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="critical">
+                    <td><span class="issue-id-badge">PH-NIV-006</span></td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td>2026-07-08</td>
+                    <td>The performance decline was mainly due to stock-outs of our top-selling products caused by supplier-side issues. Since these products contributed significantly to monthly sales, the sudden unavailability impacted revenue and prevented us from achieving the planned targets.</td>
+                  </tr>
+                  <!-- PH-NIV-007 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="medium">
+                    <td><span class="issue-id-badge">PH-NIV-007</span></td>
+                    <td><span class="badge badge-medium">Medium</span></td>
+                    <td>2026-07-08</td>
+                    <td>Same product variations (colour and bulb options) assigned to two portfolio holders made ownership unclear and did not improve sales performance.</td>
+                  </tr>
+                  <!-- PH-NIV-008 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="critical">
+                    <td><span class="issue-id-badge">PH-NIV-008</span></td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td>2026-07-08</td>
+                    <td>High returns and refunds due to product damage, missing parts, and wrong products have negatively impacted net sales, reducing the actual sales performance impact.</td>
+                  </tr>
+                  <!-- PH-NIV-009 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="high">
+                    <td><span class="issue-id-badge">PH-NIV-009</span></td>
+                    <td><span class="badge badge-high">High</span></td>
+                    <td>2026-07-08</td>
+                    <td>Server busy issue due to this taking too much time to finish listing.</td>
+                  </tr>
+                  <!-- PH-NIV-010 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="critical">
+                    <td><span class="issue-id-badge">PH-NIV-010</span></td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td>2026-07-08</td>
+                    <td>product details are not sufficient; In the listing management tool our latest listings is saved on it so we can't find that's the accurate information, In ledsone dashboard also didn't have the full information of the product.</td>
+                  </tr>
+                  <!-- PH-NIV-011 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="critical">
+                    <td><span class="issue-id-badge">PH-NIV-011</span></td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td>2026-07-08</td>
+                    <td>A major issue is price correction and synchronization. We need a pricing dashboard where any SKU price update is automatically reflected across all channels and marketplaces. Maintaining consistent pricing across platforms is important to avoid losing sales due to price differences.</td>
+                  </tr>
+                  <!-- PH-NIV-012 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="critical">
+                    <td><span class="issue-id-badge">PH-NIV-012</span></td>
+                    <td><span class="badge badge-critical">Critical</span></td>
+                    <td>2026-07-08</td>
+                    <td>The listing details updated through the Listing Management Tool are not syncing with the Amazon listing.</td>
+                  </tr>
+                  <!-- PH-NIV-013 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="medium">
+                    <td><span class="issue-id-badge">PH-NIV-013</span></td>
+                    <td><span class="badge badge-medium">Medium</span></td>
+                    <td>2026-07-08</td>
+                    <td>Whenever we create a new listing on Amazon, the same product is being listed on our eBay account by the account holder or an unknown person. As a result, we have to create another separate listing on eBay. This leads to the same product having two different eBay listing IDs, which can split traffic and negatively affect sales and overall listing performance.</td>
+                  </tr>
+                  <!-- PH-NIV-014 -->
+                  <tr data-domain="ph" data-branch="nelliyady" data-person="nivarnan" data-priority="medium">
+                    <td><span class="issue-id-badge">PH-NIV-014</span></td>
+                    <td><span class="badge badge-medium">Medium</span></td>
+                    <td>2026-07-08</td>
+                    <td>We were assigned a category ASIN in the PH team, and We work on it to drive sales, which helps it perform well. At some point, one of the listings goes out of stock, and its sales performance goes on hold. Then, after 2-3 months, the stock becomes available with us again — but by that time, the ownership of the ASINs we worked hard on gets transferred to someone else. This is totally unfair. When incidents like this happen, it completely disturbs our mindset/morale as well.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div><!-- /ph-member-view -->
 
       </section><!-- /section-issues -->
 

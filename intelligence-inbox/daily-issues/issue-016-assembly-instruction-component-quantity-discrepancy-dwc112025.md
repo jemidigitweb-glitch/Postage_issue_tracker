@@ -4,7 +4,7 @@
 **Date Logged:** 2026-07-08
 **Logged By:** Vishnusri
 **Domain:** listing
-**Priority:** TBD
+**Priority:** Medium
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
 **Owner:** SL Listing Team
