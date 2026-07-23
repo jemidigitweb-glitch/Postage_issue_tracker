@@ -7,7 +7,7 @@
 **Priority:** TBD
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
-**Owner:** SL Listing Team
+**Owner:** Nanthini
 **SKU:** CRFF2404BM
 **Document Gap:** gap-006-assembly-instruction-technical-sign-off-and-product-verification.md
 
@@ -225,8 +225,8 @@ a GAP-006 amendment or a new gap document.
 | `2026_07_09_p2.png` | `submission-html/Phase2-inputs/issues 19/2026_07_09_p2.png` | Product listing card: CRFF2404BM, 240mm, 4 Outlet, Black, 170mm bracket, red annotation circle | HIGH — product code and all measurements directly readable |
 
 **Evidence paths (URL-encoded for HTML):**
-- `Phase2-inputs/issues%2019/2026_07_09_p1.png`
-- `Phase2-inputs/issues%2019/2026_07_09_p2.png`
+- `Nanthini akka issues/issues%2019/2026_07_09_p1.png`
+- `Nanthini akka issues/issues%2019/2026_07_09_p2.png`
 
 Audio recordings present (available for human review — NOT independently transcribed):
 - `submission-html/Phase2-inputs/issues 19/recording_2026-07-09_r1.mp3`

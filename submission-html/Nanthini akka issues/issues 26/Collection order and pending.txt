@@ -1,0 +1,2 @@
+Collection order and pending payment for manual orders need to be handled properly by the website and customer issues team
+The above happened 2nd time now

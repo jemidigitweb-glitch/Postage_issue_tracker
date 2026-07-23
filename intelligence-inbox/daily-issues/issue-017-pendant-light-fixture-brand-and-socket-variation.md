@@ -7,7 +7,7 @@
 **Priority:** TBD
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
-**Owner:** Warehouse Operations Team
+**Owner:** Nanthini
 **Document Gap:** None
 
 ---
@@ -178,9 +178,9 @@ but have not been transcribed or independently analysed during this implementati
 as additional evidence available for human review.
 
 **Evidence paths (URL-encoded for HTML):**
-- `Phase2-inputs/issues%2017/2026_07_09_p1.png`
-- `Phase2-inputs/issues%2017/2026_07_09_p2.png`
-- `Phase2-inputs/issues%2017/2026_07_09_p3.png`
+- `Nanthini akka issues/issues%2017/2026_07_09_p1.png`
+- `Nanthini akka issues/issues%2017/2026_07_09_p2.png`
+- `Nanthini akka issues/issues%2017/2026_07_09_p3.png`
 
 ---
 

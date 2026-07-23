@@ -7,7 +7,7 @@
 **Priority:** TBD
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
-**Owner:** SL Listing Team
+**Owner:** Nanthini
 **SKU:** LDMT185B224
 **Document Gap:** None
 
@@ -463,7 +463,7 @@ domain assignment is consistent with ISSUE-016, ISSUE-018, and ISSUE-019.
 | `2026_07_12_p1.png` | `submission-html/Phase2-inputs/issues 20/2026_07_12_p1.png` | Shopify packlist for order LED57730 showing SKU LDMT185B224 (T185 4W, Qty 8) with two conflicting thumbnails; left in blue box, right in yellow box with blue handwritten circle and "B22, 4W" annotation | HIGH — order number, SKU, variant title, and conflicting thumbnails directly readable |
 
 **Evidence paths (URL-encoded for HTML):**
-- `Phase2-inputs/issues%2020/2026_07_12_p1.png`
+- `Nanthini akka issues/issues%2020/2026_07_12_p1.png`
 
 Audio recordings present (available for human review — NOT independently transcribed):
 - `submission-html/Phase2-inputs/issues 20/recording_2026-07-12_r1.mp3`

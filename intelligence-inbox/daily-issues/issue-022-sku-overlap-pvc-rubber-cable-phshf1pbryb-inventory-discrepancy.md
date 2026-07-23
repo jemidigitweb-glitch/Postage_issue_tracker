@@ -7,7 +7,7 @@
 **Priority:** TBD
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
-**Owner:** SL Listing Team
+**Owner:** Nanthini
 **SKU:** PHSHF1PBRYB
 **Document Gap:** None
 
@@ -330,8 +330,8 @@ SKUs, a gap review may be appropriate at that stage.
 | `2026_07_12_p2.png` | `submission-html/Phase2-inputs/issues 22/2026_07_12_p2.png` | 720×1600px, 8-bit RGB | 384,654 B | YES | YES |
 
 **Evidence paths (URL-encoded for HTML):**
-- `Phase2-inputs/issues%2022/2026_07_12_p1.png`
-- `Phase2-inputs/issues%2022/2026_07_12_p2.png`
+- `Nanthini akka issues/issues%2022/2026_07_12_p1.png`
+- `Nanthini akka issues/issues%2022/2026_07_12_p2.png`
 
 ---
 

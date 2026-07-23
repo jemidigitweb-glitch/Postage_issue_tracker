@@ -7,7 +7,7 @@
 **Priority:** Medium
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
-**Owner:** SL Listing Team
+**Owner:** Nanthini
 **Document Gap:** gap-006-assembly-instruction-technical-sign-off-and-product-verification.md
 **SKU:** DWC112025
 
@@ -119,8 +119,8 @@ Audio files present in the same folder (`recording-016.mp3`, `recording-016.ogg`
 NOT mapped as evidence images.
 
 **Evidence paths (URL-encoded for HTML):**
-- `Phase2-inputs/issues%2016/warehouse-image-016_1.png`
-- `Phase2-inputs/issues%2016/warehouse-image-016_2.png`
+- `Nanthini akka issues/issues%2016/warehouse-image-016_1.png`
+- `Nanthini akka issues/issues%2016/warehouse-image-016_2.png`
 
 ### Verified Business Intelligence Source
 

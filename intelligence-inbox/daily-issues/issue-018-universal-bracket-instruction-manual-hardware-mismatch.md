@@ -7,7 +7,7 @@
 **Priority:** TBD
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
-**Owner:** SL Listing Team
+**Owner:** Nanthini
 **SKU:** UNKNOWN — TO BE CONFIRMED
 **Document Gap:** gap-006-assembly-instruction-technical-sign-off-and-product-verification.md
 
@@ -169,7 +169,7 @@ requires the reported directive to be confirmed and its scope understood first.
 | `2026_07_09_p1.png` | `submission-html/Phase2-inputs/issues 18/2026_07_09_p1.png` | Slotted metal mounting bracket with screws and knurled nuts; five slots visible | HIGH — direct visual observation |
 
 **Evidence path (URL-encoded for HTML):**
-- `Phase2-inputs/issues%2018/2026_07_09_p1.png`
+- `Nanthini akka issues/issues%2018/2026_07_09_p1.png`
 
 Audio recordings present:
 - `submission-html/Phase2-inputs/issues 18/recording_2026-07-09_r1.mp3`

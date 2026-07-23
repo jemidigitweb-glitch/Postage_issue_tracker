@@ -742,7 +742,7 @@ body {
 }
 
 /* Solved / Not Solved column */
-/* Solved / Not Solved — manual two-option resolution column */
+/* Not Solved / Half Solved / Solved — three-option resolution column */
 .issues-table-wrap .data-table td.col-solved {
   width: 160px;
   vertical-align: top;
@@ -794,6 +794,13 @@ body {
   color: #991b1b;
   background: #fee2e2;
   border-color: #fca5a5;
+}
+
+/* Half Solved — selected state: yellow */
+.res-btn.res-half[aria-pressed="true"] {
+  color: #854d0e;
+  background: #fef3c7;
+  border-color: #fcd34d;
 }
 
 .evidence-none {
@@ -918,3 +925,4 @@ body {
   font-style: italic;
   color: var(--text-muted);
 }
+

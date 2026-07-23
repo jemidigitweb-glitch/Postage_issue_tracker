@@ -7,7 +7,7 @@
 **Priority:** TBD
 **Status:** Open — Under Investigation
 **Classification:** Daily Issue
-**Owner:** Warehouse Operations Team
+**Owner:** Nanthini
 **SKU:** CRSF1202BM
 **Document Gap:** None
 
@@ -406,7 +406,7 @@ be raised at that stage. That determination requires investigation results, not 
 | `2026_07_12_p1.png` | `submission-html/Phase2-inputs/issues 21/2026_07_12_p1.png` | Product card/picking screen showing CRSF1202BM, 120mm, 2 Outlet, Black ceiling rose; x1 quantity | HIGH — SKU, dimensions, outlet count, and colour directly readable; cord grip visible as single small protrusion; no packaging or variation visible |
 
 **Evidence paths (URL-encoded for HTML):**
-- `Phase2-inputs/issues%2021/2026_07_12_p1.png`
+- `Nanthini akka issues/issues%2021/2026_07_12_p1.png`
 
 Audio recordings present (available for human review — NOT independently transcribed):
 - `submission-html/Phase2-inputs/issues 21/recording_2026-07-12_r1.mp3` (528 KB, MP3)
