@@ -46,9 +46,20 @@ FIELD_KEYS = {
     "domain":         "domain",
     "priority":       "priority",
     "status":         "status",
+    "classification": "classification",
     "owner":          "owner",
     "sku":            "sku",
     "document gap":   "gap_file",
+}
+
+# ── Classification normalisation ──────────────────────────────────────────
+# Maps the lowercase MD field value to the canonical data-classification slug.
+# Only values in this map are accepted when an explicit classification is given.
+# When the field is absent (legacy issues), "daily-issue" is used as the
+# backward-compatible default so existing rows are unaffected.
+CLASSIFICATION_MAP = {
+    "daily issue":       "daily-issue",
+    "decision required": "decision-required",
 }
 
 # ── Required fields for an issue to be accepted ───────────────────────────
@@ -164,7 +175,7 @@ def parse_issue_md(path):
 
     issue = {
         "id": "", "date": "", "domain": "", "priority": "",
-        "status": "", "owner": "", "sku": "", "gap_file": "",
+        "status": "", "classification": "", "owner": "", "sku": "", "gap_file": "",
         "title": "", "what": "", "fix": "",
         "evidence_paths": [],
         "_has_id_field": False,  # True only when **Issue ID:** is explicit in MD
@@ -259,6 +270,11 @@ def parse_issue_md(path):
         issue["status"] = "resolved"
     else:
         issue["status"] = "investigation"  # safe default for open issues
+
+    # Normalise classification
+    # _normalize_classification returns None for explicit unsupported values;
+    # validate_issue() will catch and reject those after parsing is complete.
+    issue["classification"] = _normalize_classification(issue.get("classification", ""))
 
     # Normalise domain to lowercase, first word
     issue["domain"] = issue["domain"].lower().split()[0] if issue["domain"] else ""
@@ -369,6 +385,21 @@ def _normalise_owner(raw):
     return "" if raw.strip().lower() in OWNER_NULLS else raw.strip()
 
 
+def _normalize_classification(raw):
+    """
+    Map the raw **Classification:** MD value to its canonical data-classification slug.
+
+    - Known values ("daily issue", "decision required") → canonical slug.
+    - Absent or blank field → "daily-issue" (backward-compatible default for
+      legacy issues that predate the Classification field).
+    - Explicit but unrecognised value → None (caller must reject the issue).
+    """
+    if not raw or not raw.strip():
+        return "daily-issue"  # backward-compatible default
+    normalised = CLASSIFICATION_MAP.get(raw.strip().lower())
+    return normalised  # None when value is explicit but unrecognised
+
+
 def validate_issue(issue, fname, gaps_dir):
     """Return list of validation errors. Empty list = valid."""
     errors = []
@@ -380,6 +411,11 @@ def validate_issue(issue, fname, gaps_dir):
     allowed_domains = {"postage", "listing", "purchase", "pricing"}
     if issue.get("domain") and issue["domain"] not in allowed_domains:
         errors.append(f"Unknown domain: '{issue['domain']}' (allowed: {', '.join(sorted(allowed_domains))})")
+
+    # Validate classification — None means the MD had an explicit but unsupported value
+    if issue.get("classification") is None:
+        allowed_cls = ", ".join(sorted(CLASSIFICATION_MAP.keys()))
+        errors.append(f"Unsupported classification in MD (allowed: {allowed_cls})")
 
     # Validate gap file exists if declared
     gap_file = issue.get("gap_file", "")
@@ -692,6 +728,7 @@ def build_row_html(issue):
     if data_priority in ("tbd", "unknown"):
         data_priority = ""
 
+    data_classification = esc(issue.get("classification") or "daily-issue")
     data_domain  = esc(issue.get("domain", ""))
     data_status  = esc(issue.get("status", "investigation"))
     data_person  = _derive_person(issue.get("owner", ""))
@@ -703,16 +740,18 @@ def build_row_html(issue):
 
     res_html = (
         f'<div class="resolution-group" data-issue="{issue_id}">'
-        f'<button class="res-btn res-solved" data-value="solved" aria-pressed="false">'
-        f'<span class="res-icon">&#x2610;</span> Solved</button>'
         f'<button class="res-btn res-not" data-value="not-solved" aria-pressed="false">'
         f'<span class="res-icon">&#x2610;</span> Not Solved</button>'
+        f'<button class="res-btn res-half" data-value="half-solved" aria-pressed="false">'
+        f'<span class="res-icon">&#x2610;</span> Half Solved</button>'
+        f'<button class="res-btn res-solved" data-value="solved" aria-pressed="false">'
+        f'<span class="res-icon">&#x2610;</span> Solved</button>'
         f'</div>'
     )
 
     return (
         f'\n                <!-- {issue_id} -->\n'
-        f'                <tr data-classification="daily-issue" data-person="{data_person}" data-domain="{data_domain}"'
+        f'                <tr data-classification="{data_classification}" data-person="{data_person}" data-domain="{data_domain}"'
         f' data-priority="{data_priority}" data-status="{data_status}">\n'
         f'                  <td class="col-date">{date_val}</td>\n'
         f'                  <td class="col-id"><span class="issue-id-badge">{issue_id}</span></td>\n'
@@ -742,21 +781,24 @@ def build_js_entry(issue):
     def jstr(s):
         return json.dumps(s or "")
 
+    data_classification = issue.get("classification") or "daily-issue"
+
     lines = [
         "  {",
-        f"    id:            {jstr(issue_id)},",
-        f"    date:          {jstr(issue.get('date', '—'))},",
-        f"    domain:        {jstr(issue.get('domain', ''))},",
-        f"    priority:      {jstr(data_priority)},",
-        f"    status:        {jstr(issue.get('status', 'investigation'))},",
-        f"    title:         {jstr(issue.get('title', ''))},",
-        f"    what:          {jstr(issue.get('what', ''))},",
-        f"    gapLabel:      {jstr(gap_label)},",
-        f"    gapClass:      {jstr(('gap-ref' if gap_label != '—' else 'gap-none'))},",
-        f"    fix:           {jstr(issue.get('fix', ''))},",
-        f"    owner:         {jstr(issue.get('owner', '—'))},",
-        f"    priorityBadge: {jstr(priority_b)},",
-        f"    evidenceHtml:  {jstr(evidence_html)},",
+        f"    id:             {jstr(issue_id)},",
+        f"    date:           {jstr(issue.get('date', '—'))},",
+        f"    domain:         {jstr(issue.get('domain', ''))},",
+        f"    priority:       {jstr(data_priority)},",
+        f"    status:         {jstr(issue.get('status', 'investigation'))},",
+        f"    classification: {jstr(data_classification)},",
+        f"    title:          {jstr(issue.get('title', ''))},",
+        f"    what:           {jstr(issue.get('what', ''))},",
+        f"    gapLabel:       {jstr(gap_label)},",
+        f"    gapClass:       {jstr(('gap-ref' if gap_label != '—' else 'gap-none'))},",
+        f"    fix:            {jstr(issue.get('fix', ''))},",
+        f"    owner:          {jstr(issue.get('owner', '—'))},",
+        f"    priorityBadge:  {jstr(priority_b)},",
+        f"    evidenceHtml:   {jstr(evidence_html)},",
         "  }",
     ]
     return "\n".join(lines)

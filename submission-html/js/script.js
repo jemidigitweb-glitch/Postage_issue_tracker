@@ -232,7 +232,7 @@ function buildIssueRow(issue) {
     `<span class="res-icon">&#x2610;</span> Solved</button></div>`;
 
   const tr = document.createElement("tr");
-  tr.dataset.classification = "daily-issue";
+  tr.dataset.classification = issue.classification || "daily-issue";
   tr.dataset.domain   = dom;
   tr.dataset.priority = pri;
   tr.dataset.status   = sts;
@@ -369,9 +369,11 @@ function initAddIssuesPanel() {
 
     if (toImport.length === 0) {
       showPanelMessage(body,
-        `<p class="add-issues-success">&#10003; Dashboard is already up to date. No new issues found.</p>
-         <p class="add-issues-note">&#9432; Running in offline mode (local server not detected).
-         Start the server for permanent importing.</p>`
+        `<p class="add-issues-warning">&#9888; Import server unavailable.</p>
+         <p>The application server is not running, so new Markdown issues cannot be
+         scanned or permanently imported.</p>
+         <p class="add-issues-note">Start the server and try again:<br>
+         <code class="add-issues-cmd">python3 tools/serve.py</code></p>`
       );
       return;
     }

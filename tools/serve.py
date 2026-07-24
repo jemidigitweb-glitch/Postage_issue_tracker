@@ -239,8 +239,47 @@ def _run_import():
         _real_stdout = sys.stdout
         sys.stdout = _captured
         try:
-            imp.generate_data_js(validated)
+            # Regenerate issues-data.js from ALL inbox issues so existing entries
+            # (ISSUE-001 onwards) are not erased when only new issues are imported.
+            # Matches CLI --apply behavior: generate_data_js always receives the
+            # complete inbox list, not only the newly validated subset.
+            all_for_js = []
+            for _num2, _fname2, _path2 in inbox_issues:
+                _iss2 = imp.parse_issue_md(_path2)
+                if not _iss2["id"]:
+                    _iss2["id"] = f"ISSUE-{_num2}"
+                if _iss2.get("id"):
+                    all_for_js.append(_iss2)
+            imp.generate_data_js(all_for_js)
             imp.patch_index_html(validated)
+
+            # Also refresh existing rows whose canonical content has changed,
+            # matching CLI --apply behavior so importer improvements propagate
+            # without requiring a manual --refresh-issue per issue.
+            already_raw = [(n, fn, p) for n, fn, p in inbox_issues
+                           if n in dashboard_ids]
+            if already_raw:
+                already_parsed = []
+                for _n3, _fn3, _p3 in already_raw:
+                    _iss3 = imp.parse_issue_md(_p3)
+                    if not _iss3["id"]:
+                        _iss3["id"] = f"ISSUE-{_n3}"
+                    already_parsed.append(_iss3)
+                with open(imp.DASHBOARD, encoding="utf-8") as _fh:
+                    _html_now = _fh.read()
+                _html_now, _refreshed, _ref_errors = imp.refresh_html_rows(
+                    already_parsed, _html_now
+                )
+                if _refreshed:
+                    import tempfile as _tmpmod
+                    _html_dir = os.path.dirname(os.path.abspath(imp.DASHBOARD))
+                    with _tmpmod.NamedTemporaryFile(
+                        "w", encoding="utf-8", dir=_html_dir,
+                        suffix=".tmp", delete=False
+                    ) as _tf:
+                        _tf.write(_html_now)
+                        _tmp_html = _tf.name
+                    os.replace(_tmp_html, imp.DASHBOARD)
         finally:
             sys.stdout = _real_stdout
 
