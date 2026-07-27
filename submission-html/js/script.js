@@ -168,6 +168,31 @@ function initIssueFilters() {
 /* ================================================================
    STATISTICS — recalculate from all rows after import
    ================================================================ */
+
+/* ---- Person filter pill counts — dynamically derived from DOM rows ----
+   Never hard-coded: recomputed from #issues-tbody tr[data-person] every
+   time recalculateStats() runs (boot, server-import reload, fallback
+   import, priority change), so a newly imported issue's owner is reflected
+   automatically without any manual count edit. */
+function updatePersonCounts() {
+  const rows = document.querySelectorAll("#issues-tbody tr");
+  const counts = {};
+  rows.forEach((row) => {
+    const person = (row.dataset.person || "").toLowerCase();
+    if (!person) return;
+    counts[person] = (counts[person] || 0) + 1;
+  });
+
+  document.querySelectorAll(".person-pill").forEach((btn) => {
+    const key = (btn.dataset.personFilter || "").toLowerCase();
+    if (!btn.dataset.baseLabel) {
+      btn.dataset.baseLabel = btn.textContent.trim();
+    }
+    const n = key === "all" ? rows.length : (counts[key] || 0);
+    btn.textContent = `${btn.dataset.baseLabel} (${n})`;
+  });
+}
+
 function recalculateStats() {
   const rows = document.querySelectorAll("#issues-tbody tr");
   let total = 0, critical = 0, high = 0, medium = 0, resolved = 0;
@@ -407,6 +432,7 @@ function initAddIssuesPanel() {
         });
 
         recalculateStats();
+        updatePersonCounts();
         applyIssueFilters();
 
         const imported = stillNew.map((i) => `<li>${i.id}</li>`).join("");
@@ -529,6 +555,7 @@ function renderPriorityDropdowns() {
         const cap = sel.value.charAt(0).toUpperCase() + sel.value.slice(1);
         cell.innerHTML = `<span class="badge badge-${sel.value}">${cap}</span>`;
         recalculateStats();
+        updatePersonCounts();
         applyIssueFilters();
       } else {
         setPriority(issueId, sel.value, sel);
@@ -616,6 +643,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initAddIssuesPanel();
   restoreAtisrajPriorities(); /* restore localStorage-persisted priorities for A001–A023 before stats run */
   recalculateStats();   /* counters reflect actual DOM rows, not hardcoded HTML values */
+  updatePersonCounts(); /* person pill counts reflect actual DOM rows, not hardcoded HTML values */
   applyIssueFilters();  /* count-line and section-count-label correct on initial load */
   renderPriorityDropdowns(); /* TBD-only priority selectors for Daily Issues + A001–A023 */
 });

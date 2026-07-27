@@ -222,7 +222,23 @@ def _run_import():
         else:
             validated.append(issue)
 
-    if not validated and not rejected:
+    # ── Atisraj A-series — scoped, parallel pipeline ────────────────────
+    # Entirely separate discovery/validation from the ISSUE-NNN block above.
+    # A failure or change here cannot affect ISSUE-NNN skipped/validated/rejected.
+    atisraj_validated, atisraj_rejected_raw, atisraj_skipped, atisraj_all = imp.process_atisraj_issues()
+    skipped += atisraj_skipped
+    atisraj_rejected = [
+        {"id": aid, "errors": errs} for aid, _fname, errs in atisraj_rejected_raw
+    ]
+
+    # NOTE: atisraj_all being non-empty does NOT mean a write is needed — it
+    # only means already-present Atisraj rows exist that *might* need a
+    # metadata refresh (e.g. a Date added after the row was first inserted).
+    # refresh_atisraj_html_rows() is itself a no-op when nothing changed, so
+    # it is safe/cheap to always attempt when atisraj_all is non-empty rather
+    # than trying to predict here whether a refresh will actually fire.
+    if (not validated and not rejected and not atisraj_validated
+            and not atisraj_rejected and not atisraj_all):
         return {
             "success":  True,
             "imported": [],
@@ -231,9 +247,10 @@ def _run_import():
             "message":  "Dashboard is already up to date. No new issues found.",
         }
 
-    imported_ids = []
+    imported_ids     = []
+    atisraj_refreshed = []
 
-    if validated:
+    if validated or atisraj_validated or atisraj_all:
         # Redirect stdout from generate/patch to avoid polluting the server log
         _captured = io.StringIO()
         _real_stdout = sys.stdout
@@ -250,8 +267,27 @@ def _run_import():
                     _iss2["id"] = f"ISSUE-{_num2}"
                 if _iss2.get("id"):
                     all_for_js.append(_iss2)
-            imp.generate_data_js(all_for_js)
+            imp.generate_data_js(all_for_js, atisraj_issues=atisraj_all)
             imp.patch_index_html(validated)
+            imp.patch_index_html_atisraj(atisraj_validated)
+
+            # Refresh already-present Atisraj rows whose canonical metadata
+            # (e.g. Date) has changed. Structurally guarded in
+            # refresh_atisraj_html_rows() so A001-A023 can never be touched.
+            if atisraj_all:
+                with open(imp.DASHBOARD, encoding="utf-8") as _fh:
+                    _html_now_a = _fh.read()
+                _html_now_a, atisraj_refreshed, _atisraj_refresh_errors = \
+                    imp.refresh_atisraj_html_rows(atisraj_all, _html_now_a)
+                if atisraj_refreshed:
+                    _html_dir_a = os.path.dirname(os.path.abspath(imp.DASHBOARD))
+                    with tempfile.NamedTemporaryFile(
+                        "w", encoding="utf-8", dir=_html_dir_a,
+                        suffix=".tmp", delete=False
+                    ) as _tf_a:
+                        _tf_a.write(_html_now_a)
+                        _tmp_html_a = _tf_a.name
+                    os.replace(_tmp_html_a, imp.DASHBOARD)
 
             # Also refresh existing rows whose canonical content has changed,
             # matching CLI --apply behavior so importer improvements propagate
@@ -286,27 +322,34 @@ def _run_import():
         imported_ids = [
             "ISSUE-" + re.sub(r"^ISSUE-?", "", i["id"], flags=re.IGNORECASE).zfill(3)
             for i in validated
-        ]
+        ] + [i["id"] for i in atisraj_validated]
 
     rejected_summary = [
         {"id": r["id"], "errors": r["errors"]}
         for r in rejected
-    ]
+    ] + atisraj_rejected
 
-    if rejected and not imported_ids:
+    if rejected_summary and not imported_ids:
         return {
             "success":  False,
             "imported": [],
             "skipped":  skipped,
             "rejected": rejected_summary,
-            "message":  f"Import failed — {len(rejected)} issue(s) did not pass validation.",
+            "message":  f"Import failed — {len(rejected_summary)} issue(s) did not pass validation.",
         }
 
     msg_parts = []
     if imported_ids:
         msg_parts.append(f"{len(imported_ids)} issue(s) imported: {', '.join(imported_ids)}.")
-    if rejected:
-        msg_parts.append(f"{len(rejected)} issue(s) rejected (validation failed).")
+    if atisraj_refreshed:
+        msg_parts.append(
+            f"{len(atisraj_refreshed)} existing Atisraj row(s) refreshed "
+            f"with updated canonical metadata: {', '.join(atisraj_refreshed)}."
+        )
+    if rejected_summary:
+        msg_parts.append(f"{len(rejected_summary)} issue(s) rejected (validation failed).")
+    if not msg_parts:
+        msg_parts.append("Dashboard is already up to date. No new issues found.")
 
     return {
         "success":  True,

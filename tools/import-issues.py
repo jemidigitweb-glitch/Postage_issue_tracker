@@ -39,6 +39,12 @@ PHASE2_DIR   = os.path.join(PROJECT_ROOT, "submission-html", "Nanthini akka issu
 # Derived from PHASE2_DIR so a future folder rename only requires one change above.
 EVIDENCE_URL_PREFIX = os.path.basename(PHASE2_DIR)
 
+# ── Atisraj A-series — scoped, parallel discovery path ─────────────────────
+# Independent ID namespace (A001, A002, ...) — never converted to ISSUE-NNN.
+# Kept entirely separate from the ISSUE-NNN pipeline above so that namespace
+# never regresses; see get_atisraj_issues() / parse_atisraj_md() / etc. below.
+ATISRAJ_DIR = os.path.join(INBOX_DIR, "atisraj issues")
+
 # ── Structured field keys to extract from ** Field:** value lines ──────────
 FIELD_KEYS = {
     "issue id":       "id",
@@ -157,6 +163,19 @@ def extract_issue_number(filename):
     """Return zero-padded 3-digit number from 'issue-NNN-*.md', or None."""
     m = re.match(r"issue-(\d+)-", filename)
     return m.group(1).zfill(3) if m else None
+
+
+# ── Atisraj A-series ID extraction ──────────────────────────────────────────
+# Independent namespace: 'A' + 3-or-more digits, e.g. A001, A024, A040, A100.
+# Generic by construction — no per-issue-number special casing, works for any
+# future A0NN-*.md file dropped into ATISRAJ_DIR without a code change.
+_ATISRAJ_ID_RE = re.compile(r"^(A\d{3,})-")
+
+
+def extract_atisraj_id(filename):
+    """Return the canonical Atisraj ID (e.g. 'A024') from 'A024-*.md', or None."""
+    m = _ATISRAJ_ID_RE.match(filename)
+    return m.group(1) if m else None
 
 
 def parse_issue_md(path):
@@ -299,6 +318,362 @@ def parse_issue_md(path):
         issue["owner"] = DOMAIN_OWNER_MAP.get(issue.get("domain", ""), "")
 
     return issue
+
+
+# ── Atisraj A-series template parsing ───────────────────────────────────────
+# The Atisraj canonical template uses '# Heading' (H1) blocks, not the
+# '**Field:**' bold-line convention or '## H2' section convention used by the
+# ISSUE-NNN template. This is a distinct, generic H1-section parser — it does
+# not read or alter parse_issue_md()'s field/heading logic in any way.
+
+ATISRAJ_REQUIRED = ["id", "owner", "statement"]
+
+
+def _parse_h1_sections(content):
+    """
+    Generic parser for '# Heading' delimited Markdown: splits content on
+    lines starting with '# ' and returns {heading_text: body_text}.
+    Not specific to any issue ID — works for any file using this template.
+    """
+    sections = {}
+    current_heading = None
+    current_body = []
+    for line in content.splitlines():
+        if line.startswith("# "):
+            if current_heading is not None:
+                sections[current_heading] = "\n".join(current_body).strip()
+            current_heading = line[2:].strip()
+            current_body = []
+        else:
+            current_body.append(line)
+    if current_heading is not None:
+        sections[current_heading] = "\n".join(current_body).strip()
+    return sections
+
+
+def parse_atisraj_md(path):
+    """
+    Parse a single Atisraj A-series canonical Markdown file.
+
+    Returns a dict with: id, owner, statement, source_type, source_fidelity,
+    status_raw, status (normalised), evidence_status, known_limits, next_step.
+
+    Reads '# Source Issue Statement' verbatim — never paraphrased, never
+    truncated, never rewritten. [UNCLEAR IN SOURCE] markers pass through
+    unchanged because the text is used exactly as parsed, with no rewriting
+    step anywhere in this function or its callers.
+
+    Missing fields are left as '' — nothing is invented here. Field-level
+    fallback policy (e.g. "no domain established") is applied only when
+    building the dashboard row/JS entry, not during parsing.
+    """
+    with open(path, encoding="utf-8") as f:
+        content = f.read()
+
+    sections = _parse_h1_sections(content)
+
+    issue = {
+        "id":              sections.get("Issue ID", "").strip(),
+        "date":            sections.get("Date", "").strip(),
+        "owner":           sections.get("Owner", "").strip(),
+        "statement":       sections.get("Source Issue Statement", "").strip(),
+        "source_type":     sections.get("Source Type", "").strip(),
+        "source_fidelity": sections.get("Source Fidelity", "").strip(),
+        "status_raw":      sections.get("Status", "").strip(),
+        "evidence_status": sections.get("Evidence Status", "").strip(),
+        "known_limits":    sections.get("Known Limits", "").strip(),
+        "next_step":       sections.get("Next Step", "").strip(),
+    }
+
+    # Normalise status the same way the ISSUE-NNN pipeline does, for
+    # data-status consistency across both row types.
+    s = issue["status_raw"].lower()
+    issue["status"] = "resolved" if "resolved" in s else "investigation"
+
+    return issue
+
+
+def validate_atisraj_issue(issue, fname, expected_id):
+    """
+    Return list of validation errors for an Atisraj issue. Empty list = valid.
+
+    Only checks what the canonical template actually establishes (id, owner,
+    statement) plus filename/body ID consistency. Does NOT require domain,
+    date, priority, or any field the Atisraj source deliberately omits —
+    inventing a requirement for those would force fabricated values, which
+    is explicitly disallowed for this asset type.
+    """
+    errors = []
+    for f in ATISRAJ_REQUIRED:
+        if not issue.get(f):
+            errors.append(f"Missing required field: {f}")
+
+    if issue.get("id") and issue["id"] != expected_id:
+        errors.append(
+            f"Issue ID mismatch: filename implies '{expected_id}' "
+            f"but file declares '{issue['id']}'"
+        )
+
+    return errors
+
+
+def get_atisraj_issues():
+    """
+    Return sorted list of (aid, filename, path) from ATISRAJ_DIR.
+    Scoped exclusively to intelligence-inbox/daily-issues/atisraj issues/ —
+    does not touch or widen the ISSUE-NNN scan of INBOX_DIR in any way.
+    Returns [] if the folder does not exist (no error).
+    """
+    issues = []
+    if not os.path.isdir(ATISRAJ_DIR):
+        return issues
+    for fname in sorted(os.listdir(ATISRAJ_DIR)):
+        if not fname.endswith(".md"):
+            continue
+        aid = extract_atisraj_id(fname)
+        if aid is None:
+            print(f"  SKIP (no Atisraj ID in filename): {fname}")
+            continue
+        issues.append((aid, fname, os.path.join(ATISRAJ_DIR, fname)))
+    return issues
+
+
+# ── Atisraj dashboard-presence detection — scoped to actual issue rows ─────
+# Deliberately NOT a global "\bA\d{3}\b" scan of the whole HTML file, which
+# could false-positive-match unrelated prose anywhere on the page. Instead
+# this locates only <tr> elements carrying data-person="atisraj" and reads
+# the ID from that row's own .issue-id-badge span — i.e. it can only ever
+# match a real Atisraj issue row, never arbitrary text elsewhere in the file.
+_ATISRAJ_ROW_RE  = re.compile(r'<tr[^>]*data-person="atisraj"[^>]*>.*?</tr>', re.DOTALL)
+_ISSUE_BADGE_RE  = re.compile(r'<span class="issue-id-badge">([^<]+)</span>')
+
+
+def get_dashboard_atisraj_ids():
+    """Return set of Atisraj IDs (e.g. {'A001', ..., 'A023'}) already present
+    as real dashboard rows in index.html. See _ATISRAJ_ROW_RE docstring above
+    for why this is scoped to row markup rather than a raw text search."""
+    if not os.path.isfile(DASHBOARD):
+        return set()
+    html = open(DASHBOARD, encoding="utf-8").read()
+    ids = set()
+    for row_match in _ATISRAJ_ROW_RE.finditer(html):
+        badge_match = _ISSUE_BADGE_RE.search(row_match.group(0))
+        if badge_match:
+            ids.add(badge_match.group(1).strip())
+    return ids
+
+
+def process_atisraj_issues():
+    """
+    Discover, parse, validate, and de-duplicate all Atisraj A-series issues.
+    Pure read/compute — writes no file.
+
+    Returns (validated, rejected, skipped_ids, all_parsed):
+      validated:   list of parsed issue dicts not yet on the dashboard and
+                   passing validation — these are the ones to insert.
+      rejected:    list of (aid, fname, errors) tuples.
+      skipped_ids: list of aid strings already present on the dashboard.
+      all_parsed:  list of every successfully-parsed issue dict (used to
+                   regenerate issues-data.js in full, mirroring how the
+                   ISSUE-NNN pipeline always regenerates from the complete
+                   inbox rather than only the newly-validated subset).
+    """
+    atisraj_files = get_atisraj_issues()
+    dashboard_ids = get_dashboard_atisraj_ids()
+
+    validated   = []
+    rejected    = []
+    skipped_ids = []
+    all_parsed  = []
+
+    for aid, fname, path in atisraj_files:
+        issue = parse_atisraj_md(path)
+        if not issue.get("id"):
+            issue["id"] = aid
+        all_parsed.append(issue)
+
+        if aid in dashboard_ids:
+            skipped_ids.append(aid)
+            continue
+
+        errors = validate_atisraj_issue(issue, fname, aid)
+        if errors:
+            rejected.append((aid, fname, errors))
+        else:
+            validated.append(issue)
+
+    return validated, rejected, skipped_ids, all_parsed
+
+
+def build_atisraj_row_html(issue):
+    """
+    Build the complete <tr> HTML for one Atisraj A-series issue.
+
+    Column policy mirrors the pre-existing hand-authored A001-A023 rows
+    exactly (same neutral fallbacks already established in the dashboard —
+    "—" for date/gap/fix/evidence-none, TBD badge for priority) rather than
+    inventing any new representation. Nothing here asserts a domain, fix,
+    priority, or root cause that the Atisraj source does not establish.
+
+    Generic by construction: works identically for A024 today and A040
+    tomorrow — no per-issue-ID branching anywhere in this function.
+    """
+    esc = html_module.escape
+    aid       = issue["id"]
+    date_val  = esc(issue.get("date") or "—")
+    statement = esc(issue.get("statement", ""))
+    owner     = esc(issue.get("owner") or "—")
+    status    = esc(issue.get("status", "investigation"))
+    limits    = esc(issue.get("known_limits", ""))
+    ev_status = esc(issue.get("evidence_status", ""))
+
+    res_html = (
+        f'<div class="resolution-group" data-issue="{aid}">'
+        f'<button class="res-btn res-not" data-value="not-solved" aria-pressed="false">'
+        f'<span class="res-icon">&#x2610;</span> Not Solved</button>'
+        f'<button class="res-btn res-half" data-value="half-solved" aria-pressed="false">'
+        f'<span class="res-icon">&#x2610;</span> Half Solved</button>'
+        f'<button class="res-btn res-solved" data-value="solved" aria-pressed="false">'
+        f'<span class="res-icon">&#x2610;</span> Solved</button>'
+        f'</div>'
+    )
+
+    return (
+        f'\n                <!-- {aid} -->\n'
+        f'                <tr data-classification="daily-issue" data-person="atisraj"'
+        f' data-domain="" data-priority="" data-status="{status}"'
+        f' data-known-limits="{limits}" data-evidence-status="{ev_status}">\n'
+        f'                  <td class="col-date">{date_val}</td>\n'
+        f'                  <td class="col-id"><span class="issue-id-badge">{aid}</span></td>\n'
+        f'                  <td class="col-priority"><span class="badge badge-tbd">TBD</span></td>\n'
+        f'                  <td class="col-issue"><strong>{aid} — {statement}</strong></td>\n'
+        f'                  <td class="col-what">{statement}</td>\n'
+        f'                  <td class="col-gap"><span class="gap-none">—</span></td>\n'
+        f'                  <td class="col-fix"><p class="fix-text">—</p></td>\n'
+        f'                  <td class="col-owner"><span class="owner-tag">&#128100; {owner}</span></td>\n'
+        f'                  <td class="col-solved">{res_html}</td>\n'
+        f'                  <td class="col-evidence"><div class="evidence-cell"><span class="evidence-none">—</span></div></td>\n'
+        f'                </tr>'
+    )
+
+
+def build_atisraj_js_entry(issue):
+    """Return a JS object literal string for one Atisraj issue, for
+    issues-data.js. Mirrors build_atisraj_row_html()'s column policy exactly
+    so the fallback (offline) rendering path matches the server-rendered row."""
+    def jstr(s):
+        return json.dumps(s or "")
+
+    aid       = issue["id"]
+    statement = issue.get("statement", "")
+    owner     = issue.get("owner") or "—"
+
+    lines = [
+        "  {",
+        f"    id:             {jstr(aid)},",
+        f"    date:           {jstr(issue.get('date') or '—')},",
+        f"    domain:         {jstr('')},",
+        f"    priority:       {jstr('')},",
+        f"    status:         {jstr(issue.get('status', 'investigation'))},",
+        f"    classification: {jstr('daily-issue')},",
+        f"    title:          {jstr(statement)},",
+        f"    what:           {jstr(statement)},",
+        f"    gapLabel:       {jstr('—')},",
+        f"    gapClass:       {jstr('gap-none')},",
+        f"    fix:            {jstr('—')},",
+        f"    owner:          {jstr(owner)},",
+        f"    priorityBadge:  {jstr('<span class=\"badge badge-tbd\">TBD</span>')},",
+        f"    evidenceHtml:   {jstr('<div class=\"evidence-cell\"><span class=\"evidence-none\">—</span></div>')},",
+        f"    knownLimits:    {jstr(issue.get('known_limits', ''))},",
+        f"    evidenceStatus: {jstr(issue.get('evidence_status', ''))},",
+        "  }",
+    ]
+    return "\n".join(lines)
+
+
+def patch_index_html_atisraj(new_atisraj_issues):
+    """
+    Insert <tr> rows for newly-validated Atisraj issues into index.html.
+
+    Deliberately a separate function from patch_index_html() (ISSUE-NNN) —
+    same insertion point (TBODY_CLOSE marker) and same atomic-write pattern,
+    but kept scoped/parallel per the Atisraj implementation policy: this
+    function can never affect ISSUE-NNN row insertion, and vice versa.
+    """
+    if not new_atisraj_issues:
+        return True
+
+    with open(DASHBOARD, encoding="utf-8") as f:
+        html = f.read()
+
+    TBODY_CLOSE = "              </tbody>\n            </table>"
+    if TBODY_CLOSE not in html:
+        print("  ERROR: Cannot find issues tbody — index.html structure may have changed.", file=sys.stderr)
+        return False
+
+    for issue in new_atisraj_issues:
+        row_html = build_atisraj_row_html(issue)
+        html = html.replace(TBODY_CLOSE, row_html + "\n" + TBODY_CLOSE, 1)
+        print(f"  ✓  Patched index.html: inserted {issue['id']}")
+
+    with open(DASHBOARD, "w", encoding="utf-8") as f:
+        f.write(html)
+
+    return True
+
+
+def refresh_atisraj_html_rows(all_atisraj_issues, html_content):
+    """
+    Refresh already-present Atisraj rows whose canonical metadata (e.g. Date)
+    has changed since the row was last written, without ever inserting a new
+    row and without ever touching a row this importer did not itself create.
+
+    Safety guard: a row is only eligible for refresh when its current <tr>
+    markup already carries the 'data-known-limits=' attribute — the
+    signature build_atisraj_row_html() always writes. The pre-existing
+    hand-authored A001-A023 rows (created before Atisraj import support
+    existed, with real curated dates/content) do not carry this attribute
+    and are therefore never modified by this function. This mirrors, in
+    spirit, the ISSUE-NNN pipeline's _has_id_field guard in
+    refresh_html_rows(): refresh only ever replaces content the importer
+    itself generated.
+
+    Generic by construction — works for any current or future A-series ID;
+    no per-issue-ID branching.
+
+    Returns (updated_html_content, refreshed_ids, errors). Does not write
+    to disk — caller handles the write.
+    """
+    refreshed = []
+    errors    = []
+
+    for issue in all_atisraj_issues:
+        aid = issue["id"]
+        comment_marker = f"<!-- {aid} -->"
+        count = html_content.count(comment_marker)
+        if count == 0:
+            continue  # not present yet — insertion is handled elsewhere
+        if count > 1:
+            errors.append(f"{aid}: anchor appears {count}× (expected 1) — skipping")
+            continue
+
+        comment_pos = html_content.index(comment_marker)
+        block_start = html_content.rindex('\n', 0, comment_pos)
+        tr_end_pos  = html_content.index("</tr>", comment_pos) + 5
+        old_row     = html_content[block_start:tr_end_pos]
+
+        if 'data-known-limits=' not in old_row:
+            continue  # hand-authored legacy row (e.g. A001-A023) — never touched
+
+        new_row = build_atisraj_row_html(issue)
+
+        if old_row == new_row:
+            continue  # already current — nothing to do
+
+        html_content = html_content[:block_start] + new_row + html_content[tr_end_pos:]
+        refreshed.append(aid)
+
+    return html_content, refreshed, errors
 
 
 def _extract_section(content, headings):
@@ -804,9 +1179,18 @@ def build_js_entry(issue):
     return "\n".join(lines)
 
 
-def generate_data_js(new_issues):
-    """Write submission-html/js/issues-data.js from a list of parsed issue dicts."""
+def generate_data_js(new_issues, atisraj_issues=None):
+    """Write submission-html/js/issues-data.js from a list of parsed issue dicts.
+
+    atisraj_issues: optional list of parsed Atisraj issue dicts (from
+    process_atisraj_issues()'s all_parsed). Defaults to None so existing
+    callers that only pass ISSUE-NNN issues are completely unaffected —
+    this keeps the ISSUE-NNN code path byte-for-byte unchanged when the
+    Atisraj pipeline is not involved.
+    """
     entries = [build_js_entry(i) for i in new_issues]
+    if atisraj_issues:
+        entries += [build_atisraj_js_entry(i) for i in atisraj_issues]
     content = (
         "/* AIOS Issues Data — generated by tools/import-issues.py */\n"
         "/* Source: intelligence-inbox/daily-issues/               */\n"
@@ -1353,6 +1737,44 @@ def main():
             print(f"  ✗  ISSUE-{num}: {'; '.join(errs)}")
     print()
 
+    # ── Atisraj A-series — scoped, parallel discovery/report ────────
+    # Entirely separate from the ISSUE-NNN scan/report above. A failure or
+    # change here cannot affect ISSUE-NNN validated/rejected/dashboard_ids.
+    print("=" * 62)
+    print("Atisraj A-series")
+    print("=" * 62)
+    atisraj_validated, atisraj_rejected, atisraj_skipped, atisraj_all = process_atisraj_issues()
+
+    print(f"Atisraj inbox:     {len(atisraj_all)} issue file(s) found")
+    print(f"Atisraj dashboard: {len(atisraj_skipped)} issue ID(s) already present")
+    print()
+
+    print(f"Already in dashboard ({len(atisraj_skipped)}):")
+    for aid in atisraj_skipped:
+        print(f"  ✓  {aid}")
+    if not atisraj_skipped:
+        print("  (none)")
+    print()
+
+    print(f"New Atisraj issues found ({len(atisraj_validated) + len(atisraj_rejected)}):")
+    for issue in atisraj_validated:
+        print(f"\n  + {issue['id']}")
+        print(f"    Owner:     {issue.get('owner', '—')}")
+        print(f"    Statement: {issue.get('statement', '')[:100]}")
+        print(f"    Validation: PASS")
+    for aid, fname, errs in atisraj_rejected:
+        print(f"\n  + {aid}  {fname}")
+        print(f"    Validation: FAIL")
+        for e in errs:
+            print(f"      ✗  {e}")
+    if not atisraj_validated and not atisraj_rejected:
+        print("  (none — Atisraj dashboard is up to date)")
+    print()
+
+    print(f"Atisraj validated: {len(atisraj_validated)} new issue(s) ready")
+    print(f"Atisraj rejected:  {len(atisraj_rejected)} issue(s) failed validation")
+    print()
+
     # ── Generate / Apply ────────────────────────────────────────────
     if mode_generate or mode_apply:
         # Regenerate issues-data.js from ALL inbox issues, not only the newly
@@ -1370,13 +1792,38 @@ def main():
             # for legacy issues and render as blank in the dashboard.
             if iss2.get("id"):
                 all_for_js.append(iss2)
-        generate_data_js(all_for_js)
+        generate_data_js(all_for_js, atisraj_issues=atisraj_all)
 
         if mode_apply:
             if validated:
                 # New issues already passed per-column validation above.
                 print("Patching index.html — new issues ...")
                 patch_index_html(validated)
+
+            if atisraj_validated:
+                print("Patching index.html — new Atisraj issues ...")
+                patch_index_html_atisraj(atisraj_validated)
+
+            # Refresh already-present Atisraj rows whose canonical metadata
+            # (e.g. Date) has changed. Runs on every --apply, mirroring the
+            # ISSUE-NNN refresh below. Structurally guarded — see
+            # refresh_atisraj_html_rows() docstring — so A001-A023 can never
+            # be touched by this call.
+            if atisraj_all:
+                print("Refreshing existing Atisraj rows in index.html ...")
+                with open(DASHBOARD, encoding="utf-8") as _fh:
+                    _html_now2 = _fh.read()
+                _html_now2, _atisraj_refreshed, _atisraj_refresh_errors = \
+                    refresh_atisraj_html_rows(atisraj_all, _html_now2)
+                if _atisraj_refreshed:
+                    with open(DASHBOARD, "w", encoding="utf-8") as _fh:
+                        _fh.write(_html_now2)
+                    for _aid in _atisraj_refreshed:
+                        print(f"  ✓  Refreshed index.html row: {_aid}")
+                else:
+                    print("  All existing Atisraj rows are current — no refresh needed.")
+                for _err in _atisraj_refresh_errors:
+                    print(f"  WARN: {_err}", file=sys.stderr)
 
             # Refresh existing rows whose canonical content has changed.
             # Runs on every --apply so that importer improvements (evidence,
@@ -1426,9 +1873,9 @@ def main():
                 for err in refresh_errors:
                     print(f"  WARN: {err}", file=sys.stderr)
 
-            if not validated and not already_present:
+            if not validated and not already_present and not atisraj_validated:
                 print("Dashboard is up to date — no new rows to add.")
-    elif not validated:
+    elif not validated and not atisraj_validated:
         print("Nothing to generate or apply.")
     else:
         print("ACTION REQUIRED:")
