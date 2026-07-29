@@ -235,7 +235,11 @@ def parse_issue_md(path):
         if m:
             url_path = m.group(1)
             fs_rel   = unquote(url_path)
-            abs_path = os.path.join(PROJECT_ROOT, "submission-html", fs_rel)
+            # normpath: fs_rel comes from a forward-slash URL even on Windows,
+            # so without normalising, this would never string-match the
+            # OS-native paths from _discover_evidence_files() below, causing
+            # every MD-declared evidence file to be duplicated as "discovered".
+            abs_path = os.path.normpath(os.path.join(PROJECT_ROOT, "submission-html", fs_rel))
             md_ev_paths.append(abs_path)
 
     # ── Evidence Step 2: auto-discover from PHASE2_DIR/issues N/ ──────────
@@ -564,9 +568,11 @@ def build_atisraj_js_entry(issue):
     def jstr(s):
         return json.dumps(s or "")
 
-    aid       = issue["id"]
-    statement = issue.get("statement", "")
-    owner     = issue.get("owner") or "—"
+    aid              = issue["id"]
+    statement        = issue.get("statement", "")
+    owner            = issue.get("owner") or "—"
+    priority_badge_h = '<span class="badge badge-tbd">TBD</span>'
+    evidence_html_h  = '<div class="evidence-cell"><span class="evidence-none">—</span></div>'
 
     lines = [
         "  {",
@@ -582,8 +588,8 @@ def build_atisraj_js_entry(issue):
         f"    gapClass:       {jstr('gap-none')},",
         f"    fix:            {jstr('—')},",
         f"    owner:          {jstr(owner)},",
-        f"    priorityBadge:  {jstr('<span class=\"badge badge-tbd\">TBD</span>')},",
-        f"    evidenceHtml:   {jstr('<div class=\"evidence-cell\"><span class=\"evidence-none\">—</span></div>')},",
+        f"    priorityBadge:  {jstr(priority_badge_h)},",
+        f"    evidenceHtml:   {jstr(evidence_html_h)},",
         f"    knownLimits:    {jstr(issue.get('known_limits', ''))},",
         f"    evidenceStatus: {jstr(issue.get('evidence_status', ''))},",
         "  }",
@@ -1058,7 +1064,9 @@ def build_evidence_html(evidence_files):
         thumbs = []
         for ep in images:
             rel = os.path.relpath(ep, os.path.join(PROJECT_ROOT, "submission-html"))
-            url = rel.replace(" ", "%20")
+            # URLs always use forward slashes; os.path.relpath returns
+            # backslashes on Windows, which would break the href/src.
+            url = rel.replace("\\", "/").replace(" ", "%20")
             thumbs.append(
                 f'<a href="{url}" target="_blank" class="evidence-link">'
                 f'<img src="{url}" class="evidence-thumb" alt="evidence image" loading="lazy">'
