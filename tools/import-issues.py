@@ -117,6 +117,7 @@ PERSON_MAP = {
     "sasi":     "sasi",
     "nivarnan": "nivarnan",
     "atisraj":  "atisraj",
+    "sathis":   "sathis",
 }
 
 

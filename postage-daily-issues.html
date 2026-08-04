@@ -1,0 +1,1781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Issue Tracker</title>
+<style>
+  :root {
+    --red: #d9362e;
+    --red-bg: #fdecea;
+    --amber: #b8860b;
+    --amber-bg: #fff6e0;
+    --green: #1e8e4f;
+    --green-bg: #e8f7ee;
+    --gray: #6b7280;
+    --gray-bg: #f1f2f4;
+    --border: #e2e4e8;
+    --text: #1f2430;
+    --text-muted: #5b6270;
+    --bg: #f7f8fa;
+    --card-bg: #ffffff;
+    --accent: #2f5bea;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 24px 60px;
+  }
+  header { max-width: 1500px; margin: 0 auto 20px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; font-weight: 700; }
+  .subtitle { color: var(--text-muted); font-size: 0.92rem; }
+  .card {
+    max-width: 1500px;
+    margin: 0 auto;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .control-group { display: flex; align-items: center; gap: 6px; }
+  .controls label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  select {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 0.86rem;
+    color: var(--text);
+  }
+  .status-tabs { display: flex; gap: 6px; }
+  .status-tab {
+    padding: 5px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .status-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .count-pill {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    background: var(--gray-bg);
+    padding: 5px 10px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-red   { background: var(--red-bg);   color: var(--red); }
+  .badge-amber { background: var(--amber-bg); color: var(--amber); }
+  .badge-green { background: var(--green-bg); color: var(--green); }
+  .badge-gray  { background: var(--gray-bg);  color: var(--gray); }
+  .priority-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 0.74rem; font-weight: 600; white-space: nowrap;
+    background: var(--gray-bg); color: var(--text-muted); text-transform: capitalize;
+  }
+  .cell-full { display: none; }
+  .cell-full.expanded { display: inline; }
+  .cell-short.hidden { display: none; }
+  .show-more-btn {
+    background: none; border: none; color: var(--accent);
+    font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 0; margin-left: 4px;
+  }
+  .show-more-btn:hover { text-decoration: underline; }
+  .dash { color: var(--text-muted); }
+  .data-link-btn {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #eff6ff; color: var(--accent);
+    border: 1px solid #c7dbfb; border-radius: 999px;
+    padding: 4px 11px; font-size: 0.76rem; font-weight: 700;
+    text-decoration: none; white-space: nowrap;
+  }
+  .data-link-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .empty-state { text-align: center; padding: 40px 0; color: var(--text-muted); }
+
+  /* ---- Issue list (card layout — no horizontal scroll) ---- */
+  .issues-list { display: flex; flex-direction: column; gap: 14px; }
+  .issue-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+  }
+  .card-top {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+    margin-bottom: 10px;
+  }
+  .card-top .ticket-id { font-weight: 700; color: var(--accent); font-size: 0.88rem; }
+  .meta-item { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+  .card-top .data-link-btn { margin-left: auto; }
+  .card-title {
+    font-size: 1rem; font-weight: 600; margin: 0 0 12px; line-height: 1.4;
+    text-wrap: balance;
+  }
+  .card-field { margin-top: 12px; }
+  .card-field:first-of-type { margin-top: 0; }
+  .field-label {
+    display: block; font-size: 0.68rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); margin-bottom: 3px;
+  }
+  .field-value {
+    font-size: 0.88rem; line-height: 1.55; color: var(--text);
+    overflow-wrap: break-word;
+  }
+  footer {
+    max-width: 1500px;
+    margin: 16px auto 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-align: right;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Issue Tracker</h1>
+  <div class="subtitle">All logged write-ups — filterable by who raised it, status, and domain. Sort with the dropdown.</div>
+</header>
+
+<div class="card">
+  <div class="controls">
+    <div class="control-group">
+      <label for="nameFilter">Raised By:</label>
+      <select id="nameFilter"><option value="all">All</option></select>
+    </div>
+    <div class="control-group">
+      <label for="domainFilter">Domain:</label>
+      <select id="domainFilter"><option value="all">All</option></select>
+    </div>
+    <div class="control-group">
+      <label>Status:</label>
+      <div class="status-tabs" id="statusTabs">
+        <button class="status-tab active" data-status="all">All</button>
+        <button class="status-tab" data-status="RED">Red</button>
+        <button class="status-tab" data-status="AMBER">Amber</button>
+        <button class="status-tab" data-status="GREEN">Green</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label for="sortSelect">Sort:</label>
+      <select id="sortSelect">
+        <option value="dateRaised-desc">Date (newest)</option>
+        <option value="dateRaised-asc">Date (oldest)</option>
+        <option value="ticketId-asc">Ticket ID</option>
+        <option value="raisedBy-asc">Raised By</option>
+        <option value="domain-asc">Domain</option>
+        <option value="priority-desc">Priority (high first)</option>
+      </select>
+    </div>
+    <span class="count-pill" id="countPill"></span>
+  </div>
+
+  <div class="issues-list" id="issuesBody"></div>
+
+  <div class="empty-state" id="emptyState" style="display:none;">No issues match this filter.</div>
+</div>
+
+<footer id="generatedFooter"></footer>
+
+<script>
+  const ISSUES = [
+  {
+    "ticketId": "ND-001",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-06-26",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Return Parcel Accumulation Investigation",
+    "description": "The following facts are confirmed from the warehouse voice recording, supporting Royal Mail shipping label image, and NotebookLM extraction. No facts have been inferred or added beyond what the source materials confirm. Customers return parcels they no longer want. Returned parcels are sent to the documented return address.",
+    "rootCause": "The following facts are confirmed from the warehouse voice recording, supporting Royal Mail shipping label image, and NotebookLM extraction. No facts have been inferred or added beyond what the source materials confirm. Customers return parcels they no longer want.",
+    "whatIsHappening": "Source: Warehouse voice recording and supporting Royal Mail shipping label image, extracted and summarised via NotebookLM. Summary of NotebookLM findings: The recording and image confirm that returned parcels are physically present in the warehouse in significant volume — approximately three pallets. The return address on the Royal Mail label is consistent with the documented return address used in Postage operations.",
+    "documentGap": "gap-001-return-parcel-handling-process.md",
+    "fix": "1. Identify the process owner for returned parcel handling. 2. Document the current handling workflow (if one exists informally). 3. Verify what warehouse responsibilities apply to returned parcels. 4. Verify what courier responsibilities apply once a parcel has been returned. 5. Recommend process improvements after investigation is complete. No AIOS update to be made until investigation actions above are completed and findings are confirmed by Varmen or Laksika."
+  },
+  {
+    "ticketId": "ND-002",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-06-26",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "HIGH",
+    "title": "Website Order Incorrectly Marked as \"Collected\"",
+    "description": "The following facts are confirmed from the warehouse voice recording, supporting website order shipping label image, and NotebookLM extraction. No facts have been inferred or added beyond what the source materials confirm. Customers reported website orders showing \"Collected\" status before actual collection had taken place. The same issue was reported approximately one month earlier.",
+    "rootCause": "The following facts are confirmed from the warehouse voice recording, supporting website order shipping label image, and NotebookLM extraction. No facts have been inferred or added beyond what the source materials confirm. Customers reported website orders showing \"Collected\" status before actual collection had taken place.",
+    "whatIsHappening": "Source: Warehouse voice recording (Issue 003) and supporting website order shipping label image (2026-06-26), extracted and summarised via NotebookLM. Summary of NotebookLM findings: The recording confirms that website orders are being marked as \"Collected\" before the physical collection has occurred. This was flagged as a recurring problem — the same issue was raised approximately one month prior to this recording, and it has now resurfaced with a customer reporting it again today.",
+    "documentGap": "gap-002-website-order-collection-status-process.md",
+    "fix": "1. Identify where and how \"Collected\" status is triggered and updated. 2. Verify the website order workflow from placement to collection confirmation. 3. Verify the warehouse collection process and any scanning steps involved. 4. Verify system synchronisation behaviour between warehouse systems and website. 5. Identify the process owner accountable for collection status accuracy. 6. Recommend corrective action after investigation is complete. No AIOS update to be made until investigation actions above are completed and findings are confirmed by Varmen or Laksika."
+  },
+  {
+    "ticketId": "ND-003",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-06-30",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "High Return Rate for Crystal Lighting Fixtures",
+    "description": "Crystal Lighting Fixture models Crystal 120 and Crystal 160 are experiencing recurring weekly returns of approximately 10–15 units. Returns are being received and processed by the warehouse on a repeated basis. Although inventory adjustments are performed each time a return is received, the underlying operational problem has not been identified or resolved. The same products continue to be returned week after week, indicating a systematic issue rather than isolated incidents.",
+    "rootCause": "The warehouse is repeatedly processing the same returned products without any structured investigation into the permanent cause. Each time a Crystal 120 or Crystal 160 unit is returned, it is received, manually adjusted in inventory, and stored — after which the cycle repeats the following week. This creates unnecessary operational effort and results in the same inventory being handled multiple times across multiple cycles.",
+    "whatIsHappening": "Returned Crystal 120 and Crystal 160 units currently follow this process: 1. Received — returned units arrive at the warehouse and are accepted 2. Manually adjusted — inventory records are updated manually to reflect the returned stock 3.",
+    "documentGap": "",
+    "fix": "The following actions are recommended before any documentation or procedure decisions are made: 1. Investigate root cause — initiate a structured investigation to determine why Crystal 120 and Crystal 160 units are being returned at a higher than expected rate 2. Perform quality inspection — physically inspect a sample of returned units to identify any visible quality, assembly, or packaging defects 3. Track return reasons — begin recording the stated reason for each return at the point of receipt to build evidence for pattern analysis 4. Review packaging — assess whether current packaging for these models is adequate to prevent transit damage 5. Monitor affected SKUs — flag Crystal 120 and Crystal 160 in the warehouse system for closer monitoring over the next four weeks to capture accurate volume data Note: No new procedures, SOPs, or AIOS documents should be created at this stage. The root cause has not been identified. Document or procedure recommendations are premature until the investigation produces findings."
+  },
+  {
+    "ticketId": "ND-004",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-06-30",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Labor Cost and Assembly Pricing Discrepancy",
+    "description": "Certain products in the LEDSone range require excessive picking time and manual assembly compared to their selling price. Warehouse staff are spending significantly more time fulfilling these products than would be expected given their price point, and the labour required to pick, assemble, pack, and dispatch them does not appear to be reflected in current pricing decisions. The warehouse team believes that fulfilment labour is being excluded from the pricing model, resulting in products being sold at prices that do not cover the true cost of their fulfilment.",
+    "rootCause": "Warehouse staff are spending excessive time picking multiple individual components and manually assembling products before they can be packed and dispatched. Some products require four to five separate components to be located, picked, and assembled by hand before the order is ready to ship. Despite the additional time and effort required to fulfil these products, their selling prices appear to have been set without input from warehouse operations.",
+    "whatIsHappening": "Orders containing affected products currently follow this process: 1. Orders received — orders are received in the OMS and allocated to the warehouse for picking 2. Multiple component picking — warehouse staff must locate and pick four to five individual components per product from across the warehouse 3.",
+    "documentGap": "gap-003-labor-inclusive-pricing-and-assembly-guidelines.md",
+    "fix": "The following actions are recommended before any documentation or procedure decisions are made: 1. Conduct fulfilment time study — measure the actual time required to pick, assemble, pack, and dispatch the most labour-intensive SKUs to produce accurate data on fulfilment labour per unit 2. Review labour cost — calculate the actual warehouse labour cost per unit for affected products based on time study findings and current labour rates 3. Review selling prices — compare the calculated fulfilment labour cost per unit against the current selling price of each affected product to quantify the gap 4. Evaluate pre-assembly — assess whether affected products could be pre-assembled in bulk during quiet periods to reduce picking and assembly time during peak order fulfilment 5. Consider supplier kitting — explore whether suppliers could provide affected products as pre-kitted units rather than as individual components, eliminating the warehouse assembly step entirely"
+  },
+  {
+    "ticketId": "ND-005",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-06-30",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Inaccurate Courier Parcel Counting and Sorting",
+    "description": "Parcels intended for different couriers — DPD, EVRi (Hermes), and Royal Mail — are not being consistently counted or separated correctly during morning dispatch preparation. Staff are expected to count and segregate parcels by courier before dispatch, but the counts produced are sometimes inaccurate and parcels are occasionally found mixed between courier groups. Incorrect parcel counts create confusion at the point of dispatch and require additional manual searching to locate and correctly assign parcels to the right courier batch. This adds time to the morning dispatch process and introduces the risk that parcels may be presented to or collected by the wrong courier.",
+    "rootCause": "Incorrect parcel counts and mixed courier batches reduce dispatch efficiency and increase the workload placed on warehouse supervisors and staff. When counts do not match the expected number of parcels per courier, the team must stop the dispatch process, manually recount, and search the warehouse to identify any misplaced items. Beyond the operational disruption, mixed courier batches carry the risk of a parcel being dispatched through the wrong courier entirely — which could result in delivery failures, customer complaints, and additional cost to retrieve and rebook the shipment.",
+    "whatIsHappening": "The morning dispatch preparation process currently operates as follows: 1. Morning labelling — labels are printed and applied to outbound parcels 2. Parcel counting — staff count the total number of parcels ready for dispatch 3.",
+    "documentGap": "",
+    "fix": "The following actions are recommended to monitor and address the issue: 1. Observe the morning counting process — conduct direct observation of the morning parcel counting and sorting process to understand where inconsistencies are occurring and identify any specific steps or individuals where the breakdown happens 2. Reinforce courier segregation — reinforce the expectation that parcels must be physically separated by courier group before counting begins, so that counting and segregation are treated as a single step rather than two separate activities 3. Review staffing requirements — assess whether the volume of morning dispatch preparation work is appropriate for the number of staff allocated to the task, as time pressure may be contributing to counting errors 4. Monitor counting accuracy — record daily parcel counts per courier alongside the actual number collected, and track discrepancies over a defined monitoring period to quantify the frequency and scale of the issue 5. Validate dispatch counts before courier collection — implement a simple count confirmation step — such as a supervisor sign-off on the count per courier — before any courier is permitted to begin collection"
+  },
+  {
+    "ticketId": "ND-006",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-06-30",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Inconsistent Return Addresses on Postage Labels",
+    "description": "Postage labels are being generated with different return addresses instead of one standardised address applied consistently across all bookings. Multiple return addresses have been identified on labels produced through the postage booking workflow, meaning that returned parcels may be directed to different locations depending on which address was used at the time of booking. This inconsistency prevents accurate tracking of returned parcels, makes it difficult to investigate failed deliveries, and increases the operational risk that returned goods arrive at an unmonitored or incorrect location.",
+    "rootCause": "Inconsistent return addresses on postage labels make it difficult to monitor returned parcels effectively, investigate failed delivery events, and accurately measure the financial losses associated with returns. When a parcel is returned, the destination depends on the return address printed on the label at the time of dispatch. If different labels carry different return addresses, returned parcels will arrive at different locations — some of which may not be monitored, staffed, or prepared to receive them.",
+    "whatIsHappening": "The current postage label creation workflow operates as follows: 1. Staff create postage labels — warehouse and postage staff initiate label creation through the postage booking system for outbound orders 2. Labels are generated for different carriers — labels are produced for multiple carriers including Royal Mail, EVRi, and DPD depending on the service selected for each order 3.",
+    "documentGap": "gap-004-return-address-selection-and-verification-protocol.md",
+    "fix": "The following actions are recommended before documentation or system changes are made: 1. Audit the postage booking system — review the booking system configuration to identify all return addresses currently stored, configured, or accessible to users during the label creation process 2. Review all configured return addresses — produce a complete list of all return addresses that have appeared on labels in the recent period to understand the full extent of the inconsistency 3. Confirm the approved business return address — obtain confirmation from the appropriate authority (Varmen or Laksika) of the single approved return address that should be used across all standard postage labels 4. Validate the booking workflow — walk through the label creation process end to end to identify exactly where return address selection occurs and whether it is configurable at system level 5. Monitor future label generation — while the audit and confirmation process is underway, implement a temporary monitoring step in which a supervisor reviews the return address on all labels before printing See also: [gap-004-return-address-selection-and-verification-protocol.md](../document-gaps/gap-004-return-address-selection-and-verification-protocol.md) — a related Document Gap has been raised to capture the absence of a documented return address standard and verification protocol."
+  },
+  {
+    "ticketId": "ND-007",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-06",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Phantom Inventory for Metal Cord Clips in Unit 4",
+    "description": "Warehouse staff cannot physically locate approximately 1,495 Metal Cord Clips (SKU: CGSRBM) in Unit 4, despite the inventory system recording that stock exists at that location. The system shows the items as available and assigned to Unit 4, but when staff attempt to pick against orders, the physical stock is not present. The discrepancy between system inventory and physical inventory is preventing normal warehouse operations. Staff are unable to fulfil orders relying on this stock, and the time spent searching for items that cannot be located is disrupting daily workflow.",
+    "rootCause": "The core problem is phantom inventory — a situation where the inventory management system records stock as available when no corresponding physical stock exists in the warehouse. This creates a series of downstream problems: System stock differs from physical stock — the inventory record for SKU CGSRBM shows approximately 1,495 units in Unit 4, but no physical units can be located. The system and the warehouse are out of agreement, and neither can currently be treated as reliable without verification.",
+    "whatIsHappening": "The operational process that led to the current state is as follows: 1. Goods received into system — when stock is delivered to the warehouse, a goods received record is created in the inventory system, increasing the stock count for the relevant SKU 2. Inventory updated — the system updates the available quantity for SKU CGSRBM and records Unit 4 as the assigned warehouse location 3.",
+    "documentGap": "",
+    "fix": "The following actions are recommended to investigate and resolve the discrepancy: 1. Immediate physical stock audit — conduct a full physical count of all Metal Cord Clips (SKU: CGSRBM) across Unit 4 and all other warehouse locations to establish the actual physical quantity on hand 2. Purchase Order reconciliation — review all purchase orders for SKU CGSRBM to confirm which orders were placed, which were acknowledged by the supplier, and which quantities were invoiced 3. Goods Received verification — cross-reference the system goods received records against the physical delivery notes for all recent SKU CGSRBM deliveries to confirm whether the 1,495 units were recorded as received in the system with corresponding physical delivery documentation 4. Delivery note verification — locate and review the original delivery notes for the goods received entries that account for the 1,495 units. Confirm that the delivery notes show the same quantity as the system record. 5. Receiving user audit — identify which user created the goods received entries in the system for SKU CGSRBM and confirm whether those entries correspond to actual physical receipts or were entered in error 6. Warehouse location verification — confirm whether stock has been physically relocated within the warehouse to a location other than Unit 4 without the system being updated to reflect the move"
+  },
+  {
+    "ticketId": "ND-008",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-06",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Picking Image Mismatch for Wire Connectors",
+    "description": "The warehouse picking image associated with SKU CODL632AGYAPK does not match the actual product listing. The picking image currently displayed to warehouse staff shows the \"with hole\" variant of the wire connector, while the product listing describes and sells the standard \"without hole\" variant. Warehouse staff rely on the picking image displayed on the picking screen to identify and select the correct product during order fulfilment. Because the image shows the wrong variant, there is a high risk that staff are selecting and dispatching the \"with hole\" variant — which is the more expensive product — instead of the standard \"without hole\" variant that the customer ordered and the listing describes.",
+    "rootCause": "The core problem is that incorrect system data — a wrong picking image linked to a SKU — is directing warehouse staff to pick the wrong product variant during order fulfilment: Incorrect picking image linked to SKU — the system has the \"with hole\" variant image mapped to SKU CODL632AGYAPK, which should display the \"without hole\" standard variant. The image is the primary visual reference staff use to identify the correct product at the picking stage. Warehouse staff rely on incorrect visual information — because the picking process is image-guided, staff follow the displayed image in good faith.",
+    "whatIsHappening": "The current warehouse picking workflow for this product is as follows: 1. Customer places an order — a customer places an order for the wire connector listed under SKU CODL632AGYAPK (the \"without hole\" standard variant) 2. Warehouse picker opens the picking screen — the warehouse picker opens the picking task in the system and navigates to the order line for SKU CODL632AGYAPK 3.",
+    "documentGap": "",
+    "fix": "The following actions are recommended to resolve the image mismatch and assess the extent of the impact: 1. Replace the incorrect picking image immediately — update the picking image linked to SKU CODL632AGYAPK to display the correct \"without hole\" standard variant. This is the highest priority action and should be completed before any further orders for this SKU are picked. 2. Verify the SKU-to-image mapping — after replacing the image, confirm that the updated image is correctly linked to the SKU in the system and that the correct variant is displayed on the picking screen before resuming normal picking operations. 3. Audit similar wire connector SKUs — review the picking images for all other wire connector SKUs to confirm that no other products have a similar image mismatch. This audit should confirm that the correct variant image is displayed for each SKU. 4. Perform an inventory reconciliation of both product variants — conduct a physical count of both the \"with hole\" and \"without hole\" variants and compare against system records to identify the extent of any inventory discrepancy caused by incorrect picking. 5. Verify product images before future listing updates — confirm that any future update to product listings, SKU configurations, or picking images includes a verification step to check that the image displayed matches the variant described in the listing."
+  },
+  {
+    "ticketId": "ND-009",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-07",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Incorrect Packaging for White Light Socket (LHRUE27WH)",
+    "description": "SKU LHRUE27WH (White Light Socket) is currently being dispatched without the required Assemble Pack. The product should be packed using the designated Assemble Pack before dispatch, but this step is not being completed during the warehouse packing stage. As a result, customers receive the product in a presentation that does not match what they expect based on the listing. The condition in which the product arrives causes customer confusion about whether the correct product has been sent, whether it is complete, or whether it has been damaged in transit.",
+    "rootCause": "The core problem is that an active packing requirement for SKU LHRUE27WH is not being followed during daily warehouse operations: The required Assemble Pack is not being used — SKU LHRUE27WH has a defined packing requirement that specifies the use of an Assemble Pack before the product is dispatched. This requirement is not currently being met. The product is leaving the warehouse without the correct packaging applied.",
+    "whatIsHappening": "The current warehouse fulfilment workflow for SKU LHRUE27WH is as follows: 1. Order received — a customer places an order for the White Light Socket (SKU LHRUE27WH) 2. Warehouse picker locates SKU LHRUE27WH — the warehouse picker navigates to the correct shelf location and identifies the product 3.",
+    "documentGap": "",
+    "fix": "The following actions are recommended to resolve the packaging issue and prevent further incorrect dispatches for SKU LHRUE27WH: 1. Verify Assemble Pack requirements for SKU LHRUE27WH — confirm the exact specification of the Assemble Pack required for the White Light Socket, including what components it includes, how it should be assembled, and what the expected presentation to the customer should be. 2. Review packing instructions for SKU LHRUE27WH — check whether a packing instruction exists for this SKU in the warehouse management system or in any operational documentation. If an instruction exists, confirm it is visible to packing staff at the packing station. If no instruction exists, this finding should inform the post-investigation decision on whether a Document Gap is required. 3. Brief warehouse packing staff — communicate the Assemble Pack requirement to all packing staff who may process orders for SKU LHRUE27WH. The briefing should confirm what the Assemble Pack is, how to apply it, and that it is a required step before dispatch for this SKU. 4. Inspect recently packed orders — where possible, review recently dispatched orders for SKU LHRUE27WH to determine the extent of the issue and whether any affected orders can be identified before they reach the customer. 5. Monitor future dispatches for this SKU — after the packing requirement has been communicated, monitor dispatches for SKU LHRUE27WH to confirm that the Assemble Pack is being correctly applied before dispatch."
+  },
+  {
+    "ticketId": "ND-010",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-07",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Missing Stock: Twisted and Hook Variants of E27 Lamp Holder Not Received",
+    "description": "The twisted variant of the E27 Vintage Industrial Lamp Light Bulb Holder has not been received at the warehouse, despite the round/copper variant (SKU LHNHE27YB) being confirmed as in stock and currently available for dispatch. A related variant described as the hook version has also not been received. Both missing variants are recorded as historically fast-selling items. The absence of these variants prevents the business from fulfilling orders for these specific product types, while orders for the round/copper variant continue to be processed normally.",
+    "rootCause": "Not Yet Confirmed. The approved BI report records three possible causes as assumptions only — none have been confirmed by investigation: A procurement error may have resulted in the twisted variant not being ordered A shipping delay from the supplier may mean the item is in transit but has not yet arrived A warehouse intake oversight may mean the item was received but not recorded or placed correctly None of these assumptions should be treated as confirmed fact. The investigation defined in Recommended Next Actions must be completed before any determination is made.",
+    "whatIsHappening": "The current warehouse fulfilment workflow for fast-selling inventory items in this product range is as follows: 1. Stock monitoring across warehouse units — stock levels for items in this product range are tracked across multiple UK warehouse units, including UK Unit 18, UK Unit 3, and UK Unit 4. Specific storage locations such as Location 1-A-02 A are used to identify where items are held.",
+    "documentGap": "",
+    "fix": "1. Review shipping manifests — check incoming delivery records to determine whether the twisted variant was dispatched by the supplier. Confirm whether an expected delivery is outstanding or whether no order was placed. 2. Conduct a physical cycle count — perform a physical count at Location 1-A-02 A and surrounding storage areas in UK Unit 3, UK Unit 4, and UK Unit 18 to confirm the twisted and hook variants are not physically present but misplaced or mis-scanned on arrival. 3. Review procurement history for the hook variant — confirm the last recorded receipt of the hook variant and determine whether a replenishment order has been placed. 4. Clarify SKU PSOS2HETBM variant association — confirm which product variant SKU PSOS2HETBM refers to and whether the zero stock in UK Unit 18 and UK Unit 4 is part of the same supply gap described in this issue. 5. Distribute stock across units once variants are located or received — once the missing variants are confirmed as received or located, ensure stock is distributed appropriately across UK Unit 18, UK Unit 3, and UK Unit 4 to support fulfilment from all units. 6. Escalate to procurement if stock is not located — if the cycle count confirms no physical stock exists and no delivery is in transit, escalate to the procurement team immediately to initiate a reorder for the twisted and hook variants."
+  },
+  {
+    "ticketId": "ND-011",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-07",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Assembly Hardware Mismatch for Small Diamond Cage (WC SLBM)",
+    "description": "The small diamond cage (Part No: WC SLBM) is currently listed and assembled using a half-thin shelf holder. The internal clearance of the WC SLBM cage is insufficient to allow the securing ring to be manually tightened when a half-thin fitting is used, making assembly physically difficult and inefficient. The operational team has identified that a full-thin shelf holder together with a 2-metre cable assembly resolves the clearance problem and allows the product to be assembled correctly. However, the product listing and the back list have not yet been updated to reflect this configuration.",
+    "rootCause": "Not Yet Confirmed. The available evidence confirms that the half-thin hardware configuration is physically incompatible with the WC SLBM small diamond cage, and that the product listing continues to specify this incompatible configuration. However, the reason why the incorrect hardware specification remains in the product listing and back list has not been confirmed and requires investigation.",
+    "whatIsHappening": "The current assembly and listing process for the small diamond cage (WC SLBM) is as follows: 1. Product is listed with half-thin hardware specification — the product listing for WC SLBM units currently specifies a half-thin shelf holder as the required assembly component. This specification is also reflected in the back list for these units.",
+    "documentGap": "",
+    "fix": "1. Update the product listing for WC SLBM — change the hardware specification from half-thin shelf holder to full-thin shelf holder with 2-metre cable assembly to accurately reflect the configuration required for correct assembly. 2. Update the back list accordingly — correct the back list to specify the full-thin shelf holder and remove the half-thin specification from all WC SLBM entries. 3. Remove the half-thin specification from all WC SLBM product documentation — confirm that no other documents, instructions, or procurement records continue to reference the half-thin configuration for this product. 4. Validate the revised configuration through a physical assembly test — before finalising the updated listing, confirm that the full-thin shelf holder with 2-metre cable resolves the clearance problem and allows the product to be assembled correctly under normal conditions. 5. Confirm the root cause — investigate why the incompatible half-thin specification remained in the listing and back list, to determine whether a process or documentation control is needed to prevent similar mismatches from being introduced in future product configurations."
+  },
+  {
+    "ticketId": "ND-012",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-07",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Cable Crowding in Ceiling Roses with More Than Four Outlets",
+    "description": "Ceiling roses with more than four outlets do not provide sufficient internal space to accommodate the standard cable configuration during assembly. When standard components are used, cables curl inside the rose due to the restricted internal clearance. This affects assembly quality and consistency for multi-colour spider pendant light orders. The warehouse team has identified that grey range components provide the additional clearance needed to prevent cable crowding in these configurations and is currently using them as an operational practice.",
+    "rootCause": "Not Yet Confirmed. The available evidence confirms that ceiling roses with more than four outlets have insufficient internal space for the standard cable configuration, and that grey range components resolve the crowding problem. However, the reason why the grey range requirement has not been standardised in the product listing and fulfilment workflow has not been confirmed and requires investigation.",
+    "whatIsHappening": "The current warehouse fulfilment process for multi-colour spider pendant light orders is as follows: 1. Order received for multi-colour spider pendant light — an order arrives requiring assembly of a spider pendant with the specified ceiling rose and associated coloured cables. 2.",
+    "documentGap": "",
+    "fix": "1. Standardise the grey range requirement — formally specify that grey range components must be used for all ceiling roses with more than four outlets. Record this as a confirmed assembly requirement rather than an informal practice. 2. Update the product listing — amend the product listing for ceiling roses with more than four outlets to specify grey range components as the required assembly component for these configurations. 3. Update the picking and fulfilment process — add a step or prompt to the picking and fulfilment workflow that directs warehouse staff to select grey range components whenever a ceiling rose with more than four outlets is present in an order. 4. Communicate the requirement to all warehouse staff — brief all staff who may assemble multi-colour spider pendant orders on the grey range requirement, so that the correct component is consistently selected regardless of individual prior knowledge. 5. Validate all ceiling rose configurations with five or more outlets — conduct a physical validation of each affected ceiling rose variant to confirm which configurations are affected, what the correct grey range specification is for each, and whether any additional configurations require the same or a different resolution. 6. Confirm the root cause — investigate why the grey range requirement was not standardised when the physical space constraint was identified, to determine whether a process or documentation control is needed to prevent similar assembly configuration errors in future."
+  },
+  {
+    "ticketId": "ND-013",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-07",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Supplier Assembly Delay: Black Metal Mount and Dependent Component Manual Pairing",
+    "description": "For approximately one month, the warehouse has been receiving black metal base plate mounts (SKU: SPUPBM, Location: 1-E-12) and their associated 2-metre cable components as separate items rather than as pre-assembled kits from the supplier. Because these components are operationally dependent — the mount must be paired with the 2-metre item before dispatch — warehouse staff are manually combining them for every order during fulfilment. A short cable variant has also been received from the supplier but is currently not selling. The manual pairing process is the current operational practice but has not been documented as a formal SOP.",
+    "rootCause": "Not Yet Confirmed. The available evidence confirms that the supplier is delivering SPUPBM mounts and 2-metre cable components separately instead of as pre-assembled kits, and that this has been occurring for approximately one month. However, the reason for the continued supplier assembly delay has not been confirmed and requires investigation.",
+    "whatIsHappening": "The current warehouse fulfilment process for orders requiring the black metal mount is as follows: 1. Order received — an order arrives requiring the black metal base plate mount (SPUPBM) paired with a 2-metre cable component for customer dispatch. 2.",
+    "documentGap": "gap-005-dependent-component-pairing-and-kitting-procedure.md",
+    "fix": "1. Coordinate with the supplier — contact the supplier to confirm the cause of the assembly delay, obtain an estimated timeline for resumption of pre-assembled kit delivery, and confirm whether a procurement instruction error contributed to the separate component delivery. 2. Document the interim manual pairing procedure — create a temporary SOP for the manual pairing of SPUPBM mounts with 2-metre cables during the period when pre-assembled kits are not available, to ensure all staff perform the pairing consistently. 3. Review inventory synchronisation — audit the inventory records for SPUPBM and the 2-metre cable component to confirm that stock counts are aligned and that the dependency between the two items is visible in the procurement and fulfilment workflow. 4. Review sales performance of the short cable variant — assess whether the short cable variant that has been received is expected to sell, should be listed differently, or should be returned to the supplier or written off. 5. Review procurement and assembly planning — confirm whether the procurement process treats SPUPBM and the 2-metre cable as a dependent pair, and whether a BOM or kitting process should be introduced to prevent recurrence of this type of synchronisation problem. 6. Monitor Unit 18 stock levels — given that UK Unit 18 currently holds zero SPUPBM stock, confirm whether this is expected and whether transfers from Unit 3 or Unit 4 are required to support fulfilment from Unit 18 if demand arises."
+  },
+  {
+    "ticketId": "ND-014",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-08",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "Medium",
+    "title": "Assembly Instruction Component Quantity Discrepancy: DWC112025 3-Head Diamond Pendant Lamp",
+    "description": "The printed assembly instructions for the LEDSone 3-head diamond pendant lamp (SKU: DWC112025) list Component G (nuts) as \"x5Pcs\". Customers receive the product, refer to the instruction manual, count fewer nuts than stated, and contact the business believing hardware is missing. This generates avoidable replacement requests and operational cost. The instructions were reportedly not re-checked for accuracy against the physical product before mass printing and distribution.",
+    "rootCause": "Customer-reported hardware discrepancy. Customers believe they have received a product with missing nuts because the printed instruction manual states \"G — x5Pcs\". The customer experience is one of a defective product.",
+    "whatIsHappening": "",
+    "documentGap": "gap-006-assembly-instruction-technical-sign-off-and-product-verification.md",
+    "fix": "1. Physical product check — DWC112025: Confirm the correct quantity of Component G (nuts) for the 3-head diamond pendant lamp by counting the nuts included in a physical unit. 2. Compare to printed instructions: Verify whether the printed \"x5Pcs\" matches the actual quantity or is incorrect. 3. If instructions are wrong: Request corrected instructions from the supplier. Update the product listing with the corrected assembly guide before further units are dispatched. 4. Customer communication: Identify whether any currently open replacement requests were triggered by this instruction discrepancy and resolve accordingly. 5. Introduce sign-off step: Implement the assembly instruction verification control described in gap-006 for all future instruction approvals before mass printing."
+  },
+  {
+    "ticketId": "ND-015",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-09",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Pendant Light Fixture Brand and Socket Variation: LEDSone vs DC Voltage Packaging with Black and White Internal Socket Difference",
+    "description": "Two boxes of Pendant Light Fixture (Full Set) have been observed on the same warehouse shelf, one labelled LEDSone and one labelled DC Voltage. A warehouse team member photographed both boxes and annotated the image with the question \"Same?\" — indicating uncertainty about whether these are the same product under two different brands. A separate photograph shows two internal lamp sockets from the Pendant Light Fixture range placed side by side: one with a black interior and one with a white interior. The black-interior socket is circled and the white-interior socket is circled and marked with an X, with a \"?\" annotation below — indicating that the socket colour difference has been noticed and its significance is unresolved.",
+    "rootCause": "The following were directly observed in the evidence (photographic) and are treated as confirmed operational observations: Observation | Evidence Source | Status | A box labelled \"PENDANT LIGHT FIXTURE — FULL SET — LEDSONE\" is present on a warehouse shelf | issues 17 / 2026_07_09_p1.png | CONFIRMED | A box labelled \"PENDANT LIGHT FIXTURE — FULL SET — DC VOLTAGE — Twisted Cable\" is present on the same shelf | issues 17 / 2026_07_09_p1.png | CONFIRMED | A warehouse team member annotated the image with \"Same?\" — questioning whether these are the same product | issues 17 / 2026_07_09_p1.png | CONFIRMED | Copper E27 lamp holder components are present inside these products (60W 230V E27 CE specification label visible) | issues 17 / 2026_07_09_p2.png | CONFIRMED | A black-interior internal socket is present in the range | issues 17 / 2026_07_09_p3.png | CONFIRMED | A white-interior internal socket is present in the range | issues 17 / 2026_07_09_p3.png | CONFIRMED | A warehouse team member annotated the socket comparison image with \"?\" — indicating the difference is noted and unresolved | issues 17 / 2026_07_09_p3.png | CONFIRMED |",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": "The following actions are recommended pending reviewer approval. They are not approved operational rules and must not be treated as confirmed procedures until confirmed by Varmen or Laksika. 1. Physical product identification: A warehouse team member should inspect both branded boxes and confirm whether the contents are physically identical or different. 2. SKU verification: Check the LEDSone OMS to confirm whether both branded variants are mapped to the same SKU or to separate SKUs. 3. Socket specification check: Confirm whether the black-interior and white-interior sockets are the same specification (material, electrical rating, E27 thread standard) or different. 4. Picking rule decision: Once the above is confirmed, a business decision should establish whether the two branded variants may be picked interchangeably or must be segregated. 5. Shelf location review: Confirm whether both branded variants share a shelf location and whether a change is required. 6. Order and return review: Review recent orders and returns for the Pendant Light Fixture range to determine whether any fulfilment errors or return reasons can be attributed to brand confusion."
+  },
+  {
+    "ticketId": "ND-016",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Universal Light Fixture Mounting Bracket: Instruction Manual Does Not Match Physical Hardware",
+    "description": "A universal light fixture mounting bracket is accompanied by an instruction manual that reportedly does not match the physical hardware supplied with the product. The manual is reported to include elements — referred to as \"those five\" — that are unnecessary or not applicable to the actual hardware configuration. A directive has reportedly been issued to stop including or distributing the incorrect manual with the product. The SKU and exact product identifier have not been confirmed from repository evidence and must be established before this issue can be fully classified or resolved.",
+    "rootCause": "The following is drawn from the NotebookLM Business Intelligence Report. These claims have not been independently confirmed from the photographic evidence or any written repository record. They are recorded here as reported and must not be treated as confirmed operational facts until independently verified.",
+    "whatIsHappening": "",
+    "documentGap": "gap-006-assembly-instruction-technical-sign-off-and-product-verification.md",
+    "fix": "DECISION REQUIRED before action is confirmed. The following steps are recommended pending reviewer approval. They are not approved operational rules. 1. Confirm the SKU — identify the exact product identifier for the affected mounting bracket before any further action is taken. This is required before this issue can be resolved or linked to a product listing. 2. Identify and document \"those five\" — establish precisely what elements in the manual are described as unnecessary or inapplicable, and confirm this against the physical hardware. 3. Confirm the stop-distribution directive — verify that a formal directive exists, identify who issued it, when it was issued, and which suppliers or fulfilment points were notified. 4. Verify supplier compliance — confirm whether all relevant suppliers have received and are acting on the directive. 5. Source the correct manual — confirm whether a correct, product-accurate instruction manual exists, and if so, ensure it is ready for distribution before the incorrect manual is fully withdrawn. 6. Review linked gap — the structural control gap identified in GAP-006 (no pre-print verification or sign-off for assembly instructions) applies to this issue. No new Document Gap is required. Review the status of GAP-006 controls with the relevant team lead."
+  },
+  {
+    "ticketId": "ND-017",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Technical Specifications Discrepancy for Bracket Assembly (CRFF2404BM)",
+    "description": "A measurement specification discrepancy has been identified in the context of the CRFF2404BM 240mm 4-Outlet ceiling rose (black). The photographic evidence shows a countersunk screw component with a handwritten annotation of \"3cm\" (equivalent to 30mm). An audio recording accompanying the evidence reportedly states \"30cm\" for the same or a related measurement. The user has confirmed that \"30cm\" was a verbal mistake and that the intended value is 30mm / 3cm.",
+    "rootCause": "The following were directly observed in the photographic evidence: Observation | Evidence Source | Status | A single countersunk flat-head screw/bolt is present | `Phase2-inputs/issues 19/2026_07_09_p1.png` | CONFIRMED — direct visual observation | The screw/bolt is gold/brass coloured with a fully threaded shaft | `Phase2-inputs/issues 19/2026_07_09_p1.png` | CONFIRMED — direct visual observation | A handwritten green annotation reading \"3cm\" is written on the image with an arrow pointing to the screw | `Phase2-inputs/issues 19/2026_07_09_p1.png` | CONFIRMED — text directly readable in image | No ruler or calibrated scale reference is present in the image | `Phase2-inputs/issues 19/2026_07_09_p1.png` | CONFIRMED — absence verified by inspection | No product label, SKU, or packaging is visible in the image | `Phase2-inputs/issues 19/2026_07_09_p1.png` | CONFIRMED — absence verified by inspection | Product code \"CRFF2404BM\" is printed on the product listing card | `Phase2-inputs/issues 19/2026_07_09_p2.png` | CONFIRMED — text directly readable | \"240mm\" measurement appears at the top left of the product listing image | `Phase2-inputs/issues 19/2026_07_09_p2.png` | CONFIRMED — text directly readable | \"4 Outlet\" appears at the top right of the product listing image | `Phase2-inputs/issues 19/2026_07_09_p2.png` | CONFIRMED — text directly readable | \"Black\" appears at the bottom of the product listing image | `Phase2-inputs/issues 19/2026_07_09_p2.png` | CONFIRMED — text directly readable | A bracket component labelled \"170mm\" is visible in the product listing image | `Phase2-inputs/issues 19/2026_07_09_p2.png` | CONFIRMED — measurement label directly readable | A red hand-drawn annotation/circle is visible on the product listing image, pointing to the bracket component | `Phase2-inputs/issues 19/2026_07_09_p2.png` | CONFIRMED — annotation visible | The product listing shows \"x 1\" above the product name | `Phase2-inputs/issues 19/2026_07_09_p2.png` | CONFIRMED — text directly readable | The two photographs are contextually related but the direct evidential link between the screw shown in p1 and the CRFF2404BM product shown in p2 is not independently confirmed from the images alone. That link derives from the NotebookLM Business Intelligence Report and the audio recording, which has not been independently transcribed.",
+    "whatIsHappening": "",
+    "documentGap": "gap-006-assembly-instruction-technical-sign-off-and-product-verification.md",
+    "fix": "DECISION REQUIRED before action is confirmed. The following steps are recommended pending reviewer approval. They are not approved operational rules. 1. Confirm the source of \"30cm\" — identify exactly where and how \"30cm\" was stated (audio recording, written document, verbal briefing). This determines whether the error is contained in one medium or distributed across multiple. 2. Identify all recipients — establish who received the \"30cm\" measurement and in what format. If the incorrect value was sent to a supplier or included in a written instruction, a formal correction must be issued. 3. Confirm the correct specification in writing — obtain written confirmation from the product team or engineering authority that 30mm (3cm) is the correct screw measurement for the CRFF2404BM bracket assembly. The user-confirmed correction in this document is a starting point, not a confirmed specification. 4. Issue a correction if distributed — if the incorrect measurement was distributed in any form to suppliers, assembly staff, or customers, issue a formal correction with the confirmed value. 5. Check CRFF2404BM product documentation — review the current product listing and any associated assembly instructions to confirm whether \"30cm\" appears in any written document. If so, correct the written record. 6. Review GAP-006 scope — determine whether GAP-006 should be extended to explicitly cover audio and verbal instruction formats, not only printed manuals. Record the reviewer's determination."
+  },
+  {
+    "ticketId": "ND-018",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-12",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "T185 Bulb Product Listing Image Discrepancy (LDMT185B224)",
+    "description": "The Shopify picking interface for SKU LDMT185B224 (T185 4W bayonet filament bulb) displays two different thumbnail images on the same packlist line. The thumbnails appear side-by-side in the packlist view and show different filament patterns, creating ambiguity about which physical product variant the picker should select. Warehouse staff rely on packlist thumbnails as the primary visual reference when picking multi-line orders. When the same SKU shows two conflicting thumbnails, staff cannot determine from the listing alone which variant is the correct one for the order.",
+    "rootCause": "/ Current Root Cause Status Root cause: NOT YET CONFIRMED. The immediate observation is that the Shopify packlist for SKU LDMT185B224 shows two different thumbnail images for a single order line. The reason this discrepancy exists has not been independently established.",
+    "whatIsHappening": "Warehouse staff use the Shopify packlist and associated product thumbnail images to identify, pick, and verify items for customer orders. The process relies on visual cues — including filament shape — to distinguish between product variants during multi-line picking. When a packlist displays two conflicting thumbnails for the same SKU and picking line, staff must choose which image to follow, or rely on product knowledge that is not captured in the picking system.",
+    "documentGap": "",
+    "fix": "The following steps are recommended pending reviewer approval. They are not confirmed operational rules. 1. Verify the live Shopify listing for SKU LDMT185B224 — confirm which images are currently mapped to this SKU in the Shopify listing admin panel. Establish whether two separate variant images exist and, if so, which is assigned to which product record. 2. Physically verify the T185 product variants — obtain physical samples of the T185 4W variants available in stock and identify their filament types against the Shopify images. Confirm whether \"straight\" and \"cross/spiral\" accurately describe the physical distinction between variants. 3. Confirm the dimmable/non-dimmable relationship before recording it as AIOS knowledge — check product specifications, packaging, or supplier documentation. Do not promote straight=dimmable / cross=non-dimmable as a confirmed operational rule until product evidence supports it. 4. Correct the Shopify listing image only after verification — once the correct variant image for LDMT185B224 is confirmed, update the listing. Do not guess which image is correct based on the screenshot alone. 5. Check related T-series listings — consider auditing T45 and any other T-series bulb SKUs for similar image inconsistencies, given that the T45 line in the same screenshot also has annotations suggesting possible discrepancy. 6. Confirm whether an image verification step exists for listing updates — determine whether any documented process currently requires image accuracy to be checked before or after a listing goes live. If no such process exists, flag for future review (this task does not create a Document Gap; see Document Gap section)."
+  },
+  {
+    "ticketId": "ND-019",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-12",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "120mm 2-Outlet Ceiling Rose Supplier Component and Packaging Inconsistency (CRSF1202BM)",
+    "description": "Warehouse staff are reportedly required to manually inspect individual units of CRSF1202BM to confirm that accessory components are complete before dispatch. The reported root cause is that different suppliers provide different cord grip types for the same SKU, and that small accessories within the product packaging may not be securely sealed, creating a risk of parts spilling or falling out before the unit reaches the customer. The operational effect is an unplanned manual checking step applied to individual units during warehouse handling. Whether this check is applied consistently, how it is tracked, and what happens when a unit fails the check has not been confirmed from available evidence.",
+    "rootCause": "/ Current Root Cause Status Root cause: NOT YET CONFIRMED. The immediate reported cause is that different suppliers are providing different cord grip types and that internal accessory packaging is not always sealed. The deeper root cause — whether a documented supplier specification exists but is not being followed, or whether no such specification has ever been issued — has not been confirmed from available evidence.",
+    "whatIsHappening": "REPORTED — not independently confirmed from image or repository evidence: Warehouse staff reportedly perform manual piece-by-piece checks on individual units of CRSF1202BM to confirm that accessory components are present before packing and dispatch. This step reportedly exists because: 1. Different suppliers provide different cord grip types, creating visual inconsistency between units of the same SKU.",
+    "documentGap": "",
+    "fix": "DECISION REQUIRED before action is confirmed. The following steps are recommended pending reviewer approval. They are not approved operational rules. 1. Inspect current and incoming CRSF1202BM stock — physically examine units from recent deliveries to confirm whether cord grip variation and loose accessory packaging actually occur. Record the cord grip type(s) observed and the packaging condition of the accessory sub-bags. 2. Determine the required cord grip type — establish whether one specific cord grip type should be standardized for CRSF1202BM. This requires product/purchasing authority input, not warehouse-level decision. 3. Confirm whether a supplier specification exists — check with the purchasing or supplier management function whether a documented supplier specification for CRSF1202BM components and packaging already exists. If it does, confirm whether it is being communicated and enforced with all active suppliers. 4. Determine the sealed packaging requirement — establish whether securely sealed internal accessory sub-packaging should be a confirmed supplier requirement for CRSF1202BM. This must be confirmed by the appropriate purchasing or product authority. 5. Listen to the audio recordings — the two audio recordings may contain additional operational context about the cord grip variation and packaging issue. Human review is required to determine whether the recordings add confirmed detail. 6. Do not issue a supplier specification without business/purchasing validation — do not create a supplier requirement or product standard based on this issue record alone."
+  },
+  {
+    "ticketId": "ND-020",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-12",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "SKU Overlap: PVC and Rubber Cable Descriptions Sharing PHSHF1PBRYB with Negative Inventory in UK Unit3",
+    "description": "The warehouse picking interface (order.vintageinterior.co.uk) shows two pick cards at warehouse location 1-F-05-D for Yellow Brass pendant light fittings: Card A (confirmed in `2026_07_12_p1.png`): labelled \"1m PVC Cable\", SKU text reads PHSHF1PBRYB, stock UK Unit18: 500 / UK Unit3: 136 / UK Unit4: 0, button shows \"Picked\". Card B (confirmed in `2026_07_12_p2.png`): labelled \"1m Rubber Cable full set\", SKU text appears as PHSF1PBRYB (see Note below), stock UK Unit18: 0 / UK Unit3: -5 / UK Unit4: 0, button shows \"Pick\" (not yet actioned). Note — SKU text discrepancy between images: Card A (p1) reads PHSHF1PBRYB; Card B (p2) reads PHSF1PBRYB. At 720px image resolution, the rendering of adjacent identical characters can cause visual merging.",
+    "rootCause": "/ Claim Boundary Confirmed from Evidence Observation | Source | Status | A pick card labelled \"1m PVC Cable\" with SKU text PHSHF1PBRYB, Location 1-F-05-D, UK Unit18: 500, UK Unit3: 136, UK Unit4: 0, button \"Picked\" | `2026_07_12_p1.png` | CONFIRMED — directly readable | A pick card labelled \"1m Rubber Cable full set\" with SKU text PHSF1PBRYB (see Note), Location 1-F-05-D, UK Unit18: 0, UK Unit3: -5, UK Unit4: 0, button \"Pick\" | `2026_07_12_p2.png` | CONFIRMED — directly readable | Both cards show Yellow Brass colour and location 1-F-05-D | both images | CONFIRMED | Both cards appear in the same picking session (7:51 and 7:52, 83% battery) | both images | CONFIRMED | The picking interface is order.vintageinterior.co.uk | `2026_07_12_p2.png` (URL bar partial) | CONFIRMED — \"...tageinterior.co.uk\" directly visible | UK Unit3 stock is -5 for the Rubber Cable full set entry | `2026_07_12_p2.png` | CONFIRMED — directly readable | A partial third card beginning with \"1m PVC Cable\" label and same product image type is visible at the bottom of p2 | `2026_07_12_p2.png` | CONFIRMED — visible; content not fully readable | Reported from BI / Operational Source Claim | Status | PHSHF1PBRYB is a single SKU mapped to both \"1m PVC Cable\" and \"1m Rubber Cable full set\" | REPORTED — BI report; not confirmed from OMS system query or image evidence independently | Both product descriptions share warehouse location 1-F-05-D | CONFIRMED from images for both cards individually; whether this reflects a system routing rule or a coincidence requires OMS query | Items arriving as full sets are being processed as individual components | REPORTED — BI report; not directly confirmed from image evidence | Warehouse staff flag the issue through operational or audio reports | REPORTED — BI report; audio recordings exist but content not independently transcribed | Inventory inaccuracy extends to multiple stock records | REPORTED — only UK Unit3: -5 for Rubber Cable entry is confirmed; other values are confirmed per card but their accuracy is not independently audited | Assumptions / Unproven Assumption | Status | The cause is old-stock listings or legacy SKU registration | UNPROVEN — stated in BI report as possible; no evidence chain confirmed | Quality or price differences were not reconciled during system updates | UNPROVEN | Pick-list preparation staff caused the discrepancy | UNPROVEN | The issue originated from initial SKU registration | UNPROVEN | Both cards represent the same physical product space at 1-F-05-D | UNPROVEN — location is the same per display; physical reality requires audit | Proposed Decision or Action Proposed Action | Status | PHSHF1PBRYB should be split into two separate canonical SKUs | PROPOSED — not an approved business decision | PVC and Rubber cable products must universally use different SKU conventions | PROPOSED — not an approved business rule | Full-set items must always be represented as one pick-list line | PROPOSED — not an approved business rule | Negative inventory values must be reconciled before the next picking session | PROPOSED — not a confirmed operational requirement |",
+    "whatIsHappening": "Warehouse staff use a mobile browser interface at order.vintageinterior.co.uk to pick items during fulfilment. The pick list displays cards with: a product image, a product description label, a quantity, a SKU, a colour, a warehouse location, per-unit stock levels, and a Pick or Picked button. Confirmed from image evidence: a picker viewing location 1-F-05-D during a picking session on 2026-07-12 saw both a \"Picked\" card (Card A, PVC Cable, 4 units) and a \"Pick\" card (Card B, Rubber Cable full set, 1 unit) in the same session.",
+    "documentGap": "",
+    "fix": "The following actions are recommended based on the BI report. They are not approved operational procedures. Management and business validation is required before any action is treated as a confirmed operational step. 1. Determine canonical SKU mapping — directly query the OMS to confirm whether PHSHF1PBRYB and PHSF1PBRYB are the same record or two distinct records. If the same: document which product description is correct. If different: determine whether the visual similarity is causing pick confusion. 2. Determine the correct product identity for each physical item at 1-F-05-D — the business must confirm whether \"1m PVC Cable\" and \"1m Rubber Cable full set\" are: (a) two separate products that currently share a SKU (requiring separate canonical SKUs); (b) the same product with an incorrectly duplicated or variant listing; or (c) a legacy listing that should be archived. 3. Physically audit stock at 1-F-05-D — count the physical units present for each cable type, compare against system values, and reconcile the -5 negative balance in UK Unit3. 4. Resolve negative inventory — after the physical audit, adjust the OMS inventory record to reflect actual stock. Do not simply zero the negative balance without confirming the physical count. 5. Confirm full-set handling requirement — if items arrive from suppliers as full sets, determine whether the pick list must represent them as one line (full set) or whether component-level listing is acceptable. This is a business decision, not a picking decision. 6. Review legacy/old-stock records — identify whether the overlap originated from system records that were not updated during a product refresh or SKU revision. 7. Listen to audio recordings — the three audio recording pairs in the evidence folder may contain additional operational context about the discrepancy. Human review is required. 8. Confirm whether PHSHF1PBRYB requires one or two canonical SKUs — this is the key business decision that unlocks all downstream corrections. It must be made by a business authority, not by the warehouse team or AIOS independently."
+  },
+  {
+    "ticketId": "ND-021",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-12",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Vendor Box Inventory Discrepancy and Reported Calculation Method Concern (UNIT 3 / UNIT 4)",
+    "description": "Operational staff reportedly calculate the number of vendor boxes required for vendor shipments based on unit count. The supplied BI report states: A current shipment reportedly involves 290 units or shades. The required box count for this shipment is reportedly recorded as zero despite boxes reportedly being physically available. The calculation method reportedly in use may be outdated.",
+    "rootCause": "/ Claim Boundary Confirmed from Image Evidence Observation | Source | Status | A table exists titled UNIT 3-VENDOR -BOX | `2026_07_12_p1.png` | CONFIRMED | A table exists titled UNIT 4-VENDOR -BOX | `2026_07_12_p1.png` | CONFIRMED | UNIT 3-VENDOR -BOX lists: a3box (9*6*6 in)=197, a2box (6*6*6 in)=0, a1box (5*5*5 in)=28, a4box (8*8*8 in)=0, ybox=3, c8box (12*12*6 in)=0, Bubble bag - 4=0, Cray bag=26 | `2026_07_12_p1.png` | CONFIRMED — values directly readable | UNIT 4-VENDOR -BOX lists: zbox=87, ybox=3, a1box (5*5*5 in)=28, 6×5×5=7, a3box (9*6*6 in)=197, 8×5×5=6, 9×6×6=7, Cray bag=26 | `2026_07_12_p1.png` | CONFIRMED — values directly readable | A partial row is visible at the very top of the image showing a value of \"0\" with its label cut off | `2026_07_12_p1.png` | CONFIRMED — value visible; label not readable | c8box is the 12*12*6 in box category | `2026_07_12_p1.png` | CONFIRMED — label and dimension directly readable together | The image appears to be a spreadsheet screenshot | `2026_07_12_p1.png` | CONFIRMED — table layout consistent with spreadsheet | No date, person name, calculation formula, or methodology indicator is visible | `2026_07_12_p1.png` | CONFIRMED ABSENT from this image | Reported from BI / Operational Source (not independently confirmed) Claim | Status | A current shipment involves 290 units or shades | REPORTED — figure not visible in image evidence | The required box count for 290 units is recorded as zero | REPORTED — \"290\" not visible; zero values are confirmed for specific categories, not for a specific shipment | Boxes are physically available despite the zero recorded requirement | REPORTED — physical availability is not proven by the inventory table alone | The calculation method in use is outdated | REPORTED — no calculation method document found in the repository; cannot confirm \"outdated\" | c8box / 12126 is the specifically affected category | REPORTED in BI report, PARTIALLY SUPPORTED by image (c8box (12*12*6 in)=0 confirmed; \"12126\" is consistent with 12*12*6 dimensions) | The discrepancy causes vendor processing delays | REPORTED — no confirmed delay record in repository | UNIT 3-VENDOR -BOX contains zero values for packaging categories | CONFIRMED for specific categories (a2box, a4box, c8box, Bubble bag-4); not all categories are zero | Audio-Derived Claims (audio files present, not independently transcribed) Claim | Status | Any spoken detail about the 290-unit shipment | AUDIO UNVERIFIED | Any spoken reference to the box calculation method | AUDIO UNVERIFIED | Any confirmation of physical box availability | AUDIO UNVERIFIED | Any person named in connection with the calculation or error | AUDIO UNVERIFIED — do not assign fault without confirmed transcription | Assumptions / Unproven Assumption | Status | All vendor box calculations are currently incorrect | UNPROVEN — one reported incident; systemic impact not confirmed | Zero values in UNIT 3-VENDOR -BOX were caused by the calculation method | UNPROVEN — cause of zero values not confirmed from evidence | The correct number of boxes for 290 units is non-zero | UNPROVEN — no approved calculation methodology found; do not infer a box count | c8box should have been assigned to the shipment | UNPROVEN — no confirmed box selection rule | Physical boxes are available but incorrectly unrecorded | UNPROVEN — reported only | The issue is isolated to one shipment | UNPROVEN — scope of impact not confirmed | Proposed Decisions or Actions (not active business rules) Proposed Action | Status | Determine whether a current approved box calculation methodology exists | PROPOSED INVESTIGATION | Establish the correct box requirement for a given unit count | PROPOSED DECISION — requires business authority; do not invent the formula | Update the calculation method if an approved method exists and the current one deviates | PROPOSED ACTION — requires comparison of old and new methods, neither of which has been confirmed from the repository | Reconcile zero values in UNIT 3-VENDOR -BOX categories with physical stock | PROPOSED INVESTIGATION |",
+    "whatIsHappening": "Confirmed from image evidence: The vendor box inventory is tracked in a table with two sections: UNIT 3-VENDOR -BOX and UNIT 4-VENDOR -BOX. Each section lists box categories by name (and dimensions where shown) against a numeric value. The table appears to be a spreadsheet screenshot.",
+    "documentGap": "",
+    "fix": "The following are recommendations based on the supplied BI report. They are not approved operational procedures. Each requires business and/or management validation before action. 1. Confirm whether an approved vendor box calculation methodology exists — search business systems, SOPs, and spreadsheet source files for a confirmed formula. If found, compare it against the calculation currently in use to determine whether a deviation exists. 2. Confirm the 290-unit shipment details — if a specific shipment is the trigger for this report, retrieve its record from the source system to confirm unit count, box requirement recorded, and date. 3. Physically audit UNIT 3-VENDOR -BOX stock — count actual boxes on hand for a2box, a4box, c8box, and Bubble bag-4 (which all show zero in the system) to determine whether the system count matches physical reality. 4. Determine the cause of zero values in UNIT 3 — once the physical count is known, determine whether the zeros are: (a) accurate — stock is genuinely depleted; (b) an input or calculation error; (c) a known but unrecorded depletion; or (d) an artefact of an incorrect calculation method. 5. Listen to the audio recordings — the two recording pairs (r1 and r2) may contain operational context about the shipment, the calculation method, and the physical box situation. Human review is required before audio-derived claims can be verified. 6. Identify the source spreadsheet — the image appears to be a screenshot of a spreadsheet. Locating the source file would allow review of any formulas, method version indicators, or input history that cannot be confirmed from the screenshot alone. 7. Do not update the calculation method without confirming the approved method — updating a calculation to an assumed correct value without a confirmed reference could introduce a new error. The approved method must be confirmed before any update is applied."
+  },
+  {
+    "ticketId": "ND-022",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-15",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "High",
+    "title": "Traceability Audit of Trend Mark Logistics",
+    "description": "A traceability audit is required for a Trend Mark Logistics shipment of ST64-E27-4W LED Filament Bulbs (Carton 182 /1, 100 pieces, shipment reference DCVOLTAGE UK GZ-1, May 2026 batch). The audit focus is whether the technical specification markings on individual retail packaging boxes accurately reflect the master carton and product declaration — specifically the Dimmable status and Amber colour markings. Products received in master cartons are expected to have consistent specification markings across individual inner boxes. A potential discrepancy or unverified compliance requirement concerning Dimmable and Amber fields has been identified, requiring 100% inspection of the carton.",
+    "rootCause": "Observation | Source | Status | Supplier is Trend Mark Logistics | BI report | CONFIRMED | Product identifier is ST64-E27-4W | BI report | CONFIRMED | Carton reference is 182 /1 | BI report | CONFIRMED | Carton quantity is 100 pieces | BI report | CONFIRMED | Shipment / master reference is DCVOLTAGE UK GZ-1 | BI report | CONFIRMED | Date / batch reference is May 2026 | BI report | CONFIRMED | Individual retail boxes contain Dimmable and Amber specification fields | BI report | CONFIRMED | 100% inspection of all 100 pieces in Carton 182 /1 is required | BI report | CONFIRMED | Evidence images (3 PNG files) are available for review | Phase2-inputs/issues 24/ | CONFIRMED — files non-zero | Audio recording (1 pair: r1 MP3 and OGG) is available for review | Phase2-inputs/issues 24/ | CONFIRMED — file non-zero |",
+    "whatIsHappening": "Confirmed from the BI report: Products are received in master cartons with shipment and product identification markings. Each master carton contains individual retail boxes for LED Filament Bulbs. Warehouse personnel manually verify individual retail box specification markings against the master carton or product declaration.",
+    "documentGap": "",
+    "fix": "The following are recommendations from the BI report. They are not approved operational procedures. Each requires business and/or management validation before action. 1. Conduct 100% inspection of Carton 182 /1 — physically inspect all 100 pieces. Verify Dimmable and Amber marking on each individual retail box against the master carton and product declaration. 2. Reconcile individual box markings against the master record — for the 4W, 2200K, E27, Dimmable, and Amber fields in Carton 182 /1 against the DCVOLTAGE UK GZ-1 master / product record. 3. Validate the supplier quality-control process for the May 2026 batch — confirm whether the Trend Mark Logistics quality-control process produced consistent and accurate specification markings for this batch. If non-conformance is found, raise with the supplier. 4. Review evidence images and audio — the three PNG images and audio recording available in the evidence folder should be reviewed by the domain owner or warehouse team to confirm the nature and scope of the marking concern before corrective action is taken."
+  },
+  {
+    "ticketId": "ND-023",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-17",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Yellow Brass Wall Sconce Packaging Label Mismatch",
+    "description": "A packaging discrepancy has been identified for SKU WSFS1YBYB (Yellow Brass Wall Sconce). Both the external shipping cartons and the internal retail boxes are labelled \"2 PACK\". Internal SKU records and physical verification confirm the product is actually supplied as Pack of 1.",
+    "rootCause": "Confirmed evidence shows packaging labels are incorrect. Whether the supplier created the error intentionally or accidentally remains unknown.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "ND-024",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-17",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Manual Order Payment Reconciliation Workflow Failure",
+    "description": "A manual order placed by customer LED57956 has entered a pending payment state with no confirmed reconciliation path. The order requires proof of payment (bank transfer via HSBC) to be received and matched to the collection order before it can be progressed. No documented workflow exists for handling manual order payment reconciliation in this scenario, resulting in the order stalling with no clear owner or next action.",
+    "rootCause": "It is not yet known whether the payment failure is due to: The customer not having made the transfer An error in the bank account details provided A transfer made but not yet matched against the order Absence of a reconciliation process meaning the payment arrived but was not actioned No root cause investigation has been completed at the time of logging.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "ND-025",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-17",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Product Assembly State Discrepancy",
+    "description": "SKU LHBPE27BM (lamp holder) is being shipped as components only — assembly is required by the customer. The Shopify product presentation does not clearly communicate this. A customer complaint was received via Help Desk ticket 31186, indicating that the customer expected a ready-to-use assembled product and received unassembled components instead. There is a confirmed mismatch between the physical delivery state of this product and how it is presented on Shopify.",
+    "rootCause": "The mismatch between the physical delivery state and the Shopify presentation is confirmed. The underlying cause of the mismatch — whether the listing was created incorrectly, the supplier changed the product state without notification, or the fulfilment method was changed without updating the listing — has not been confirmed at time of logging. No root cause investigation has been completed beyond confirming the mismatch and the customer complaint in Help Desk 31186.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "ND-026",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-17",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Defective Barrel Quality Alert",
+    "description": "SKU WCB6BC (barrel — metal lampshade) has been received from the supplier in a defective state. Units have arrived bent. The defect is physical — the barrel component is deformed on receipt. The cause of the deformation has not been confirmed.",
+    "rootCause": "The physical defect (bent barrel) is confirmed. The cause of the deformation has not been established at time of logging. Possible causes under investigation (none confirmed): Supplier manufacturing defect — units were produced or assembled incorrectly Transit damage — units were deformed during shipment or handling in transit Packaging failure — inadequate packaging allowed movement and bending during transport No root cause investigation has been completed.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "ND-027",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-17",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Hardware Deficiency and Quality Control",
+    "description": "SKU WSWH135BM (lamp holder) was found broken inside packaging on arrival in the latest delivery. The hardware deficiency was identified at point of unpacking. The internal component was damaged or broken before reaching the warehouse team, indicating a quality or handling failure upstream of receipt. The cause of the breakage has not been confirmed.",
+    "rootCause": "The breakage of WSWH135BM inside packaging is confirmed. The cause of the breakage is not established at time of logging. Possible causes under investigation (none confirmed): Manufacturing defect — the lamp holder component was produced or assembled incorrectly before leaving the supplier's facility Transit damage — the unit was damaged during shipment or handling in transit Packaging insufficiency — the supplier's packaging does not provide adequate protection for this product type during normal transit conditions No root cause investigation has been completed.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "ND-028",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-17",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Yellow Brass Finish Inconsistency from Latest Supplier Batch",
+    "description": "The latest Yellow Brass supplier delivery contains stock with a finish that differs significantly from previous stock. The new batch does not match the finish of existing stock in the warehouse. CRSF120YB is currently mapped as a substitute for CRSF125YB. This mapping assumes finish consistency between the two components.",
+    "rootCause": "The latest Yellow Brass supplier delivery has a visibly different finish compared to previous stock. This is confirmed. CRSF120YB is currently mapped as a substitute for CRSF125YB.",
+    "whatIsHappening": "At time of logging, the following is understood about the current process: Yellow Brass components are received from the supplier as part of scheduled deliveries. Components are accepted into warehouse stock on receipt. CRSF120YB is currently mapped as a substitute for CRSF125YB in product fulfillment.",
+    "documentGap": "gap-007-missing-supplier-finish-consistency-validation-and-golden-sample-approval-process.md",
+    "fix": "Immediate: Physically segregate all new batch Yellow Brass components (CRSF120YB / CRSF125YB) from existing stock. Do not allow the new batch to enter general picking locations until finish consistency is confirmed. Photograph new batch components alongside previous stock to document the visible finish difference. Suspend the CRSF120YB → CRSF125YB substitution mapping until the finish issue is resolved or the mapping has been re-validated. Raise the finish inconsistency with the supplier immediately, providing photographic evidence. Request confirmation of whether the finish change is permanent, unintentional, or a process change at their end. Short term: Conduct a physical comparison of new and previous batch components to formally document the extent and nature of the finish difference. Reassess the CRSF120YB → CRSF125YB mapping once supplier feedback is received. Confirm whether the mapping remains valid, needs to be updated, or should be suspended permanently. Review any active customer orders pending these SKUs and determine whether fulfillment should be held, substituted with existing stock only, or paused. Long term: Implement a Golden Sample / Pre-Shipment Inspection (PSI) process for supplier components where finish consistency is a quality requirement. Establish a documented incoming material finish inspection step at point of receipt for affected SKU categories. Document a mapping validation process: when new stock is received for a mapped SKU, finish and specification consistency must be confirmed before the mapping is applied to new batch stock. See Document Gap GAP-007 for the formal documentation gap record associated with this issue."
+  },
+  {
+    "ticketId": "SA-001",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Low Sales Volume for O-Garden Products Imported from Italy",
+    "description": "Low sales volume for \"O-Garden\" products imported from Italy despite a 30–40% pricing advantage over Amazon listings.",
+    "rootCause": "Pricing is significantly lower than Amazon. Sales volume is less than 10 units in three months.",
+    "whatIsHappening": "Products are listed at prices 30–40% lower than those found on Amazon to encourage sales.",
+    "documentGap": "",
+    "fix": "Investigate the specific account settings for these items, evaluate the listing's \"attractiveness,\" and analyze competitor advertising spend."
+  },
+  {
+    "ticketId": "SA-002",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Excessive Sales Decline in Light Transformers",
+    "description": "Excessive sales decline specifically in Light Transformers — a 70% drop versus the expected 30% seasonal decline.",
+    "rootCause": "Stock is available for 90% of the relevant product models. A colleague/partner reports only a 30% drop while the speaker sees a 70% drop.",
+    "whatIsHappening": "Selling Light Transformers from existing stock during the seasonal transition.",
+    "documentGap": "",
+    "fix": "Perform a detailed calculation to identify which specific models or regions are driving the 70% decline."
+  },
+  {
+    "ticketId": "SA-003",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Failure to Capture the Broader European Market Despite Duty-Free Access",
+    "description": "Failure to capture the broader European market despite being duty-free — sales across 27 EU countries are non-existent or stagnant.",
+    "rootCause": "The European market (27 countries) is accessible without customs taxes. The German market is inherently larger than the London/UK market.",
+    "whatIsHappening": "Operating primarily in the UK market while acknowledging that the German and wider European markets are larger.",
+    "documentGap": "",
+    "fix": "Conduct a \"back-end\" review of how European sales are being handled and analyze if competitors are using superior advertising techniques."
+  },
+  {
+    "ticketId": "SA-004",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-15",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "System Stock Discrepancies and Inactive Listings",
+    "description": "A mismatch exists between physical inventory and the digital system (Kronos/eBay), where items physically in stock are shown as inactive (\"off\") or displaying negative balances.",
+    "rootCause": "Items like small transformers (Blue, Orange, Black & White) are physically in the warehouse but show as inactive or negative in the system.",
+    "whatIsHappening": "Staff review system reports for \"minus\" stock and attempt to reconcile them with physical counts in the store. Listings on platforms like eBay are manually checked to see if they are active or inactive.",
+    "documentGap": "",
+    "fix": "Conduct a full physical audit of the \"minus\" stock items and sync the \"Kronos\" intake (500 units) immediately into the active system."
+  },
+  {
+    "ticketId": "SA-005",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-15",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Delays in Pricing Updates for Incoming Container Stock",
+    "description": "New stock arriving via containers is experiencing delays in being listed with current pricing, particularly for items routed through London.",
+    "rootCause": "Container stock arrived recently.",
+    "whatIsHappening": "Stock arrives at the store; however, updating the \"old price listings\" takes a significant amount of time during the transition.",
+    "documentGap": "",
+    "fix": "Streamline the price-update workflow for container arrivals to ensure listings go live as soon as the stock is physically received."
+  },
+  {
+    "ticketId": "SA-006",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-15",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Manual Inter-Account Accounting for Cross-Platform Sales",
+    "description": "Selling \"HomeIn\" (German/European) stock through different company accounts requires a complex manual process of \"buying and selling\" between internal accounts to maintain balance.",
+    "rootCause": "HomeIn uses a German system/platform while other stock is UK-based.",
+    "whatIsHappening": "When stock from the HomeIn account (Italy items/German system) is sold via another account, staff must manually record it as a sale from one and a purchase by the other to \"convert\" the transaction.",
+    "documentGap": "",
+    "fix": "Develop or implement a \"system to convert\" or synchronize these accounts to automate the inter-company transfer records."
+  },
+  {
+    "ticketId": "ND-029",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-20",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Low-Volume 2nd Booking Others Sub-folder Fragmentation",
+    "description": "On 2026-07-20, a management directive was issued stating that when the \"Others\" category within a 2nd Booking contains only a small number of orders, those orders should be consolidated into a single location rather than separated into individual sub-folders. The current folder structure within: `Dropbox > Unit - 03 Postage Folder > 2026 > July > 20.07.2026 > 2nd Booking > Others` contains multiple sub-folders — Cable, Others (nested), Replacement, and Transformer — alongside an \"Order Management - LEDSone\" shortcut file. The directive indicates that where order volume is low, this level of sub-folder separation is not required and should be avoided.",
+    "rootCause": "Unnecessary fragmentation of low-volume entries. When only a small number of orders fall into the \"Others\" category, separating them into component-type sub-folders (Cable, Transformer, Replacement) increases the navigation burden without meaningful benefit. Administrative overhead.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": "1. Verify actual order counts. Check the number of entries in the Cable, Replacement, and Transformer sub-folders for the 20.07.2026 session to confirm whether the volume is genuinely low. 2. Consolidate if volume is low. If the volume confirms that sub-folder separation is not warranted, move all entries into a single consolidated location within the Others directory as per the management directive. 3. Confirm with management. Confirm with the relevant manager whether the consolidation action has been completed satisfactorily for the 2026-07-20 date. 4. Threshold validation (pending). If a recurring consolidation guideline is needed, raise the numeric threshold (e.g. the < 5 example from the BI report) with the business owner for approval before it is written into any SOP or AIOS operating rule. 5. Do not pre-empt SOP creation. Do not write a permanent digital filing rule or Document Gap based solely on this single-day event until the threshold and process have been validated and approved."
+  },
+  {
+    "ticketId": "ND-030",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-20",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Outdoor Lamp Holder Missing-Hardware Claim: Click-In Assembly Instruction Gap",
+    "description": "A customer (Derek Fraser) reported \"parts missing\" for an order of the IP44 Rainproof Outdoor E27 Lamp Holder (2-pack), SKU LHXSHE27BM2PK. The customer stated that both holders arrived without internal screws and requested replacements including the screws. Internal communication indicates that the product uses a click-in assembly mechanism rather than screws. Because neither the assembly instructions nor the pack list for LHXSHE27BM2PK explain this click-in mechanism, the customer had no documented basis for understanding how the product is assembled.",
+    "rootCause": "Confirmed: The assembly instructions for SKU LHXSHE27BM2PK do not currently explain the click-in assembly mechanism. Confirmed: The pack list does not adequately detail the components or assembly method for this product. These two absences are the direct cause of the customer's missing-hardware claim.",
+    "whatIsHappening": "",
+    "documentGap": "gap-008-missing-click-in-assembly-instructions-and-pack-list-detail-lhxshe27bm2pk.md",
+    "fix": "1. Create click-in assembly instructions. Prepare a clear guide explaining the click-in assembly mechanism for the top part of the LHXSHE27BM2PK lamp holder. The guide must make explicit that screws are not required and that the fitting is achieved by the click-in design. 2. Update the pack list. Revise the pack list for SKU LHXSHE27BM2PK to include the click-in assembly information and to correctly describe the expected components so customers have the information needed to assemble the product. 3. Audit the product listing. Check whether the online product description incorrectly mentions or implies that screws are required or expected. This is a mandatory audit action — do NOT assume the listing is incorrect until the audit is completed and its finding is confirmed. 4. Resolve Derek Fraser's request. Confirm whether a replacement was appropriate and, if so, whether the customer has been supported. If no replacement was dispatched, consider whether providing an assembly explanation resolves the complaint. 5. Verify mechanism scope. Confirm whether other SKUs in the lamp holder range use the same click-in mechanism. If they do, those SKUs require the same pack-list and instruction update."
+  },
+  {
+    "ticketId": "ND-031",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Inventory Coordination: Color-Matched Accessory Procurement Failure (PCBSM2FSN)",
+    "description": "On 2026-07-21 a critical stockout was identified for the 10mm Satin Nickel connector (Product Code: PCBSM2FSN), an essential accessory for conduit pipe sets. Stock for PCBSM2FSN in UK Unit 3 dropped from 20 to 0 on 2026-07-21. Primary conduit pipes are in stock, but the absence of matching connectors prevents sale of complete color-coordinated sets. The connector was not included in the same procurement cycle as the conduit pipe delivery that preceded the stockout.",
+    "rootCause": "Confirmed: PCBSM2FSN stock in UK Unit 3 reached zero on 2026-07-21. The connector had previously been slow-moving and recently cleared out. Primary conduit pipes were procured and delivered without the corresponding matching connectors being included in the same order.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": "1. Initiate procurement for PCBSM2FSN. Place an order for the 10mm Satin Nickel connectors immediately to restore stock in UK Unit 3. 2. Cross-check conduit pipe stock against matching accessories. Identify all conduit pipe SKUs currently in stock and verify that their corresponding matching color accessory SKUs (connectors, fittings) are also in stock at adequate levels. 3. Review connected products together during ordering. When procuring primary conduit pipe products, the corresponding accessory SKUs (connectors and color-matched components) must be reviewed at the same time rather than treated as independent items. 4. Confirm staff follow-through. A staff member stated that color coordination would be monitored more closely during the next ordering cycle. Confirm whether this was recorded as a formal action or remained an informal acknowledgement."
+  },
+  {
+    "ticketId": "ND-032",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Unit 4 / Unit 18 Inventory Transfer Discrepancy and Held Labels",
+    "description": "A significant failure in the stock update and transfer process between Unit 4 and Unit 18 has resulted in a backlog of held shipping labels and inaccurate inventory records. Stock intended for Unit 4 is not arriving or being updated in the system. Items from Unit 18 are not being dispatched or recorded correctly. The immediate operational consequence is that shipping labels are being held: orders have reached the labelling stage but cannot be shipped because the physical whereabouts or availability of the stock cannot be confirmed.",
+    "rootCause": "Confirmed: 1. Inventory updates for Unit 4 and Unit 18 are currently inaccurate. 2.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": "1. Conduct a physical stock reconciliation at Unit 4 and Unit 18. Locate and count all stock physically present at both locations and reconcile against system records. 2. Identify what was moved during the referenced leave period. Determine which items were removed, when, and to where, and update the inventory records accordingly. 3. Establish a formal notification and recording process for warehouse transfers. Rather than relying solely on retrospective group-chat messages, introduce a formal step requiring that warehouse removals are recorded and confirmed with the inventory lead at the time of transfer. These are recommended actions from the supplied BI report. Their completion status is unknown at time of logging. Do not mark any as completed without separate confirmation."
+  },
+  {
+    "ticketId": "ND-033",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Inventory Management and Dynamic Pricing Strategy",
+    "description": "A strategy has been proposed for managing inventory for fast-selling items by using price adjustments to control the rate of sales when stock is nearing depletion before the next scheduled delivery. The current instruction is to monitor fast-selling items and manually adjust prices to control remaining inventory until replenishment arrives. However, the parameters required for consistent execution have not been established. The specific SKUs, stock-level triggers, direction of adjustment, magnitude of change, and replenishment-ETA input are currently undefined.",
+    "rootCause": "Confirmed: Fast-selling items are depleting faster than the replenishment cycle, creating a risk of complete stock-out before the next scheduled delivery. Unconfirmed: The mechanism (pricing direction, trigger level, SKU scope) by which management intends to address this has not been confirmed in the supplied evidence.",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": "— Decisions Needed The following are required before this strategy can be consistently executed. None of the below have been decided or approved at time of logging: 1. Identify the specific fast-selling SKUs in scope for this strategy. Without a defined SKU list, the strategy cannot be applied consistently. 2. Determine appropriate stock-level decision parameters. Establish what stock level (volume, days of cover, or other measure) triggers a pricing review for a given SKU. This requires explicit business approval — no threshold has been approved or should be assumed. 3. Obtain reliable incoming-delivery ETAs. The adjustment logic depends on knowing when the next replenishment will arrive. ETAs must be confirmed before any pricing decision is made. 4. Obtain business approval for any pricing-control rules before implementation. The direction of adjustment (and whether \"adjust\" means increase, decrease, or another change) must be explicitly approved by a business owner before it is treated as an instruction or implemented in any system. 5. Verify the prior \"Dana\" discussion. The BI report attributes a version of this strategy to a prior discussion with or directed by \"Dana\". If that discussion was captured in any format, it should be located and linked here before this issue is closed. These are open decision requirements, not completed actions. Do not mark any as resolved without separate confirmation."
+  },
+  {
+    "ticketId": "ND-034",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Vendor Logistics and Material Coordination",
+    "description": "On 2026-07-21 the warehouse experienced a compound operational breakdown involving three distinct but interconnected failures: unnecessary inter-unit material movement contributing to Unit 3 congestion, a printer-settings failure that produced 16 sheets of unusable output, and insufficient advance procurement of vendor boxes for incoming bulky shipments. The combined effect was that Unit 3 became congested to the point where a courier reportedly left the premises without completing a collection. The situation was attributed partly to the repeated non-implementation of previously communicated operational guidance.",
+    "rootCause": "Confirmed: 1. Large boxes were unnecessarily moved from Unit 4 to Unit 3 rather than being labelled and dispatched at their origin. This contributed to Unit 3 congestion.",
+    "whatIsHappening": "Confirmed from BI report (operational context): Cable ties and bulky vendor goods originating at Unit 4 are physically moved to Unit 3 for labelling and dispatch. Packing lists and labels are printed on-site. Vendor boxes for bulky and normal shipments are ordered as required.",
+    "documentGap": "",
+    "fix": "The following are recommendations from the supplied BI report. They are not completed actions, newly approved company policies, or operational rules. Each requires business validation before implementation. 1. Review direct labelling and dispatch of appropriate large items from Unit 4. Assess whether items of sufficient size that originate at Unit 4 can be labelled and dispatched from Unit 4 without being moved to Unit 3. This may reduce unnecessary material movement and lower the congestion risk at Unit 3. 2. Resolve and verify printer settings before batch printing. Confirm and correct the printer configuration before initiating any packing list or label batch print. A settings verification step before printing would prevent recurrence of the 16-sheet waste event. 3. Establish a preparation checklist for bulky vendor shipments. Consider a checklist that confirms vendor boxes and labels are prepared and available before a bulky vendor shipment arrives. This would surface procurement gaps before they block dispatch. 4. Review procurement lead time for vendor boxes against known shipment schedules. Align box ordering timelines with incoming shipment ETAs so that boxes are available before the goods arrive, not after. The BI report uses stronger language such as \"enforce\" and \"mandatory\" in relation to these actions. These terms have not been adopted here because no independent repository evidence confirms that management has formally approved these as binding rules."
+  },
+  {
+    "ticketId": "ND-035",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Backlist Label Team Staffing Shortage",
+    "description": "The Backlist Label team is experiencing a significant labour shortage during peak operating hours. Evening is identified in the supplied BI report as the high-volume period for Backlist Label operations, and current staffing levels are insufficient to maintain required productivity during that period. The issue has reportedly been escalated to management contacts Rajeev and Kannatharam on multiple occasions without a confirmed resolution being implemented.",
+    "rootCause": "Confirmed: 1. Staffing levels are insufficient for the Backlist Label team's workload during evening shifts. 2.",
+    "whatIsHappening": "Confirmed from BI report: The Backlist Label team processes labels during an evening operating window. The evening period is the identified high-volume and busy period for this team's work. Escalations regarding staffing have been directed to Rajeev and Kannatharam as management contacts.",
+    "documentGap": "",
+    "fix": "The following are recommendations from the supplied BI report. They are not completed actions, approved staffing decisions, or management policy. Each requires management validation before implementation. 1. Review Backlist Label headcount against actual evening workload. Assess whether current staffing levels match the label-processing volume during evening peak hours. No staffing number or headcount target has been approved or should be assumed from this review. 2. Discuss previous unresolved escalations with Rajeev and Kannatharam. Establish the current management position on the resource gap and confirm what, if any, resolution is planned or in progress. 3. Evaluate whether existing labour can be realigned from lower-volume periods to evening peak periods. Assess whether available staff scheduled during quieter windows could safely cover the evening demand without compromising other operational areas. These are open recommendations. Do not mark any as completed without separate confirmation."
+  },
+  {
+    "ticketId": "ND-036",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Assembling Group Integration and Logistics Coordination",
+    "description": "There is insufficient centralised coordination between the packing and assembly functions. Packing-list information for assembled products is not being posted in the shared Assembling Group coordination channel, and relevant operational personnel — specifically Manoranjani and Panman — are not currently included in that channel. As a result, relevant team members do not have full visibility of which products are being assembled, their current status, or the corresponding packing requirements.",
+    "rootCause": "Confirmed: 1. Packing lists for assembled products are not being posted in the centralised Assembling Group coordination channel. 2.",
+    "whatIsHappening": "Confirmed from BI report: Packing lists for assembled products appear to be handled separately from the assembly coordination channel. Manoranjani and Panman are not currently included in the centralised Assembling Group. Production and packing information is therefore not fully visible to all relevant operational personnel through the shared channel.",
+    "documentGap": "",
+    "fix": "The following are recommendations from the supplied BI report. They are not completed actions, approved process changes, or operational rules. Each requires management or operational validation before implementation. 1. Add Manoranjani and Panman to the Assembling Group. Include the relevant personnel in the centralised coordination channel so they receive assembly-status and packing information through the shared channel. 2. Post relevant packing lists for assembled products into the Assembling Group. Ensure that packing-list information is shared in the channel so that all members can align packing activity with assembly output. 3. Align packing activity with assembly-status information available through the shared channel. Once packing lists and membership are corrected, establish the practice of using the Assembling Group as the reference for coordinating packing schedules with assembly progress. These are open recommendations. Do not mark any as completed without separate confirmation."
+  },
+  {
+    "ticketId": "ND-037",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Discrepancies in Waterproof LED Module Technical Specifications",
+    "description": "A technical specification discrepancy has been identified for the Waterproof LED Module listed under SKU approximately 3742. The listing title states a voltage of 12V and wattage of 1.5W, while the product packaging shown in the listing image states AC 220V and 2W. These two sets of specifications directly contradict each other. Customers viewing this listing are presented with conflicting voltage and wattage information for the same product.",
+    "rootCause": "— Not Yet Confirmed CRITICAL: The correct electrical specification for this product has not been confirmed. Do not state which specification is accurate. Two possible explanations exist.",
+    "whatIsHappening": "Confirmed from BI report: The Waterproof LED Module is listed under an identifier of approximately SKU 3742. The listing title includes the technical specification: 12V, 1.5W. The listing image shows product packaging bearing the specification: AC 220V, 2W.",
+    "documentGap": "",
+    "fix": "The following are proposed next actions. They are recommendations only — not completed actions and not approved operational procedures. Each requires validation before implementation. 1. Physical product audit. Physically inspect the product assigned to SKU ~3742 and establish its actual voltage and wattage from authoritative product evidence (product label, manufacturer data sheet, or similar). Do not assume either the listing title or the packaging image is correct before this step is completed. 2. Listing reconciliation after confirmed audit. Once the correct specification is confirmed from physical evidence, synchronise the listing title, technical specifications, and product imagery so all three are consistent and accurate. 3. Related catalogue review. Consider checking similar Waterproof LED Module listings for comparable voltage/wattage specification mismatches. This discrepancy may not be isolated to SKU ~3742. Do not perform any listing correction, product data update, or image change until the physical audit has confirmed the correct specification."
+  },
+  {
+    "ticketId": "ND-038",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Product Image Synchronization and Inventory Accuracy Audit",
+    "description": "Conflicting product imagery has been identified for SKU PCBM20DS (20mm Saddle Mount) within the operational interface used by fulfilment staff. One visual reference for this SKU shows a single black component; another visual shows multiple components or colour variations. Fulfilment staff are therefore presented with inconsistent images for the same SKU, reducing picking and packing confidence. The supplied BI report also states that an image update had been previously requested for this SKU.",
+    "rootCause": "— Not Yet Confirmed The correct imagery for PCBM20DS has not been established from independent evidence. Until the authoritative product image is confirmed, the root cause cannot be determined. Investigation hypotheses include: 1.",
+    "whatIsHappening": "Confirmed from BI report: PCBM20DS is identified as a 20mm Saddle Mount variant. Product imagery for this SKU appears in the operational interface used for fulfilment. The operational interface currently shows conflicting visuals for this SKU: one image shows a single black component; another shows multiple components or colour variations.",
+    "documentGap": "",
+    "fix": "The following are proposed next actions from the supplied BI report. They are recommendations only — not completed actions or approved operational rules. Each requires validation before implementation. 1. Verify PCBM20DS imagery across all relevant system views. Confirm what images are currently displayed for this SKU in each relevant interface (listing, picking, packing) and identify all locations where a discrepancy exists. 2. Determine why the previous update did not propagate consistently. Investigate what was updated, what was missed, and which views or image sources were not covered by the original request. 3. Compare listing, picking, and packing image sources. Establish whether the conflicting views draw from different image repositories or sources, which would explain why an update to one did not affect the other. 4. Establish the authoritative image only after verification. Confirm the correct product image from physical product evidence or manufacturer data before replacing any current image. Do not assume either conflicting view is correct. 5. Consider a wider Conduit Fittings image audit. If investigation confirms the image synchronization issue is not isolated to PCBM20DS, extend the audit to similar SKUs in the Conduit Fittings range to determine the full scope. Do not replace, synchronize, or modify any product image in this task."
+  },
+  {
+    "ticketId": "ND-039",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Inventory Discrepancy for 350W 12V LED Driver",
+    "description": "A location discrepancy exists for SKU 12IP673500L3 (12V IP67 350W LED Driver) between the digital inventory record and the reported physical stock location. The inventory system records 78 units as held in UK Unit 3. Warehouse personnel report that the physical stock is located in UK Unit 4, with no corresponding system entry for that unit. Picking staff who rely on digital unit-location data are therefore directed to a location that does not hold the physical stock.",
+    "rootCause": "— Not Yet Confirmed The cause of the location discrepancy has not been established. Two investigation hypotheses are identified in the supplied BI report. Neither is confirmed from available evidence.",
+    "whatIsHappening": "Confirmed from BI report: The 12V IP67 350W LED Driver is tracked under SKU 12IP673500L3. The inventory system records 78 units of this SKU in UK Unit 3. UK Unit 4 has no corresponding system entry for this SKU.",
+    "documentGap": "",
+    "fix": "The following are recommended next actions. They are not completed actions and have not been executed. Each requires physical verification and operational approval before any system change is made. 1. Physically audit SKU 12IP673500L3 in Unit 3 and Unit 4. Confirm physical presence and count in each unit. Establish where the physical stock actually is, and verify the unit count against the system record of 78 units. 2. Correct the inventory-system location record after verification. Once the physical audit confirms the correct location, update the system record to reflect the actual physical location. This correction requires operational approval and must not be made on the basis of the reported discrepancy alone. 3. Review recent intake and transfer records. Investigate the system intake and transfer history for 12IP673500L3 to identify the point at which the location record diverged from the physical reality. This will help determine the root cause and reduce the likelihood of recurrence. CRITICAL: No inventory system update, stock transfer, SQL execution, CSV upload, or API mutation has been performed in this task. The proposed correction of moving 78 units from Unit 3 to Unit 4 in the system is a recommended action pending physical verification and operational approval. It has not been executed."
+  },
+  {
+    "ticketId": "ND-040",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "DG Voltage Pendant Light Packaging Mismatch",
+    "description": "A labelling conflict has been identified between external master cartons and internal product boxes for DG Voltage Pendant Light fixtures. The external master carton (outer packaging, used as the counting and placement reference during warehouse and container operations) is labelled \"1M Twisted Cable\". The inner product boxes found inside those master cartons are labelled \"1M PVC Cable\". These two labels cannot both be correct for the same product.",
+    "rootCause": "— Not Yet Confirmed The cause of the label discrepancy between the outer master carton and the inner product boxes has not been established. Investigation hypotheses include: 1. Supplier labelling error at print or packaging stage.",
+    "whatIsHappening": "Confirmed from BI report: DG Voltage Pendant Light fixtures arrive in master cartons used as the primary counting and stock-placement reference in warehouse and container operations. External master cartons carry the label \"1M Twisted Cable\". Inner product boxes found inside those master cartons carry the label \"1M PVC Cable\".",
+    "documentGap": "",
+    "fix": "The following are recommended next actions from the supplied BI report. They are not completed actions, approved procedures, or operational rules. Each requires physical verification and operational approval before implementation. 1. Physical audit of affected DG Voltage Pendant Light stock. Inspect the master cartons physically — open sample units and confirm what cable type is actually installed in the product. Do not assume the outer or inner label is correct before this step is completed. 2. Establish which label accurately represents the physical contents. After physical inspection, determine whether the product contains a twisted cable, a PVC cable, or something else. Record this as a confirmed finding from the audit. 3. Determine the scope of the mismatch. Establish how many units or cartons carry the conflicting labels and whether the discrepancy is isolated to a specific batch or is present across the full DG Voltage Pendant Light stock. 4. Correct or relabel affected packaging after verification and approval. Once the correct label is confirmed, take appropriate action to address the incorrect label. This must not be performed before the physical audit confirms which label is accurate. 5. Identify the root cause. Investigate whether the label mismatch originated at the supplier's packing stage, during a specification change, or through another cause. Document the finding to reduce the likelihood of recurrence. CRITICAL: No packaging change, relabelling, inventory system update, stock transfer, SQL execution, CSV upload, or API mutation has been performed in this task."
+  },
+  {
+    "ticketId": "ND-041",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-21",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "DPD Service Failure and Alternative Logistics Strategy",
+    "description": "DPD has failed to provide the requested high-capacity collection vehicle (large van) for scheduled parcel pickups, despite prior notification that such a vehicle would be required for the duration of the current week. This has resulted in a parcel collection backlog: the vehicle DPD sent was insufficient to transport the daily parcel volume in a single trip. The failure is creating operational pressure and logistical congestion at the vendor site. No formal workaround is currently in place.",
+    "rootCause": "— Not Yet Confirmed The reason DPD failed to provide the requested large-capacity vehicle has not been established. Investigation hypotheses from the supplied BI report: 1. DPD fleet shortage.",
+    "whatIsHappening": "Confirmed from BI report: LEDSone uses DPD for daily logistics and collection services. A large-capacity van was specifically requested from DPD for the full current week to accommodate higher parcel volumes. DPD did not provide the requested vehicle for the collection on 2026-07-21.",
+    "documentGap": "",
+    "fix": "The following are recommendations from the supplied BI report. They are not completed actions, approved decisions, or operational rules. Each requires management validation before implementation. 1. Formal communication with DPD. Send an urgent communication to DPD to determine their intent and capability to provide the required large-capacity vehicle for the remainder of the week and in future high-volume periods. 2. Identify/evaluate alternative logistics providers. Identify at least one alternative logistics provider capable of supporting the required parcel collection capacity, as a contingency or replacement option. CRITICAL: Neither action has been executed in this task. Specifically, in this task: No email or message has been sent to DPD. No alternative provider has been contacted or selected. No DPD service has been cancelled, modified, or suspended. No courier configuration has been changed. No contract has been created or modified."
+  },
+  {
+    "ticketId": "ND-042",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-22",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Chroma Modification Request",
+    "description": "A formal request has been raised to modify the system colour designation for SKU PLHIRR from \"Rustic Red\" to \"Black\". The request is associated with the discovery of two distinct variations of the \"Rustic Red\" finish currently in circulation from the supplier. The current system designation of \"Rustic Red\" for PLHIRR is reported to create picking confusion because the physical product reportedly appears dark or metallic — leading staff to question whether the correct item is being selected when looking for a \"red\" product. The supplier must also be informed of the two Rustic Red variations to prevent further inconsistency in future batches.",
+    "rootCause": "— Not Yet Confirmed The underlying cause of the two Rustic Red variations from the supplier has not been established. Possible investigation hypotheses from the supplied BI report: 1. The physical product has a dark/metallic finish that differs visually from what \"Rustic Red\" implies.",
+    "whatIsHappening": "Confirmed from BI report: The inventory management system tracks SKU PLHIRR using a colour attribute of \"Rustic Red\", along with its storage location (reported as 1-C-06-B), to facilitate accurate picking and supplier ordering. Two distinct variations of the \"Rustic Red\" finish from the supplier are in circulation. Staff may encounter a product that appears dark or metallic while the system describes it as \"Rustic Red\".",
+    "documentGap": "gap-007-missing-supplier-finish-consistency-validation-and-golden-sample-approval-process.md",
+    "fix": "The following are recommended next actions from the supplied BI report. They are not completed actions, approved system changes, or operational policies. Each requires appropriate business and technical approval before implementation. 1. Update system colour designation for PLHIRR from \"Rustic Red\" to \"Black\". This requires approval from the appropriate master-data or inventory authority before execution. The change may affect picking instructions, supplier ordering records, and customer-facing product descriptions. 2. Supplier notification. Formally inform the supplier of the existence of two distinct \"Rustic Red\" finish variations to ensure future batches are consistent or correctly identified at source. 3. Physical audit of PLHIRR stock. Verify the reported 138 units in UK Unit3 to confirm whether all units match the proposed \"Black\" designation or whether mixed variations are present. CRITICAL: None of these actions has been executed in this task. PLHIRR's colour designation has NOT been changed. No supplier communication has been sent. No inventory record has been modified. No new SKU has been created. No stock count has been updated."
+  },
+  {
+    "ticketId": "ND-043",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-22",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "AC220V LED Module Packlist Identifier and Voltage Discrepancy",
+    "description": "Warehouse staff have identified a discrepancy between the physical labelling of AC220V LED modules and the information displayed in the digital picking document (Packlist.htm). Two distinct AC220V LED module variants are in use: 7714-3LED — Size: 7714-3LED, Voltage: AC220V, Power: 2W, Color: WHITE(6000K), QTY: 200 PCS per bag (SKU: IMAC7714CWNPK) 9820-3LED — Size: 9820-3LED, Voltage: AC220V, Power: 2W, Color: 6000K, QTY: 100 PCS per bag (SKU: IMAC9820CWNPK) The Packlist.htm product title for both variants states \"12V\", while the physical product labels clearly state AC220V. A manual red-text annotation \"SEND 220V\" has been added to the 7714 variant's packlist entry as an unofficial override, but this creates a conflicting-instruction situation (title says 12V; annotation says 220V) and is not a formal picking SOP. The physical size identifiers 7714 and 9820 — which are printed clearly on the physical product bags — are embedded only in the SKU string (IMAC7714CWNPK, IMAC9820CWNPK) in the packlist, not presented as standalone, human-readable picking identifiers.",
+    "rootCause": "— Not Yet Confirmed The underlying reason the product title contains \"12V\" for an AC220V product has not been established from available evidence. Investigation hypothesis: The product title may originate from a generic or older 12V LED module product template that was not updated when the AC220V variant was created or introduced. This is an assumption only — not confirmed.",
+    "whatIsHappening": "Confirmed from evidence (images p1 and p2) and BI report: Warehouse staff use Packlist.htm to fulfil international orders. The packlist is loaded from the Dropbox path visible in evidence: `C:/Users/Ledsone/Dropbox/Unit - 3 Postage Folder/2026/July/22.07.2026/ 1st booking/Others/Others/Packlist.htm` The packlist lists items by product title and SKU. For both AC220V LED module variants, the current product title is: \"200 * LED Modul 12V Wasserdicht 1.5W für Lichtwerbung ~3742 - Kaltweiß\" For SKU IMAC7714CWNPK (Typ 3 / 7714 variant), a manual red-text annotation \"SEND 220V\" appears above the product title to signal that the correct product is AC220V, not 12V.",
+    "documentGap": "gap-009-ac220v-led-module-packlist-voltage-and-size-identifier-accuracy.md",
+    "fix": "The following are recommended next actions from the supplied BI report. They are recommendations only — not completed actions or approved changes. Each requires validation and approval before implementation. 1. Update product titles for AC220V LED module SKUs so the correct voltage (AC220V) is clearly stated. Remove the incorrect \"12V\" reference. Verify the physical product specification before changing the title. 2. Add 7714 and 9820 as explicit, prominent picking identifiers in the picking description. Ensure the size code matches the physical bag label so pickers can make a direct visual match. 3. Verify the 6000K colour temperature specification. The 6000K value is VERIFIED from the physical labels; confirm it is also correctly represented in the product data before treating it as canonical system data. 4. Remove incorrect 12V references after validation. Once the product title is corrected, remove or retire the \"SEND 220V\" manual annotation as it would no longer be required. CRITICAL: None of these actions has been executed in this task. Packlist.htm has NOT been modified. Product titles have NOT been changed. Master data has NOT been updated. No SKU has been changed or created. No picking rule has been implemented."
+  },
+  {
+    "ticketId": "ND-044",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-23",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Amazon Bulky Vendor PO Processing Failure",
+    "description": "A failure occurred during processing of a bulky Amazon Vendor purchase order (PO) on 2026-07-23. The Postage Team member assigned to execute Step 8 of the Amazon Vendor Central process (Master Boxes Order) could not calculate the required number of master boxes for a bulky product order. The Amazon Vendor Central Guidelines — the authoritative operational document for this workflow — do not contain a calculation method or methodology for determining master box quantities. This is confirmed from direct review of the complete guidelines document.",
+    "rootCause": "— Not Yet Confirmed The immediate trigger is documented: the Postage Team member processing the bulky vendor PO could not determine the master box quantity because no calculation methodology exists in the guidelines. The root cause of the documentation absence has not been established. Investigation hypotheses: 1.",
+    "whatIsHappening": "Confirmed from verified guidelines document (Amazon_Vendor_Central_Guidelines (3).pdf and image 2026_07_23_p1.png — Steps 1-12 directly readable from both): Step | Title | Owner | Description | Step 3 | Product Boxes Availability Checking | Inventory Team | Verify packaging boxes availability for confirmed products — ensure sufficient stock of appropriate size boxes for all SKUs in the order | Step 6 | Picking List Generation | Inventory Team | Provide confirmed orders to picking team — decide boxes or pallet shipping method | Step 7 | Small Boxes Order | Postage Team (Lakshika) | Each units boxes — order small boxes required for individual units | Step 8 | Master Boxes Order | Postage Team (Lakshika) | Overall box — order master/outer boxes for the complete shipment | Step 9 | Pallet or Box Send Decide | Packing Team (Sevanthi Akka) | Decide whether the shipment goes out as pallet or as individual boxes | All five steps above are VERIFIED from direct visual inspection of the guidelines document. Descriptions are reproduced exactly as they appear. What the guidelines do NOT provide (confirmed by absence from all 3 pages): A formula or calculation method for determining how many master boxes are required for a given PO quantity or product type A threshold distinguishing when a \"bulky\" order differs in treatment from a standard order Criteria distinguishing the Step 6 pallet/box decision from the Step 9 pallet/box decision",
+    "documentGap": "gap-010-missing-bulky-vendor-order-master-box-calculation-and-decision-ownership.md",
+    "fix": "The following are recommendations from the supplied BI report. They are not completed actions, approved decisions, or operational rules. Each requires management decision and approval before implementation. 1. Establish and document a master-box quantity calculation methodology for bulky Amazon Vendor orders. This should define how many master/outer boxes are required for a given PO, taking into account product type, unit dimensions, and Amazon shipping standards. The methodology must be approved before execution. 2. Clarify Step 6 vs Step 9 decision ownership. Management must determine which team and which workflow step is authoritative for the pallet/box shipping decision. The guidelines should be updated to reflect this clarification. 3. Update the Amazon Vendor Central Guidelines. Once the calculation methodology and decision ownership are confirmed, the guidelines should be updated to include the missing information. This would close GAP-010. 4. Confirm whether Unit 4 is an approved source for emergency box supply. If ad hoc sourcing from Unit 4 will be used as an interim fallback, this should be documented as an approved interim procedure with stock management visibility — not left as an undocumented emergency workaround. CRITICAL: None of these actions has been executed in this task. No calculation methodology has been created or implemented. No box has been ordered, moved, or allocated. No staff assignment or team responsibility has been changed. No guideline document has been modified. No Amazon Vendor Central record has been changed. No pallet/box decision rule has been created or approved."
+  },
+  {
+    "ticketId": "ND-045",
+    "member": "vishnusri",
+    "raisedBy": "Nandhi",
+    "dateRaised": "2026-07-24",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Multi-Outlet Ceiling Rose Internal Connector Specification Decision",
+    "description": "A decision is required on whether multi-outlet ceiling rose variants should be supplied with internal connectors (connector SKU CO532AGY — grey, confirmed from evidence). The connector is currently stocked and being picked as a component (evidenced directly), but no approved specification defines which ceiling rose variants require this connector, how many are needed per variant, or whether the connector should be pre-installed by the supplier or handled separately. The supplied BI report describes the unresolved decision as: whether all future procurement requests for the relevant multi-outlet ceiling roses should include a mandatory specification for internal connectors. This has NOT been approved.",
+    "rootCause": "— Not Yet Confirmed The root cause of why no connector specification exists for multi-outlet ceiling roses has not been established. The decision to require a connector has not been made. Without that decision being made, the absence of a specification is not a documented gap — it is the expected state for an unapproved requirement.",
+    "whatIsHappening": "Confirmed from image evidence: The evidence image (`2026_07_24_p1.png`) shows a mobile picking screen. The following is directly readable: Field | Value | Status | SKU | CO532AGY | VERIFIED — text directly readable | Color | Grey | VERIFIED — text directly readable | Location | 1-D-14-A | VERIFIED — text directly readable | UK Unit18 stock | 500 | VERIFIED — text directly readable | UK Unit3 stock | 212 | VERIFIED — text directly readable | Number displayed below product image | 6 | VERIFIED — text directly readable; meaning unclear (pick quantity, port count, or other — requires human review) | Physical product form | Multi-port lever-type connector (grey body, orange lever positions) | VERIFIED — visually observable; port count appears greater than 3 from visual inspection | What is NOT confirmed from the evidence image: Which ceiling rose variant is being assembled or picked for Whether CO532AGY is being picked as an internal component of a ceiling rose The outlet count (2, 4, or 5) of any ceiling rose involved Whether the connector is pre-installed or supplied separately The quantity of connectors required per ceiling rose Reported from BI report (not independently confirmed from evidence): CO532AGY connectors are described as \"3-way connectors\" The connector is reportedly being used with multi-outlet ceiling roses Variants reportedly affected include 2-outlet, 4-outlet, and 5-outlet The current connector supply/installation state is unclear from available evidence",
+    "documentGap": "",
+    "fix": "The following are recommendations from the supplied BI report. They are not completed actions, approved decisions, or operational rules. Each requires management decision and approval before implementation. 1. Make Decision A. Management must determine whether the relevant multi-outlet ceiling roses should include internal connectors. This is the prerequisite for all other actions. 2. Clarify which variants (Decision B). If Decision A is YES, confirm which of the 2-outlet, 4-outlet, and 5-outlet variants (and their specific SKUs) are in scope. 3. Confirm supply method (Decision C). If connectors are required, confirm whether they should be pre-installed by the supplier, supplied loose, or handled through another approved method. 4. Confirm the connector type and quantity (Decision D). Verify whether CO532AGY is the correct connector for each affected variant, and confirm the required quantity per unit. Resolve the \"3-way\" vs. visual port-count discrepancy as part of this step. 5. Consult Varmen (AIOS Team Lead/Validator). The supplied BI report references \"Varman\" as a person to consult. The AIOS governance record confirms \"Varmen\" as the Team Lead/Validator. Whether these refer to the same person has not been independently confirmed (see Assumptions section). Consulting Varmen per the AIOS escalation path is appropriate for a Decision Required issue. 6. If Decision A = YES, create a formal specification. Once the decision is made, document the connector type, quantity, and supply method for each affected variant as an approved operational specification. Consider whether this constitutes a new Document Gap at that stage. CRITICAL: None of these actions has been executed in this task. No connector specification has been created or approved. No supplier order has been modified. No assembly rule has been created. No product or master data has been changed. No mandatory connector quantity has been assigned."
+  },
+  {
+    "ticketId": "SA-007",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Product Allocation Communication Gap with Mano",
+    "description": "Communication between Mano and the team regarding the allocation and sharing of new products needs improvement.",
+    "rootCause": "The team has flagged a recurring communication gap specifically between Mano and the team on new product allocation and sharing.",
+    "whatIsHappening": "Not Available in the Evidence — the current handover process between Mano and the team for new product allocation is not described in detail.",
+    "documentGap": "",
+    "fix": "Establish a clear, consistent channel or process for Mano to communicate new product allocation and sharing to the team as soon as it is confirmed."
+  },
+  {
+    "ticketId": "SA-008",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Pricing Governance: Floor/Ceiling Price, Landing Cost, and Cost Breakdown Sharing",
+    "description": "Product pricing is not being shared with the team as soon as products become available in Sri Lanka, and Finance is not consistently providing the Floor Price, Ceiling Price, Landing Cost, and Cost Breakdown needed to support competitive pricing decisions. There is also a stated need to avoid frequent price changes and to obtain a full expense/landing cost breakdown for products shipped to the Germany (DE) warehouse.",
+    "rootCause": "Finance has not been consistently providing Floor Price, Ceiling Price, Landing Cost, and Cost Breakdown figures. Frequent price changes have been flagged as a risk to Amazon ranking and customer confidence. A complete expense/landing cost breakdown for products shipped to the DE warehouse has not yet been obtained.",
+    "whatIsHappening": "Not Available in the Evidence — the current timing and handoff for pricing data between Finance and the team is not described in detail.",
+    "documentGap": "",
+    "fix": "Finance to establish a standard process for sharing Floor Price, Ceiling Price, Landing Cost, and Cost Breakdown as soon as products arrive in Sri Lanka. Pricing should be set against current market/competitor conditions while maintaining profitability, and frequent price changes should be avoided. Obtain a complete expense and landing cost breakdown for DE warehouse shipments."
+  },
+  {
+    "ticketId": "SA-009",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Cross-Departmental Communication Gap (Finance, Operations, Inventory, Sales, PH Team)",
+    "description": "There is a communication gap between Finance, Operations, Inventory, and the Sales team that slows down decision-making, and a related need to improve collaboration between Finance, Inventory, Operations, and the PH team to support faster execution.",
+    "rootCause": "The gap has been raised twice in the discussion: once as Finance/Operations/Inventory/Sales generally, and once specifically regarding Finance/Inventory/Operations/PH team collaboration for execution speed.",
+    "whatIsHappening": "Not Available in the Evidence — the current inter-departmental communication structure is not described in detail.",
+    "documentGap": "",
+    "fix": "Reduce the communication gap between Finance, Operations, Inventory, and Sales to enable faster decision-making, and improve collaboration between Finance, Inventory, Operations, and the PH team specifically to support faster execution."
+  },
+  {
+    "ticketId": "SA-010",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "Seasonal and Slow-Moving Inventory Causing Warehouse Congestion",
+    "description": "Seasonal products are not selling within their intended season, causing warehouse congestion and limiting space for introducing new products.",
+    "rootCause": "Seasonal products have missed their intended selling season, resulting in warehouse congestion.",
+    "whatIsHappening": "Not Available in the Evidence — the current process for clearing seasonal stock at end-of-season is not described in detail.",
+    "documentGap": "",
+    "fix": "Prioritize clearing slow-moving and seasonal inventory to create space for new product introductions, and assign a dedicated person or team to manage and improve the sales performance of seasonal and slow-moving products."
+  },
+  {
+    "ticketId": "SA-011",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Sales Performance Analysis Required for Underperforming Products",
+    "description": "Mahima should conduct a detailed analysis covering products that are selling well, products with poor or no sales, reasons for the decline in sales compared to previous years, and recommendations to improve sales performance. Products with zero or significantly reduced sales should be reviewed to identify root causes such as pricing, stock, listing quality, or suppression.",
+    "rootCause": "Products with zero or significantly reduced sales exist and have not yet had their root causes (pricing, stock, listing quality, suppression, etc.) formally reviewed.",
+    "whatIsHappening": "Not Available in the Evidence — whether this analysis is currently performed on any regular basis is not described.",
+    "documentGap": "",
+    "fix": "Mahima to conduct the detailed analysis covering well-performing products, poor/no-sales products, year-over-year decline reasons, and recommendations. Review zero/reduced-sales products individually to identify root cause among pricing, stock, listing quality, or suppression."
+  },
+  {
+    "ticketId": "SA-012",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Marketplace Listing Expansion and Bundle Strategy Consistency",
+    "description": "Products that are not currently listed across marketplaces should be identified and listed where applicable, expanding availability beyond Amazon alone. A Pack Wise / Bundle strategy should be implemented consistently across all accounts, since some accounts are not currently following this approach. New products should be listed, optimized, and launched as quickly as possible when they arrive.",
+    "rootCause": "Some products are not currently listed across all supported marketplaces. Some accounts are not currently following the Pack Wise / Bundle strategy that others use.",
+    "whatIsHappening": "Not Available in the Evidence — current marketplace listing coverage and bundle-strategy adoption per account are not fully detailed.",
+    "documentGap": "",
+    "fix": "Identify products not currently listed across marketplaces and list them where applicable. Expand product availability across all supported marketplaces instead of relying only on Amazon. Implement Pack Wise / Bundle strategy consistently across all accounts. Follow a \"Create Once, Deploy Everywhere\" approach, reusing product content, images, and assets across marketplaces. Ensure new products are listed, optimized, and launched as quickly as possible on arrival."
+  },
+  {
+    "ticketId": "SA-013",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "HomeIn Brand Competitiveness and Customer Engagement",
+    "description": "The HomeIn brand needs improvement to remain competitive with other brands and increase customer engagement.",
+    "rootCause": "HomeIn has been specifically flagged as needing improvement to remain competitive and increase engagement.",
+    "whatIsHappening": "Not Available in the Evidence — current HomeIn brand positioning and engagement activity are not described in detail.",
+    "documentGap": "",
+    "fix": "Improve the HomeIn brand to remain competitive with other brands and increase customer engagement."
+  },
+  {
+    "ticketId": "SA-014",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "purchase",
+    "status": "RED",
+    "priority": "",
+    "title": "UK-to-DE Warehouse Transfer Reporting and European Stock Visibility",
+    "description": "Regular reports are needed for products transferred from the UK warehouse to the Germany warehouse, including stock movement and status updates. Continuous operational and performance reports should be provided to the Germany team, and visibility of stock movement and inventory planning across European warehouses needs improvement.",
+    "rootCause": "Stock movement and inventory planning visibility across European warehouses has been flagged as needing improvement.",
+    "whatIsHappening": "Not Available in the Evidence — the current reporting cadence (if any) for UK-to-DE stock transfers is not described in detail.",
+    "documentGap": "",
+    "fix": "Generate regular reports for products transferred from the UK warehouse to the Germany warehouse, covering stock movement and status updates. Provide continuous operational and performance reports to the Germany team. Improve visibility of stock movement and inventory planning across European warehouses generally."
+  },
+  {
+    "ticketId": "SA-015",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Continued Strengthening of Germany, France, Italy, and Spain Marketplaces",
+    "description": "The Germany, France, Italy, and Spain marketplaces should continue to be strengthened as part of ongoing European expansion.",
+    "rootCause": "Germany, France, Italy, and Spain have been named as marketplaces to continue strengthening.",
+    "whatIsHappening": "Not Available in the Evidence — current activity level in each of these marketplaces is not described in detail.",
+    "documentGap": "",
+    "fix": "Continue strengthening the Germany, France, Italy, and Spain marketplaces as an ongoing priority."
+  },
+  {
+    "ticketId": "SA-016",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Italy Product Research and Optimization as First Priority",
+    "description": "The team should start focusing on Italy product research, analysis, and optimization activities as the first priority to build early momentum.",
+    "rootCause": "Italy has been explicitly named as the first priority for product research, analysis, and optimization activity.",
+    "whatIsHappening": "Not Available in the Evidence — current level of Italy-focused research/optimization activity is not described in detail.",
+    "documentGap": "",
+    "fix": "Begin Italy product research, analysis, and optimization activities as the team's first priority."
+  },
+  {
+    "ticketId": "SA-017",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Focus PPC Spend on High-Potential Products",
+    "description": "PPC spending should be focused on high-potential products while maintaining advertising profitability.",
+    "rootCause": "The need to focus PPC spend on high-potential products while maintaining ad profitability has been explicitly raised.",
+    "whatIsHappening": "Not Available in the Evidence — current PPC allocation methodology is not described in detail.",
+    "documentGap": "",
+    "fix": "Focus PPC spending on high-potential products and maintain advertising profitability as the guiding standard."
+  },
+  {
+    "ticketId": "SA-018",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Reduce Manual Reporting and Admin Burden for the PH Team",
+    "description": "Manual reporting and administrative work for the PH team should be reduced, allowing more time for listing optimization, SEO, PPC, and sales growth.",
+    "rootCause": "Manual reporting and administrative work has been identified as taking time away from the PH team's listing optimization, SEO, PPC, and sales growth activities.",
+    "whatIsHappening": "Not Available in the Evidence — the current volume and nature of the PH team's manual reporting/admin work is not described in detail.",
+    "documentGap": "",
+    "fix": "Reduce manual reporting and administrative work for the PH team, freeing more time for listing optimization, SEO, PPC, and sales growth."
+  },
+  {
+    "ticketId": "SA-019",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Multi-Marketplace Sales Monitoring and Ownership Beyond Amazon",
+    "description": "Sales performance should be considered and monitored across all marketplaces, not just Amazon, with a responsible person assigned to manage these marketplaces if required.",
+    "rootCause": "The need to monitor sales performance across all marketplaces (not only Amazon) and to assign a responsible person if required has been explicitly raised.",
+    "whatIsHappening": "Not Available in the Evidence — current monitoring coverage across non-Amazon marketplaces is not described in detail.",
+    "documentGap": "",
+    "fix": "Consider and monitor sales performance across all marketplaces, not just Amazon, and assign a responsible person to manage these marketplaces if required."
+  },
+  {
+    "ticketId": "SA-020",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "eBay Recovery Plan Needed Alongside Continued Amazon Growth",
+    "description": "Amazon's positive growth should continue to be monitored while a recovery plan is prepared for the declining eBay business.",
+    "rootCause": "Amazon is described as showing positive growth while the eBay business is described as declining.",
+    "whatIsHappening": "Not Available in the Evidence — current eBay-specific monitoring or recovery activity is not described in detail.",
+    "documentGap": "",
+    "fix": "Continue monitoring Amazon's positive growth while preparing a specific recovery plan for the declining eBay business."
+  },
+  {
+    "ticketId": "SA-021",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-29",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "German Marketplace €8.00 Minimum Price Policy Compliance",
+    "description": "A minimum selling price policy of €8.00 has been set for German marketplace listings. Any listing priced below €8.00 must either add a €4.99 shipping charge or be converted into a 2-pack listing to meet this minimum.",
+    "rootCause": "The German marketplace minimum price policy is set at €8.00. Two accepted compliance paths exist for listings below that threshold: (a) add a €4.99 shipping charge, or (b) convert the listing into a 2-pack.",
+    "whatIsHappening": "Not Available in the Evidence — the current listing/pricing setup process on the German marketplace prior to this policy is not described in detail.",
+    "documentGap": "",
+    "fix": "Ensure no German marketplace listings are priced below €8.00. For any listing priced below €8.00, either add a €4.99 shipping charge or convert it into a 2-pack. Review all existing German marketplace listings and update any that do not comply with the €8.00 minimum price policy. Going forward, do not create or publish any German marketplace listing priced below €8.00 unless the €4.99 shipping fee has been applied or the product has been converted to a 2-pack listing."
+  },
+  {
+    "ticketId": "ST-001",
+    "member": "vishnusri",
+    "raisedBy": "Sathis",
+    "dateRaised": "2026-07-29",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "No Documented Net Sales Calculation Formula or Cost Component Visibility at Pricing Time",
+    "description": "Sales (Amazon, eBay, Shopify, PH, Wayfair) prices listings against a ceiling and floor set by management, using competitor benchmarking data and cost/margin data supplied by the INV team. There is no shared or documented formula for how Finance calculates \"net sales\" or \"negative revenue,\" and Sales does not know, at the time of pricing, which cost components are included or how they are weighted.",
+    "rootCause": "There is no shared or documented formula for how \"net sales\" or \"negative revenue\" is calculated at the point a price is set. Sales has full visibility into external, platform-side data (Amazon/eBay/Shopify platform-level cost data, ads data, competitor pricing, search ranking position, Amazon's and eBay's own validated ACOS benchmarks, buyer-facing market movement) but no visibility into internal cost data held outside those platforms — Finance's cost calculations, postage/packaging cost allocation, and how \"net sales\" is derived internally.",
+    "whatIsHappening": "Sales prices listings using two inputs provided by management: competitor benchmarking data and cost/margin data from the INV team. Pricing is managed against Amazon's validated ACOS standard of 25–30%, and Sales has held actual ACOS at 19–23% — below that ceiling, by design, to protect margin.",
+    "documentGap": "",
+    "fix": "Establish a documented Net Sales Calculation Standard — a fixed formula and full list of cost components (COGS, postage, packaging, platform/referral fees, ad spend, refund/return provision) that Finance, Postage/Packing, and Sales all use consistently, so \"net sales\" means the same thing to everyone. This should be agreed and signed off jointly by Finance, Postage/Packing, and Sales team leaders.",
+    "dataLink": "https://varman-aios-hub-varmens.vercel.app/view/hub_pages/sathis-issue-fixes#st-001"
+  },
+  {
+    "ticketId": "ST-002",
+    "member": "vishnusri",
+    "raisedBy": "Sathis",
+    "dateRaised": "2026-07-29",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Delayed Profitability Feedback Loop Causing Reactive Mispricing and Ranking Loss",
+    "description": "Finance's profitability review is delivered roughly 6 months after a price is set, with no live or near-live feedback loop. By the time a price is found unprofitable, the market has moved and competitors have repriced, forcing a reactive price correction that pushes listings out of competitive search ranking.",
+    "rootCause": "There is no live or near-live feedback loop between pricing decisions and Finance's profitability assessment; the review cadence is roughly 6-monthly rather than continuous or near-real-time. By the time a price is confirmed unprofitable, competitors have already repriced and the resulting correction damages search ranking and visibility.",
+    "whatIsHappening": "Prices are set against a ceiling/floor at one point in time. Finance's review of the resulting sales — including any \"negative net sales\" flag — is delivered approximately 6 months later, as a separate, disconnected event from the original pricing decision.",
+    "documentGap": "",
+    "fix": "Move from a static \"fixed price\" model to a live-updatable cost floor and margin formula (unit cost, fulfilment cost, average return rate, minimum acceptable margin), so Sales can adjust pricing in real time as competitors move while staying within an agreed profitability boundary. Establish a monthly (not 6-monthly) reconciliation cadence between the prices Sales has set and Finance's net sales tracking, so any miscalculation, formula error, or drift is caught within weeks — before it compounds into a visible sales decline.",
+    "dataLink": "https://varman-aios-hub-varmens.vercel.app/view/hub_pages/sathis-issue-fixes#st-002"
+  },
+  {
+    "ticketId": "ST-003",
+    "member": "vishnusri",
+    "raisedBy": "Sathis",
+    "dateRaised": "2026-07-29",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Pricing-Driven Sales Decline Misattributed to Sales Team Accountability",
+    "description": "When Sales follows the exact prices provided by INV/Finance and those prices are later found to be uncompetitive or unprofitable, the resulting sales decline is being attributed to the Sales team's performance rather than to the pricing input itself.",
+    "rootCause": "Sales is fully accountable for sales numbers and executes against whatever validated pricing and cost data management provides. What Sales cannot do is absorb accountability for outcomes driven by inputs it did not set, could not see in advance, and — in this case — requested three months ago and still has not received (see issue-073).",
+    "whatIsHappening": "Sales executes against whatever validated pricing and cost data management provides. Sales has full visibility into external, platform-side data (platform-level cost data, ads data, competitor pricing, search ranking position, Amazon's and eBay's own validated ACOS benchmarks, buyer-facing market movement) but no visibility into internal cost data — Finance's cost calculations, postage/packaging cost allocation, and how \"net sales\" is derived internally.",
+    "documentGap": "",
+    "fix": "Establish a jointly agreed ACOS/profitability threshold that both Sales and Finance operate from, with no ambiguity about what \"acceptable\" looks like at the point pricing decisions are made — not 6 months later. This should be agreed and signed off jointly by Finance, Postage/Packing, and Sales team leaders as part of the same working session covering the Net Sales Calculation Standard (issue-070).",
+    "dataLink": "https://varman-aios-hub-varmens.vercel.app/view/hub_pages/sathis-issue-fixes#st-003"
+  },
+  {
+    "ticketId": "ST-004",
+    "member": "vishnusri",
+    "raisedBy": "Sathis",
+    "dateRaised": "2026-07-29",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Validated Cost and Net-Sales Data Request Overdue by 3 Months (Repeat Escalation)",
+    "description": "Sales requested validated, correctly calculated cost and net-sales data approximately 3 months ago. That data has still not been received. This escalation is a repeat of that exact same request, not a new one.",
+    "rootCause": "Validated cost and net-sales data was first requested approximately 3 months prior to this escalation and has not been delivered. This is explicitly stated to be the second time this exact request has been raised.",
+    "whatIsHappening": "Not Available in the Evidence — the process by which such a data request is submitted and tracked to fulfilment is not described in detail.",
+    "documentGap": "",
+    "fix": "Immediate delivery of the validated cost and net-sales data requested 3 months ago, ahead of the next pricing review cycle.",
+    "dataLink": "https://varman-aios-hub-varmens.vercel.app/view/hub_pages/sathis-issue-fixes#st-004"
+  },
+  {
+    "ticketId": "ST-005",
+    "member": "vishnusri",
+    "raisedBy": "Sathis",
+    "dateRaised": "2026-07-29",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "No Real-Time Profitability Validation Mechanism Is Blocking New Sales Initiatives",
+    "description": "Beyond pricing itself, the absence of a real-time way to validate profitability against Finance's cost model is stopping the Sales team from introducing any new pricing tactic, listing approach, or promotional method, because there is no way to know in advance whether it will generate a positive or negative result.",
+    "rootCause": "There is no fast or lightweight way to pre-validate a new sales initiative against Finance's cost model before rollout. The same underlying gap described in issue-070 (no documented net sales formula) and issue-071 (delayed feedback loop) applies here: without a formula or a fast feedback mechanism, no initiative can be tested with confidence.",
+    "whatIsHappening": "New Sales initiatives (pricing tactics, listing approaches, promotional methods) can only be judged \"positive\" or \"negative\" once Finance's profitability review is delivered — up to 6 months after the initiative was launched.",
+    "documentGap": "",
+    "fix": "Establish a fast, lightweight way to pre-validate new sales initiatives against the cost model before rollout — even a simple estimated impact check — so the team can test and commit to new approaches without waiting 6 months to learn whether the decision was right.",
+    "dataLink": "https://varman-aios-hub-varmens.vercel.app/view/hub_pages/sathis-issue-fixes#st-005"
+  },
+  {
+    "ticketId": "ST-006",
+    "member": "vishnusri",
+    "raisedBy": "Sathis",
+    "dateRaised": "2026-07-29",
+    "domain": "postage",
+    "status": "RED",
+    "priority": "",
+    "title": "Refund/Return Costs From Packing and Postage Issues Misattributed to Pricing Performance",
+    "description": "By the Sales team's day-to-day estimate, around 70% of refund and return cases trace back to packing and postage-related issues (damage in transit, incorrect packaging, mislabelling, carrier handling) rather than pricing, listing accuracy, or customer intent. If this expense is folded into \"net sales\" calculations and attributed against Sales performance without separating out its actual root cause, it distorts the picture of what Sales pricing decisions are actually achieving.",
+    "rootCause": "Refund/return expense is a cost component that can be folded into \"net sales\" calculations (see issue-070).",
+    "whatIsHappening": "Refund and return costs are understood to be included as an expense component within \"net sales\" calculations, without root-cause separation by category (packing/postage-driven vs. pricing- or demand-driven).",
+    "documentGap": "",
+    "fix": "Validate the ~70% estimate against actual return-reason data, and establish root-cause attribution on refund/return costs — separating packing/postage-driven returns from pricing- or demand-driven returns — so expense is assigned to the function actually responsible, before it is used to judge pricing outcomes.",
+    "dataLink": "https://varman-aios-hub-varmens.vercel.app/view/hub_pages/sathis-issue-fixes#st-006"
+  },
+  {
+    "ticketId": "SA-022",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Low sales volume for \"O-Garden\" products imported from Italy",
+    "description": "Low sales volume for \"O-Garden\" products imported from Italy.",
+    "rootCause": "Pricing is significantly lower than Amazon. Sales volume is less than 10 units in three months.",
+    "whatIsHappening": "Products are listed at prices 30-40% lower than those found on Amazon to encourage sales.",
+    "documentGap": "",
+    "fix": "Investigate the specific account settings for these items, evaluate the listing's \"attractiveness,\" and analyze competitor advertising spend."
+  },
+  {
+    "ticketId": "SA-023",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Excessive sales decline specifically in \"Light Transformers\"",
+    "description": "Excessive sales decline specifically in \"Light Transformers\".",
+    "rootCause": "Stock is available for 90% of the relevant product models. A colleague/partner reports only a 30% drop while the speaker sees a 70% drop.",
+    "whatIsHappening": "Selling Light Transformers from existing stock during the seasonal transition.",
+    "documentGap": "",
+    "fix": "Perform a detailed calculation to identify which specific models or regions are driving the 70% decline."
+  },
+  {
+    "ticketId": "SA-024",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-09",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Failure to capture the broader European market despite being duty-free",
+    "description": "Failure to capture the broader European market despite being duty-free.",
+    "rootCause": "The European market (27 countries) is accessible without customs taxes. The German market is inherently larger than the London/UK market.",
+    "whatIsHappening": "Operating primarily in the UK market while acknowledging that the German and wider European markets are larger.",
+    "documentGap": "",
+    "fix": "Conduct a \"back-end\" review of how European sales are being handled and analyze if competitors are using superior advertising techniques."
+  },
+  {
+    "ticketId": "SA-025",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-15",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "System Stock Discrepancies and Inactive Listings",
+    "description": "There is a mismatch between physical inventory and the digital system (Kronos/eBay), where items physically in stock are shown as inactive (\"off\") or displaying negative balances.",
+    "rootCause": "Items like small transformers (Blue, Orange, Black & White) are physically in the warehouse but show as inactive or negative in the system.",
+    "whatIsHappening": "Staff review system reports for \"minus\" stock and attempt to reconcile them with physical counts in the store. Listings on platforms like eBay are manually checked to see if they are active or inactive.",
+    "documentGap": "",
+    "fix": "Conduct a full physical audit of the \"minus\" stock items and sync the \"Kronos\" intake (500 units) immediately into the active system."
+  },
+  {
+    "ticketId": "SA-026",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-15",
+    "domain": "pricing",
+    "status": "RED",
+    "priority": "",
+    "title": "Delays in Pricing Updates for Incoming Container Stock",
+    "description": "New stock arriving via containers is experiencing delays in being listed with current pricing, particularly for items routed through London.",
+    "rootCause": "Container stock arrived recently.",
+    "whatIsHappening": "Stock arrives at the store; however, updating the \"old price listings\" takes a significant amount of time during the transition.",
+    "documentGap": "",
+    "fix": "Streamline the price-update workflow for container arrivals to ensure listings go live as soon as the stock is physically received."
+  },
+  {
+    "ticketId": "SA-027",
+    "member": "vishnusri",
+    "raisedBy": "Sasi",
+    "dateRaised": "2026-07-15",
+    "domain": "listing",
+    "status": "RED",
+    "priority": "",
+    "title": "Manual Inter-Account Accounting for Cross-Platform Sales",
+    "description": "Selling \"HomeIn\" (German/European) stock through different company accounts requires a complex manual process of \"buying and selling\" between internal accounts to maintain balance.",
+    "rootCause": "HomeIn uses a German system/platform while other stock is UK-based.",
+    "whatIsHappening": "When stock from the HomeIn account (Italy items/German system) is sold via another account, staff must manually record it as a sale from one and a purchase by the other to \"convert\" the transaction.",
+    "documentGap": "",
+    "fix": "Develop or implement a \"system to convert\" or synchronize these accounts to automate the inter-company transfer records."
+  },
+  {
+    "ticketId": "NV-001",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "high",
+    "title": "FBA cannot send some products because of the parcel cost. If we increase the product price, can FBA send those products? Especially if the full hemp set is out of stock, would it be possible to send the separate combo instead?",
+    "description": "FBA cannot send some products because of the parcel cost. If we increase the product price, can FBA send those products? Especially if the full hemp set is out of stock, would it be possible to send the separate combo instead?",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-002",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "critical",
+    "title": "It is not possible to request the image editing team to update the main images for ASINs with low impressions.",
+    "description": "It is not possible to request the image editing team to update the main images for ASINs with low impressions.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-003",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "medium",
+    "title": "In some cases, child ASINs under the same parent ASIN are assigned to different PH owners.",
+    "description": "In some cases, child ASINs under the same parent ASIN are assigned to different PH owners.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-004",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "medium",
+    "title": "Our product is currently priced above our competitors. Considering its sales performance, could we reduce the price to improve product movement?",
+    "description": "Our product is currently priced above our competitors. Considering its sales performance, could we reduce the price to improve product movement?",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-005",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "critical",
+    "title": "In some cases, KPI performance is low due to the product being out of stock. This should be considered.",
+    "description": "In some cases, KPI performance is low due to the product being out of stock. This should be considered.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-006",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "critical",
+    "title": "The performance decline was mainly due to stock-outs of our top-selling products caused by supplier-side issues. Since these products contributed significantly to monthly sales, the sudden unavailability impacted revenue and prevented us from achieving the planned targets.",
+    "description": "The performance decline was mainly due to stock-outs of our top-selling products caused by supplier-side issues. Since these products contributed significantly to monthly sales, the sudden unavailability impacted revenue and prevented us from achieving the planned targets.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-007",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "medium",
+    "title": "Same product variations (colour and bulb options) assigned to two portfolio holders made ownership unclear and did not improve sales performance.",
+    "description": "Same product variations (colour and bulb options) assigned to two portfolio holders made ownership unclear and did not improve sales performance.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-008",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "critical",
+    "title": "High returns and refunds due to product damage, missing parts, and wrong products have negatively impacted net sales, reducing the actual sales performance impact.",
+    "description": "High returns and refunds due to product damage, missing parts, and wrong products have negatively impacted net sales, reducing the actual sales performance impact.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-009",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "high",
+    "title": "Server busy issue due to this taking too much time to finish listing.",
+    "description": "Server busy issue due to this taking too much time to finish listing.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-010",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "critical",
+    "title": "Product details are not sufficient. In the listing management tool the latest listings are saved but the accurate information cannot be found. The LEDSone dashboard also does not have full product information.",
+    "description": "Product details are not sufficient. In the listing management tool the latest listings are saved but the accurate information cannot be found. The LEDSone dashboard also does not have full product information.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-011",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "critical",
+    "title": "A major issue is price correction and synchronization. A pricing dashboard is needed where any SKU price update is automatically reflected across all channels and marketplaces.",
+    "description": "A major issue is price correction and synchronization. A pricing dashboard is needed where any SKU price update is automatically reflected across all channels and marketplaces.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-012",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "critical",
+    "title": "The listing details updated through the Listing Management Tool are not syncing with the Amazon listing.",
+    "description": "The listing details updated through the Listing Management Tool are not syncing with the Amazon listing.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-013",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "medium",
+    "title": "Whenever a new listing is created on Amazon, the same product is being listed on the eBay account by an unknown person, resulting in two different eBay listing IDs for the same product, which splits traffic and negatively affects sales.",
+    "description": "Whenever a new listing is created on Amazon, the same product is being listed on the eBay account by an unknown person, resulting in two different eBay listing IDs for the same product, which splits traffic and negatively affects sales.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  },
+  {
+    "ticketId": "NV-014",
+    "member": "vishnusri",
+    "raisedBy": "Nivarnan",
+    "dateRaised": "2026-07-08",
+    "domain": "ph",
+    "status": "RED",
+    "priority": "medium",
+    "title": "A category ASIN assigned to the PH team was worked on to drive sales. After a stock-out, the ASIN ownership was transferred to someone else upon restocking, which is unfair to the original holder.",
+    "description": "A category ASIN assigned to the PH team was worked on to drive sales. After a stock-out, the ASIN ownership was transferred to someone else upon restocking, which is unfair to the original holder.",
+    "rootCause": "",
+    "whatIsHappening": "",
+    "documentGap": "",
+    "fix": ""
+  }
+];
+
+  const PENDING_REVIEW_COUNT = 0;
+
+  const TRUNCATE_LENGTH = 320;
+
+  function escapeHtml(str) {
+    return String(str == null ? "" : str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function statusBadgeClass(status) {
+    const s = (status || "").toUpperCase();
+    if (s === "RED") return "badge-red";
+    if (s === "AMBER") return "badge-amber";
+    if (s === "GREEN") return "badge-green";
+    return "badge-gray";
+  }
+
+  let cellCounter = 0;
+  function buildTruncatedCell(text) {
+    const safe = escapeHtml(text);
+    if (!safe) return '<span class="dash">—</span>';
+    if (safe.length <= TRUNCATE_LENGTH) {
+      return `<span class="cell-text">${safe}</span>`;
+    }
+    const id = cellCounter++;
+    const shortText = safe.slice(0, TRUNCATE_LENGTH) + "…";
+    return `
+      <span class="cell-text">
+        <span class="cell-short" id="short-${id}">${shortText}</span><span class="cell-full" id="full-${id}">${safe}</span>
+        <button class="show-more-btn" onclick="toggleCell(${id})" id="btn-${id}">more</button>
+      </span>`;
+  }
+
+  function toggleCell(i) {
+    const shortEl = document.getElementById(`short-${i}`);
+    const fullEl = document.getElementById(`full-${i}`);
+    const btn = document.getElementById(`btn-${i}`);
+    const expanded = fullEl.classList.toggle("expanded");
+    shortEl.classList.toggle("hidden", expanded);
+    btn.textContent = expanded ? "less" : "more";
+  }
+
+  function populateFilters() {
+    const nameSelect = document.getElementById("nameFilter");
+    const names = Array.from(new Set(ISSUES.map(i => i.raisedBy))).sort((a, b) => a.localeCompare(b));
+    names.forEach(name => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      nameSelect.appendChild(opt);
+    });
+    nameSelect.addEventListener("change", render);
+
+    const domainSelect = document.getElementById("domainFilter");
+    const domains = Array.from(new Set(ISSUES.map(i => i.domain).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+    domains.forEach(d => {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = d.charAt(0).toUpperCase() + d.slice(1);
+      domainSelect.appendChild(opt);
+    });
+    domainSelect.addEventListener("change", render);
+
+    document.querySelectorAll(".status-tab").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".status-tab").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        render();
+      });
+    });
+  }
+
+  function activeStatusFilter() {
+    const active = document.querySelector(".status-tab.active");
+    return active ? active.dataset.status : "all";
+  }
+
+  // ── Sorting (dropdown-driven — no column headers in the card layout) ──
+  function setupSort() {
+    document.getElementById("sortSelect").addEventListener("change", render);
+  }
+
+  function currentSort() {
+    const val = document.getElementById("sortSelect").value; // "key-dir"
+    const idx = val.lastIndexOf("-");
+    return { key: val.slice(0, idx), dir: val.slice(idx + 1) };
+  }
+
+  function compareValues(a, b, key) {
+    let av = a[key];
+    let bv = b[key];
+    if (key === "priority") {
+      // rough severity ordering so Priority Score sorts meaningfully, not just alphabetically
+      const order = { critical: 3, high: 2, medium: 1, "": -1 };
+      av = order[(av || "").toLowerCase()] ?? 0;
+      bv = order[(bv || "").toLowerCase()] ?? 0;
+      return av - bv;
+    }
+    av = (av || "").toString().toLowerCase();
+    bv = (bv || "").toString().toLowerCase();
+    return av.localeCompare(bv);
+  }
+
+  function buildFieldBlock(label, text) {
+    const safe = escapeHtml(text);
+    if (!safe) return "";
+    return `<div class="card-field"><span class="field-label">${label}</span><div class="field-value">${buildTruncatedCell(text)}</div></div>`;
+  }
+
+  function render() {
+    const nameValue = document.getElementById("nameFilter").value;
+    const domainValue = document.getElementById("domainFilter").value;
+    const statusValue = activeStatusFilter();
+    const sortState = currentSort();
+    const list = document.getElementById("issuesBody");
+    const emptyState = document.getElementById("emptyState");
+    list.innerHTML = "";
+    cellCounter = 0;
+
+    const filtered = ISSUES
+      .filter(i => nameValue === "all" || i.raisedBy === nameValue)
+      .filter(i => domainValue === "all" || i.domain === domainValue)
+      .filter(i => statusValue === "all" || (i.status || "").toUpperCase() === statusValue)
+      .slice()
+      .sort((a, b) => {
+        const cmp = compareValues(a, b, sortState.key);
+        return sortState.dir === "asc" ? cmp : -cmp;
+      });
+
+    document.getElementById("countPill").textContent =
+      `${filtered.length} issue${filtered.length === 1 ? "" : "s"}`;
+
+    if (filtered.length === 0) {
+      emptyState.style.display = "block";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    filtered.forEach(issue => {
+      const card = document.createElement("div");
+      card.className = "issue-card";
+      const priorityHtml = issue.priority
+        ? `<span class="priority-badge">${escapeHtml(issue.priority)}</span>`
+        : "";
+      const dataLinkHtml = issue.dataLink
+        ? `<a href="${escapeHtml(issue.dataLink)}" target="_blank" rel="noopener" class="data-link-btn">&#128202; View Data</a>`
+        : "";
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="ticket-id">${escapeHtml(issue.ticketId)}</span>
+          <span class="badge ${statusBadgeClass(issue.status)}">${escapeHtml(issue.status)}</span>
+          ${priorityHtml}
+          <span class="meta-item">&#128100; ${escapeHtml(issue.raisedBy) || "—"}</span>
+          <span class="meta-item">&#128197; ${escapeHtml(issue.dateRaised) || "—"}</span>
+          <span class="meta-item">&#127991; ${escapeHtml(issue.domain) || "—"}</span>
+          ${dataLinkHtml}
+        </div>
+        <h3 class="card-title">${escapeHtml(issue.title)}</h3>
+        ${buildFieldBlock("Description", issue.description)}
+        ${buildFieldBlock("Root Cause", issue.rootCause)}
+        ${buildFieldBlock("What Is Happening", issue.whatIsHappening)}
+        ${buildFieldBlock("Document Gap", issue.documentGap)}
+        ${buildFieldBlock("Fix &amp; Action Required", issue.fix)}
+      `;
+      list.appendChild(card);
+    });
+  }
+
+  populateFilters();
+  setupSort();
+  render();
+
+  document.getElementById("generatedFooter").textContent =
+    `Generated from source write-ups — ${PENDING_REVIEW_COUNT} items pending review not shown here`;
+</script>
+
+</body>
+</html>
