@@ -84,6 +84,31 @@
     border-radius: 999px;
     white-space: nowrap;
   }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 1400px; }
+  thead th {
+    text-align: left;
+    padding: 9px 10px;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    position: sticky;
+    top: 0;
+    background: var(--card-bg);
+    cursor: pointer;
+    user-select: none;
+  }
+  thead th:hover { color: var(--accent); }
+  thead th .sort-arrow { display: inline-block; width: 12px; opacity: 0.5; }
+  thead th.sort-active { color: var(--accent); }
+  thead th.sort-active .sort-arrow { opacity: 1; }
+  tbody td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:hover { background: #fafbfc; }
+  td.ticket-id { font-weight: 700; color: var(--accent); white-space: nowrap; }
+  td.priority { font-weight: 600; white-space: nowrap; }
   .badge {
     display: inline-block;
     padding: 3px 10px;
@@ -96,11 +121,7 @@
   .badge-amber { background: var(--amber-bg); color: var(--amber); }
   .badge-green { background: var(--green-bg); color: var(--green); }
   .badge-gray  { background: var(--gray-bg);  color: var(--gray); }
-  .priority-badge {
-    display: inline-block; padding: 3px 10px; border-radius: 999px;
-    font-size: 0.74rem; font-weight: 600; white-space: nowrap;
-    background: var(--gray-bg); color: var(--text-muted); text-transform: capitalize;
-  }
+  .cell-text { max-width: 260px; display: inline-block; }
   .cell-full { display: none; }
   .cell-full.expanded { display: inline; }
   .cell-short.hidden { display: none; }
@@ -119,8 +140,38 @@
   }
   .data-link-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
   .empty-state { text-align: center; padding: 40px 0; color: var(--text-muted); }
+  .meta-item { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+  footer {
+    max-width: 1500px;
+    margin: 16px auto 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-align: right;
+  }
 
-  /* ---- Issue list (card layout — no horizontal scroll) ---- */
+  /* ---- Assignment feature (additive only — reuses existing tokens) ---- */
+  .ticket-checkbox { width: 16px; height: 16px; cursor: pointer; margin-right: 2px; vertical-align: middle; }
+  .select-all-label { display: inline-flex; align-items: center; gap: 6px; }
+  .assign-btn {
+    padding: 5px 12px; border-radius: 999px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+  }
+  .assign-btn:disabled { background: #fff; color: var(--text-muted); border-color: var(--border); cursor: not-allowed; }
+  /* The status select carries the badge color when closed; its dropdown
+     options must fall back to normal browser styling, not inherit it. */
+  select.badge option { background-color: #fff; color: var(--text); font-weight: 400; }
+
+  /* ---- Top-level view tabs (Issues / Assigned Tickets) ---- */
+  .view-tabs { display: flex; gap: 8px; max-width: 1500px; margin: 0 auto 14px; }
+  .view-tabs .tab-btn {
+    padding: 8px 16px; border-radius: 10px 10px 0 0;
+    border: 1px solid var(--border); background: #fff;
+    font-size: 0.86rem; font-weight: 600; color: var(--text-muted); cursor: pointer;
+  }
+  .view-tabs .tab-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .assigned-only { display: none; }
+
+  /* ---- Assigned Tickets tab: card layout (Issues tab keeps the table) ---- */
   .issues-list { display: flex; flex-direction: column; gap: 14px; }
   .issue-card {
     background: var(--card-bg);
@@ -134,8 +185,6 @@
     margin-bottom: 10px;
   }
   .card-top .ticket-id { font-weight: 700; color: var(--accent); font-size: 0.88rem; }
-  .meta-item { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
-  .card-top .data-link-btn { margin-left: auto; }
   .card-title {
     font-size: 1rem; font-weight: 600; margin: 0 0 12px; line-height: 1.4;
     text-wrap: balance;
@@ -151,33 +200,39 @@
     font-size: 0.88rem; line-height: 1.55; color: var(--text);
     overflow-wrap: break-word;
   }
-  footer {
-    max-width: 1500px;
-    margin: 16px auto 0;
-    color: var(--text-muted);
-    font-size: 0.8rem;
-    text-align: right;
-  }
+  /* .cell-text has a 260px max-width for the Issues tab's narrow table
+     columns — that restriction doesn't belong inside a full-width card, so
+     override it scoped to card fields only. Issues tab table cells are
+     untouched (this selector never matches a <td>). */
+  .card-field .cell-text { max-width: none; }
+  /* Slightly increased spacing between assignee / date / status dropdown,
+     scoped to the "Assign To" row only — no other spacing anywhere is affected. */
+  .assign-to-row { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
 </style>
 </head>
 <body>
 
 <header>
   <h1>Issue Tracker</h1>
-  <div class="subtitle">All logged write-ups — filterable by who raised it, status, and domain. Sort with the dropdown.</div>
+  <div class="subtitle">All logged write-ups — click any column header to sort, filterable by who raised it, status, and domain.</div>
 </header>
+
+<div class="view-tabs" id="viewTabs">
+  <button class="tab-btn active" data-view="issues" type="button">Issues</button>
+  <button class="tab-btn" data-view="assigned" type="button">Assigned Tickets</button>
+</div>
 
 <div class="card">
   <div class="controls">
-    <div class="control-group">
+    <div class="control-group issues-only">
       <label for="nameFilter">Raised By:</label>
       <select id="nameFilter"><option value="all">All</option></select>
     </div>
-    <div class="control-group">
+    <div class="control-group issues-only">
       <label for="domainFilter">Domain:</label>
       <select id="domainFilter"><option value="all">All</option></select>
     </div>
-    <div class="control-group">
+    <div class="control-group issues-only">
       <label>Status:</label>
       <div class="status-tabs" id="statusTabs">
         <button class="status-tab active" data-status="all">All</button>
@@ -186,21 +241,60 @@
         <button class="status-tab" data-status="GREEN">Green</button>
       </div>
     </div>
-    <div class="control-group">
-      <label for="sortSelect">Sort:</label>
-      <select id="sortSelect">
-        <option value="dateRaised-desc">Date (newest)</option>
-        <option value="dateRaised-asc">Date (oldest)</option>
-        <option value="ticketId-asc">Ticket ID</option>
-        <option value="raisedBy-asc">Raised By</option>
-        <option value="domain-asc">Domain</option>
-        <option value="priority-desc">Priority (high first)</option>
+    <div class="control-group issues-only">
+      <label class="select-all-label">Select All <input type="checkbox" id="selectAllCheckbox" class="ticket-checkbox" /></label>
+    </div>
+    <div class="control-group issues-only">
+      <label for="assignToSelect">Assign To:</label>
+      <select id="assignToSelect">
+        <option value="">Choose…</option>
+        <option value="Rajive">Rajive</option>
+        <option value="Maurika">Maurika</option>
+        <option value="Arun">Arun</option>
+        <option value="Suman">Suman</option>
+      </select>
+      <button class="assign-btn" id="assignBtn" type="button" disabled>Assign</button>
+      <span class="meta-item" id="selectedCountPill">0 selected</span>
+    </div>
+    <div class="control-group assigned-only" id="assigneeFilterGroup">
+      <label for="assigneeFilter">Assignee:</label>
+      <select id="assigneeFilter">
+        <option value="all">All Assignees</option>
+        <option value="Rajive">Rajive</option>
+        <option value="Maurika">Maurika</option>
+        <option value="Arun">Arun</option>
+        <option value="Suman">Suman</option>
       </select>
     </div>
     <span class="count-pill" id="countPill"></span>
   </div>
 
-  <div class="issues-list" id="issuesBody"></div>
+  <div class="table-wrap issues-only">
+    <table>
+      <thead>
+        <tr id="headerRow">
+          <th class="issues-only-cell"></th>
+          <th data-sort-key="ticketId">Ticket ID <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="member">Member <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="raisedBy">Raised By <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="dateRaised">Date Raised <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="domain">Domain <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="status">Status <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="priority">Priority Score <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="title">Title <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="description">Description <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="rootCause">Root Cause <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="whatIsHappening">What Is Happening <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="documentGap">Document Gap <span class="sort-arrow">↕</span></th>
+          <th data-sort-key="fix">Fix &amp; Action Required <span class="sort-arrow">↕</span></th>
+          <th>Data</th>
+        </tr>
+      </thead>
+      <tbody id="issuesBody"></tbody>
+    </table>
+  </div>
+
+  <div class="issues-list assigned-only" id="assignedCardsBody" style="display:none;"></div>
 
   <div class="empty-state" id="emptyState" style="display:none;">No issues match this filter.</div>
 </div>
@@ -1643,6 +1737,180 @@
     btn.textContent = expanded ? "less" : "more";
   }
 
+  // ── Assignment feature ──────────────────────────────────────────────────
+  // Frontend/UI-only — there is no backend or database for assignments.
+  // Assignment data is kept entirely separate from ISSUES (never mutated)
+  // and lives only in memory for the lifetime of the page: no localStorage,
+  // no persistence of any kind. A page refresh discards it completely and
+  // everything (assignments, checkboxes, the Assigned Tickets list) returns
+  // to the original unassigned state.
+  const assignments = {};
+
+  const ASSIGN_STATUS_OPTIONS = [
+    { value: "not-solved",       label: "Not Solved",        badgeClass: "badge-red" },
+    { value: "partially-solved", label: "Partially Solved",  badgeClass: "badge-amber" },
+    { value: "solved",           label: "Solved Completely", badgeClass: "badge-green" },
+  ];
+
+  const selectedTickets = new Set();
+  let lastFilteredIds = []; // currently visible ticket IDs — Select All only ever acts on these
+  let activeView = "issues"; // "issues" | "assigned" — read by render() to pick which list to build
+
+  function getAssignment(ticketId) {
+    return assignments[ticketId] || null;
+  }
+
+  function setAssignment(ticketId, data) {
+    assignments[ticketId] = { ...(assignments[ticketId] || {}), ...data };
+  }
+
+  function assignTickets(ticketIds, assignee) {
+    const today = new Date().toISOString().slice(0, 10);
+    ticketIds.forEach((id) => {
+      assignments[id] = { assignedTo: assignee, assignedDate: today, solvingStatus: "not-solved" };
+    });
+  }
+
+  function getAssignedTickets(assigneeValue) {
+    return ISSUES.filter((issue) => {
+      const a = assignments[issue.ticketId];
+      if (!a) return false;
+      return !assigneeValue || assigneeValue === "all" || a.assignedTo === assigneeValue;
+    });
+  }
+
+  function assignStatusBadgeClass(status) {
+    const found = ASSIGN_STATUS_OPTIONS.find((s) => s.value === status);
+    return found ? found.badgeClass : "badge-gray";
+  }
+
+  // Solving Status selector — Assigned Tickets tab only, bound to
+  // row.solvingStatus (in-memory), never to row.status (the database
+  // Red/Amber/Green triage field). The select itself carries the badge
+  // color (reusing .badge-red|amber|green) so there's a single control,
+  // not a badge next to a separate dropdown. Takes the merged row object
+  // (see render()) and reads only by property name.
+  function renderStatusControl(row) {
+    const current = ASSIGN_STATUS_OPTIONS.find((s) => s.value === row.solvingStatus) || ASSIGN_STATUS_OPTIONS[0];
+    const optionsHtml = ASSIGN_STATUS_OPTIONS.map(
+      (s) => `<option value="${s.value}" ${row.solvingStatus === s.value ? "selected" : ""}>${s.label}</option>`
+    ).join("");
+    return `<select class="badge ${current.badgeClass}" data-ticket="${escapeHtml(row.ticketId)}">${optionsHtml}</select>`;
+  }
+
+  function updateTicketStatus(ticketId, newSolvingStatus) {
+    setAssignment(ticketId, { solvingStatus: newSolvingStatus });
+    render();
+  }
+
+  function buildFieldBlock(label, text) {
+    const safe = escapeHtml(text);
+    if (!safe) return "";
+    return `<div class="card-field"><span class="field-label">${label}</span><div class="field-value">${buildTruncatedCell(text)}</div></div>`;
+  }
+
+  // ── Assigned Tickets tab — card layout, entirely separate from the
+  // Issues tab's table. `issue` (static record) is never mutated;
+  // `assignment` (in-memory only) supplies assignedTo/assignedDate/
+  // solvingStatus, merged here only for rendering.
+  function renderAssignedCards() {
+    const list = document.getElementById("assignedCardsBody");
+    const emptyState = document.getElementById("emptyState");
+    const assigneeValue = document.getElementById("assigneeFilter").value;
+    list.innerHTML = "";
+    // cellCounter is NOT reset here — it's a single monotonically increasing
+    // counter shared across both views' lifetime. The Issues tab table stays
+    // in the DOM (just hidden) when this view is active, so resetting to 0
+    // here would mint duplicate ids (short-0/full-0/btn-0 etc.) that already
+    // exist in the hidden table, and getElementById would resolve to the
+    // wrong (hidden) element.
+
+    const assignedIssues = getAssignedTickets(assigneeValue);
+
+    document.getElementById("countPill").textContent =
+      `${assignedIssues.length} issue${assignedIssues.length === 1 ? "" : "s"}`;
+
+    if (assignedIssues.length === 0) {
+      emptyState.style.display = "block";
+      return;
+    }
+    emptyState.style.display = "none";
+
+    assignedIssues.forEach(issue => {
+      const assignment = assignments[issue.ticketId];
+      const row = { ...issue, assignedTo: assignment.assignedTo, assignedDate: assignment.assignedDate, solvingStatus: assignment.solvingStatus };
+
+      const card = document.createElement("div");
+      card.className = "issue-card";
+      card.innerHTML = `
+        <div class="card-top">
+          <span class="ticket-id">${escapeHtml(row.ticketId)}</span>
+          <span class="meta-item">&#128100; ${escapeHtml(row.raisedBy) || "—"}</span>
+          <span class="meta-item">&#128197; ${escapeHtml(row.dateRaised) || "—"}</span>
+          <span class="meta-item">&#8644; ${escapeHtml(row.domain) || "—"}</span>
+        </div>
+        <h3 class="card-title">${escapeHtml(row.title)}</h3>
+        ${buildFieldBlock("Description", row.description)}
+        ${buildFieldBlock("Root Cause", row.rootCause)}
+        ${buildFieldBlock("What Is Happening", row.whatIsHappening)}
+        ${buildFieldBlock("Fix &amp; Action Required", row.fix)}
+        <div class="card-field">
+          <span class="field-label">Assign To</span>
+          <div class="field-value assign-to-row">
+            <span class="meta-item">&#128100; ${escapeHtml(row.assignedTo)}</span>
+            <span class="meta-item">&#128197; ${escapeHtml(row.assignedDate)}</span>
+            ${renderStatusControl(row)}
+          </div>
+        </div>
+      `;
+      list.appendChild(card);
+    });
+
+    list.querySelectorAll("select[data-ticket]").forEach(sel => {
+      sel.addEventListener("change", () => updateTicketStatus(sel.dataset.ticket, sel.value));
+    });
+  }
+
+  function updateAssignBar() {
+    document.getElementById("selectedCountPill").textContent = `${selectedTickets.size} selected`;
+    const assignToSelect = document.getElementById("assignToSelect");
+    document.getElementById("assignBtn").disabled = !(selectedTickets.size > 0 && assignToSelect.value !== "");
+
+    // Checkbox selection is temporary UI-only state. Already-assigned
+    // tickets are locked (checked+disabled) and excluded from Select All's
+    // scope, same as they can't be toggled individually.
+    const selectAllCb = document.getElementById("selectAllCheckbox");
+    const toggleableIds = lastFilteredIds.filter((id) => !assignments[id]);
+    const visibleSelected = toggleableIds.filter((id) => selectedTickets.has(id)).length;
+    selectAllCb.checked       = toggleableIds.length > 0 && visibleSelected === toggleableIds.length;
+    selectAllCb.indeterminate = visibleSelected > 0 && visibleSelected < toggleableIds.length;
+  }
+
+  function initAssignmentControls() {
+    document.getElementById("selectAllCheckbox").addEventListener("change", (e) => {
+      const toggleableIds = lastFilteredIds.filter((id) => !assignments[id]);
+      if (e.target.checked) {
+        toggleableIds.forEach((id) => selectedTickets.add(id));
+      } else {
+        toggleableIds.forEach((id) => selectedTickets.delete(id));
+      }
+      render();
+    });
+
+    const assignToSelect = document.getElementById("assignToSelect");
+    assignToSelect.addEventListener("change", updateAssignBar);
+
+    document.getElementById("assignBtn").addEventListener("click", () => {
+      const assignee = assignToSelect.value;
+      if (!assignee || selectedTickets.size === 0) return;
+
+      assignTickets([...selectedTickets], assignee);
+      selectedTickets.clear(); // temporary UI selection only — cleared immediately after assigning
+      assignToSelect.value = "";
+      render();
+    });
+  }
+
   function populateFilters() {
     const nameSelect = document.getElementById("nameFilter");
     const names = Array.from(new Set(ISSUES.map(i => i.raisedBy))).sort((a, b) => a.localeCompare(b));
@@ -1671,6 +1939,8 @@
         render();
       });
     });
+
+    document.getElementById("assigneeFilter").addEventListener("change", render);
   }
 
   function activeStatusFilter() {
@@ -1678,15 +1948,52 @@
     return active ? active.dataset.status : "all";
   }
 
-  // ── Sorting (dropdown-driven — no column headers in the card layout) ──
-  function setupSort() {
-    document.getElementById("sortSelect").addEventListener("change", render);
+  // ── Top-level view tabs: Issues / Assigned Tickets ──────────────────────
+  function setActiveView(view) {
+    activeView = view;
+    document.querySelectorAll(".view-tabs .tab-btn").forEach(b => b.classList.toggle("active", b.dataset.view === view));
+    document.querySelectorAll(".issues-only").forEach(el => { el.style.display = view === "issues" ? "" : "none"; });
+    document.querySelectorAll(".assigned-only").forEach(el => { el.style.display = view === "assigned" ? "flex" : "none"; });
+    document.querySelectorAll(".issues-only-cell").forEach(el => { el.style.display = view === "issues" ? "" : "none"; });
+    render();
   }
 
-  function currentSort() {
-    const val = document.getElementById("sortSelect").value; // "key-dir"
-    const idx = val.lastIndexOf("-");
-    return { key: val.slice(0, idx), dir: val.slice(idx + 1) };
+  function initViewTabs() {
+    document.querySelectorAll(".view-tabs .tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => setActiveView(btn.dataset.view));
+    });
+  }
+
+  // ── Column sorting ──────────────────────────────────────────────────
+  let sortState = { key: "dateRaised", dir: "desc" };
+
+  function setupSortHeaders() {
+    document.querySelectorAll("th[data-sort-key]").forEach(th => {
+      th.addEventListener("click", () => {
+        const key = th.dataset.sortKey;
+        if (sortState.key === key) {
+          sortState.dir = sortState.dir === "asc" ? "desc" : "asc";
+        } else {
+          sortState = { key, dir: "asc" };
+        }
+        updateSortIndicators();
+        render();
+      });
+    });
+    updateSortIndicators();
+  }
+
+  function updateSortIndicators() {
+    document.querySelectorAll("th[data-sort-key]").forEach(th => {
+      const arrow = th.querySelector(".sort-arrow");
+      if (th.dataset.sortKey === sortState.key) {
+        th.classList.add("sort-active");
+        arrow.textContent = sortState.dir === "asc" ? "▲" : "▼";
+      } else {
+        th.classList.remove("sort-active");
+        arrow.textContent = "↕";
+      }
+    });
   }
 
   function compareValues(a, b, key) {
@@ -1704,20 +2011,21 @@
     return av.localeCompare(bv);
   }
 
-  function buildFieldBlock(label, text) {
-    const safe = escapeHtml(text);
-    if (!safe) return "";
-    return `<div class="card-field"><span class="field-label">${label}</span><div class="field-value">${buildTruncatedCell(text)}</div></div>`;
-  }
-
   function render() {
+    if (activeView === "assigned") {
+      // Assigned Tickets tab — entirely separate card-based rendering.
+      // Does not touch the Issues tab's table/tbody at all.
+      renderAssignedCards();
+      return;
+    }
+
+    // Issues tab
     const nameValue = document.getElementById("nameFilter").value;
     const domainValue = document.getElementById("domainFilter").value;
     const statusValue = activeStatusFilter();
-    const sortState = currentSort();
-    const list = document.getElementById("issuesBody");
+    const tbody = document.getElementById("issuesBody");
     const emptyState = document.getElementById("emptyState");
-    list.innerHTML = "";
+    tbody.innerHTML = "";
     cellCounter = 0;
 
     const filtered = ISSUES
@@ -1733,6 +2041,9 @@
     document.getElementById("countPill").textContent =
       `${filtered.length} issue${filtered.length === 1 ? "" : "s"}`;
 
+    lastFilteredIds = filtered.map(i => i.ticketId);
+    updateAssignBar();
+
     if (filtered.length === 0) {
       emptyState.style.display = "block";
       return;
@@ -1740,37 +2051,49 @@
     emptyState.style.display = "none";
 
     filtered.forEach(issue => {
-      const card = document.createElement("div");
-      card.className = "issue-card";
-      const priorityHtml = issue.priority
-        ? `<span class="priority-badge">${escapeHtml(issue.priority)}</span>`
-        : "";
-      const dataLinkHtml = issue.dataLink
-        ? `<a href="${escapeHtml(issue.dataLink)}" target="_blank" rel="noopener" class="data-link-btn">&#128202; View Data</a>`
-        : "";
-      card.innerHTML = `
-        <div class="card-top">
-          <span class="ticket-id">${escapeHtml(issue.ticketId)}</span>
-          <span class="badge ${statusBadgeClass(issue.status)}">${escapeHtml(issue.status)}</span>
-          ${priorityHtml}
-          <span class="meta-item">&#128100; ${escapeHtml(issue.raisedBy) || "—"}</span>
-          <span class="meta-item">&#128197; ${escapeHtml(issue.dateRaised) || "—"}</span>
-          <span class="meta-item">&#127991; ${escapeHtml(issue.domain) || "—"}</span>
-          ${dataLinkHtml}
-        </div>
-        <h3 class="card-title">${escapeHtml(issue.title)}</h3>
-        ${buildFieldBlock("Description", issue.description)}
-        ${buildFieldBlock("Root Cause", issue.rootCause)}
-        ${buildFieldBlock("What Is Happening", issue.whatIsHappening)}
-        ${buildFieldBlock("Document Gap", issue.documentGap)}
-        ${buildFieldBlock("Fix &amp; Action Required", issue.fix)}
+      const tr = document.createElement("tr");
+      // Assignment data (and therefore this lock) is UI-only, in memory —
+      // it resets to unassigned/unchecked/enabled on every page refresh.
+      const isAssigned = !!assignments[issue.ticketId];
+
+      tr.innerHTML = `
+        <td class="issues-only-cell"><input type="checkbox" class="ticket-checkbox" data-ticket="${escapeHtml(issue.ticketId)}" ${(isAssigned || selectedTickets.has(issue.ticketId)) ? "checked" : ""} ${isAssigned ? "disabled" : ""} /></td>
+        <td class="ticket-id">${escapeHtml(issue.ticketId)}</td>
+        <td>${escapeHtml(issue.member)}</td>
+        <td>${escapeHtml(issue.raisedBy)}</td>
+        <td>${escapeHtml(issue.dateRaised) || '<span class="dash">—</span>'}</td>
+        <td>${escapeHtml(issue.domain) || '<span class="dash">—</span>'}</td>
+        <td><span class="badge ${statusBadgeClass(issue.status)}">${escapeHtml(issue.status)}</span></td>
+        <td class="priority">${escapeHtml(issue.priority) || '<span class="dash">—</span>'}</td>
+        <td>${buildTruncatedCell(issue.title)}</td>
+        <td>${buildTruncatedCell(issue.description)}</td>
+        <td>${buildTruncatedCell(issue.rootCause)}</td>
+        <td>${buildTruncatedCell(issue.whatIsHappening)}</td>
+        <td>${buildTruncatedCell(issue.documentGap)}</td>
+        <td>${buildTruncatedCell(issue.fix)}</td>
+        <td>${issue.dataLink ? `<a href="${escapeHtml(issue.dataLink)}" target="_blank" rel="noopener" class="data-link-btn">&#128202; View Data</a>` : '<span class="dash">—</span>'}</td>
       `;
-      list.appendChild(card);
+      tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll(".ticket-checkbox").forEach(cb => {
+      cb.addEventListener("change", () => {
+        const id = cb.dataset.ticket;
+        if (cb.checked) selectedTickets.add(id);
+        else selectedTickets.delete(id);
+        updateAssignBar();
+      });
+    });
+
+    tbody.querySelectorAll("select[data-ticket]").forEach(sel => {
+      sel.addEventListener("change", () => updateTicketStatus(sel.dataset.ticket, sel.value));
     });
   }
 
   populateFilters();
-  setupSort();
+  setupSortHeaders();
+  initAssignmentControls();
+  initViewTabs();
   render();
 
   document.getElementById("generatedFooter").textContent =

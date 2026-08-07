@@ -3,13 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const navItems = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Booking Status", href: "/dashboard/booking" },
-  { label: "Couriers", href: "/dashboard/couriers" },
-  { label: "Open Issues", href: "/dashboard/issues" },
-  { label: "Reports", href: "/dashboard/reports" },
-];
+const navItems = [{ label: "Open Issues", href: "/dashboard/issues" }];
 
 export default function AppSidebar() {
   const pathname = usePathname();

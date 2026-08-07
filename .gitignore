@@ -1,1 +1,9 @@
 node_modules/
+
+# Migration secrets and backups — never commit these
+.env
+.env.*
+*.dump
+*_backup*.sql
+migration/*.dump
+migration/*backup*.sql

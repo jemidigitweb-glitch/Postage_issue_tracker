@@ -1,0 +1,220 @@
+import type { ReactNode } from "react";
+
+import type { IssueDetail as IssueDetailData } from "@/lib/queries/issues";
+import IssuePriorityBadge from "./IssuePriorityBadge";
+import IssueStatusBadge from "./IssueStatusBadge";
+
+// Styling mirrors the rest of components/issues/*.tsx (rounded-xl border,
+// neutral palette) so the detail page matches the list page and the rest
+// of the dashboard. Read-only: no edit controls anywhere in this file.
+//
+// All fields rendered here come from the existing getIssueById() result
+// (issue.* plus issue.extraData) — no new data is fetched. `member` and
+// `dataLink` are pulled out of extraData for dedicated treatment (Member
+// sits with the other meta fields; dataLink becomes the small "View Data"
+// capsule instead of a raw entry); everything else in extraData still
+// renders in "Additional details", unchanged in substance.
+
+function formatIsoDate(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function formatIsoTimestamp(isoTimestamp: string): string {
+  // e.g. "2026-06-25T18:30:00Z" -> "25/06/2026 18:30 UTC"
+  const [datePart, timePart] = isoTimestamp.split("T");
+  const [year, month, day] = datePart.split("-");
+  const time = timePart.replace("Z", "").slice(0, 5);
+  return `${day}/${month}/${year} ${time} UTC`;
+}
+
+// Title-cases each word so keys like "whatIsHappening" / "root_cause" read
+// as "What Is Happening" / "Root Cause" instead of sentence case.
+function humanizeKey(key: string): string {
+  const withSpaces = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ");
+  return withSpaces
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function formatExtraValue(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value.trim());
+}
+
+// Matches key.toLowerCase() after stripping spaces/underscores, so "Source
+// Id", "sourceId", and "source_id" are all treated the same regardless of
+// which casing convention a given row's extra_data happens to use.
+function normalizeKey(key: string): string {
+  return key.toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+// Intake/tracking metadata from the daily-issue ingestion pipeline — not
+// useful on the operational issue detail page, so filtered from display
+// only. The underlying extra_data values are untouched.
+const HIDDEN_META_KEYS = new Set([
+  "sourceid",
+  "sourcefile",
+  "evidencefiles",
+  "originalowner",
+  "classification",
+]);
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-1.5">
+        {label}
+      </dt>
+      <dd className="text-sm text-neutral-800 dark:text-neutral-200">{children}</dd>
+    </div>
+  );
+}
+
+const capsuleClassName =
+  "inline-flex items-center gap-1.5 rounded-full border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/60 px-3 py-1 text-xs font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors";
+
+function DataLinkIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      className="h-3.5 w-3.5"
+      aria-hidden="true"
+    >
+      <path
+        d="M6.5 9.5 9.5 6.5M7 4.5H4.5A2 2 0 0 0 2.5 6.5v5A2 2 0 0 0 4.5 13.5h5a2 2 0 0 0 2-2V9"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.5 2.5h4v4M13.5 2.5 9 7"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// Small capsule instead of a raw link/text blob. When the value looks like
+// a URL it opens directly; otherwise it reveals the value inline via
+// <details> (no JS needed, keeps this a server component) — either way the
+// existing data is never removed, just no longer dumped as a large text
+// link in the middle of the page.
+function DataLinkCapsule({ value }: { value: string }) {
+  if (isHttpUrl(value)) {
+    return (
+      <a href={value} target="_blank" rel="noopener noreferrer" className={capsuleClassName}>
+        <DataLinkIcon />
+        View Data
+      </a>
+    );
+  }
+
+  return (
+    <details className="inline-block">
+      <summary className={`${capsuleClassName} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
+        <DataLinkIcon />
+        View Data
+      </summary>
+      <div className="mt-2 max-w-sm rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/60 px-3 py-2 text-xs text-neutral-700 dark:text-neutral-300 whitespace-pre-wrap break-words">
+        {value}
+      </div>
+    </details>
+  );
+}
+
+const PULLED_OUT_KEYS = new Set(["member", "datalink"]);
+
+export default function IssueDetail({ issue }: { issue: IssueDetailData }) {
+  const entries = Object.entries(issue.extraData).filter(([, value]) => value !== null && value !== "");
+
+  const memberEntry = entries.find(([key]) => key.toLowerCase() === "member");
+  const memberValue = memberEntry ? formatExtraValue(memberEntry[1]) : null;
+
+  const dataLinkEntry = entries.find(([key]) => key.toLowerCase() === "datalink");
+  const dataLinkValue =
+    dataLinkEntry && typeof dataLinkEntry[1] === "string" && dataLinkEntry[1].trim() !== ""
+      ? (dataLinkEntry[1] as string)
+      : null;
+
+  const extraEntries = entries.filter(
+    ([key]) => !PULLED_OUT_KEYS.has(key.toLowerCase()) && !HIDDEN_META_KEYS.has(normalizeKey(key))
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+          <div>
+            <p className="font-mono text-xs text-neutral-500 dark:text-neutral-400 mb-1">{issue.issueId}</p>
+            <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
+              {issue.title}
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <IssueStatusBadge status={issue.status} />
+            <IssuePriorityBadge priority={issue.priority} />
+            {dataLinkValue && <DataLinkCapsule value={dataLinkValue} />}
+          </div>
+        </div>
+
+        <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-5 gap-y-6 pb-6 mb-6 border-b border-neutral-100 dark:border-neutral-800">
+          <Field label="Raised By">{issue.staffName}</Field>
+          <Field label="Date Raised">{formatIsoDate(issue.createdDate)}</Field>
+          <Field label="Domain">
+            <span className="capitalize">{issue.category}</span>
+          </Field>
+          {memberValue && <Field label="Member">{memberValue}</Field>}
+          <Field label="Updated">
+            {issue.updatedAt ? formatIsoTimestamp(issue.updatedAt) : "—"}
+          </Field>
+        </dl>
+
+        <div>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-2">
+            Description
+          </h2>
+          <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed whitespace-pre-wrap">
+            {issue.description}
+          </p>
+        </div>
+      </div>
+
+      {extraEntries.length > 0 && (
+        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-5">
+            Additional details
+          </h2>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-6">
+            {extraEntries.map(([key, value]) => (
+              <div key={key}>
+                <dt className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-1.5">
+                  {humanizeKey(key)}
+                </dt>
+                <dd className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed whitespace-pre-wrap break-words">
+                  {formatExtraValue(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,8 @@
+{
+  "name": "issue-tracker-migration",
+  "private": true,
+  "description": "One-time migration of postage-daily-issues.html into issue_tracking.issue_staff / issue_tracking.issues",
+  "dependencies": {
+    "pg": "^8.22.0"
+  }
+}

@@ -1,15 +1,308 @@
-import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import Link from "next/link";
 
-export default function IssuesPage() {
+import AssignedIssueCard from "@/components/issues/AssignedIssueCard";
+import AssignedIssuesFilters from "@/components/issues/AssignedIssuesFilters";
+import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import IssueFilters from "@/components/issues/IssueFilters";
+import IssueTable from "@/components/issues/IssueTable";
+import IssueTabs from "@/components/issues/IssueTabs";
+import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { listAssignmentUsers } from "@/lib/queries/assignmentUsers";
+import { listAssignedIssues } from "@/lib/queries/issueAssignments";
+import { listCategories, listIssues } from "@/lib/queries/issues";
+import { listStaff } from "@/lib/queries/staff";
+
+// Real, database-backed issue list. Two tabs on this one route/page — NOT
+// separate pages — switched via the `tab` query param:
+//   /dashboard/issues            -> Issues (existing table, unchanged)
+//   /dashboard/issues?tab=assigned -> Assigned Issues (card view)
+//
+// searchParams is a Promise in this Next.js version — confirmed against
+// node_modules/next/dist/docs/01-app/01-getting-started/03-layouts-and-pages.md
+// (same convention already used by app/dashboard/issues/[issueId]/page.tsx
+// for `params`).
+
+type RawSearchParams = { [key: string]: string | string[] | undefined };
+
+function firstValue(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+  return value ?? "";
+}
+
+function buildPageHref(basePath: string, baseParams: URLSearchParams, page: number): string {
+  const next = new URLSearchParams(baseParams);
+  next.set("page", String(page));
+  return `${basePath}?${next.toString()}`;
+}
+
+export default async function IssuesPage({
+  searchParams,
+}: {
+  searchParams: Promise<RawSearchParams>;
+}) {
+  const resolved = await searchParams;
+  const tab = firstValue(resolved.tab) === "assigned" ? "assigned" : "issues";
+
+  if (tab === "assigned") {
+    return <AssignedIssuesTabContent resolved={resolved} />;
+  }
+
+  const search = firstValue(resolved.q).trim();
+  const staffCode = firstValue(resolved.staff).trim();
+  const status = firstValue(resolved.status).trim();
+  const priority = firstValue(resolved.priority).trim();
+  const category = firstValue(resolved.category).trim();
+
+  const pageParam = Number.parseInt(firstValue(resolved.page), 10);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+
+  const hasActiveFilters = Boolean(search || staffCode || status || priority || category);
+
+  let staff: Awaited<ReturnType<typeof listStaff>> = [];
+  let categories: Awaited<ReturnType<typeof listCategories>> = [];
+  let assignmentUsers: Awaited<ReturnType<typeof listAssignmentUsers>> = [];
+  let result: Awaited<ReturnType<typeof listIssues>> | null = null;
+  let errorMessage: string | null = null;
+
+  try {
+    [staff, categories, assignmentUsers, result] = await Promise.all([
+      listStaff(),
+      listCategories(),
+      listAssignmentUsers(),
+      listIssues({ page, search, staffCode, status, priority, category }),
+    ]);
+  } catch (error) {
+    // Never surface the raw error (could include connection details) to
+    // the browser — log server-side only, show a generic message.
+    console.error("[dashboard/issues] failed to load issues:", error);
+    errorMessage = "Unable to load issues right now. Please try again shortly.";
+  }
+
+  const currentUser = await getCurrentUser();
+  const canAssign = currentUser ? await hasPermission(currentUser, "issue:assign") : false;
+  const canManageStaff = currentUser ? await hasPermission(currentUser, "user:manage") : false;
+
+  const linkParams = new URLSearchParams();
+  if (search) linkParams.set("q", search);
+  if (staffCode) linkParams.set("staff", staffCode);
+  if (status) linkParams.set("status", status);
+  if (priority) linkParams.set("priority", priority);
+  if (category) linkParams.set("category", category);
+
   return (
     <DashboardLayout>
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 mb-1">
-          Open Issues
-        </h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          This section is under development.
-        </p>
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 mb-1">
+              Open Issues
+            </h1>
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              Issues raised by Postage staff.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/dashboard/issues/new"
+              className="rounded-lg bg-neutral-900 dark:bg-neutral-100 px-4 py-2 text-sm font-medium text-white dark:text-neutral-900 hover:opacity-90 transition-opacity"
+            >
+              + New Issue
+            </Link>
+            {canManageStaff && (
+              <Link
+                href="/dashboard/issues/add-staff"
+                className="rounded-lg bg-neutral-900 dark:bg-neutral-100 px-4 py-2 text-sm font-medium text-white dark:text-neutral-900 hover:opacity-90 transition-opacity"
+              >
+                + Add Staff
+              </Link>
+            )}
+          </div>
+        </div>
+
+        <IssueTabs active="issues" />
+
+        <IssueFilters
+          staff={staff}
+          categories={categories}
+          search={search}
+          staffCode={staffCode}
+          status={status}
+          priority={priority}
+          category={category}
+          hasActiveFilters={hasActiveFilters}
+        />
+
+        {errorMessage ? (
+          <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 px-5 py-4 text-sm text-red-700 dark:text-red-400">
+            {errorMessage}
+          </div>
+        ) : (
+          <>
+            <IssueTable
+              issues={result?.issues ?? []}
+              assignmentUsers={assignmentUsers}
+              canAssign={canAssign}
+            />
+
+            {result && result.totalCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-neutral-500 dark:text-neutral-400">
+                <span>
+                  Showing {(result.page - 1) * result.pageSize + 1}–
+                  {Math.min(result.page * result.pageSize, result.totalCount)} of {result.totalCount}
+                </span>
+
+                <div className="flex items-center gap-3">
+                  {result.page > 1 ? (
+                    <Link
+                      href={buildPageHref("/dashboard/issues", linkParams, result.page - 1)}
+                      className="rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+                    >
+                      Previous
+                    </Link>
+                  ) : (
+                    <span className="rounded-lg border border-neutral-100 dark:border-neutral-900 px-3 py-1.5 font-medium text-neutral-300 dark:text-neutral-700">
+                      Previous
+                    </span>
+                  )}
+
+                  <span>
+                    Page {result.page} of {result.totalPages}
+                  </span>
+
+                  {result.page < result.totalPages ? (
+                    <Link
+                      href={buildPageHref("/dashboard/issues", linkParams, result.page + 1)}
+                      className="rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+                    >
+                      Next
+                    </Link>
+                  ) : (
+                    <span className="rounded-lg border border-neutral-100 dark:border-neutral-900 px-3 py-1.5 font-medium text-neutral-300 dark:text-neutral-700">
+                      Next
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </DashboardLayout>
+  );
+}
+
+async function AssignedIssuesTabContent({ resolved }: { resolved: RawSearchParams }) {
+  const assigneeIdRaw = firstValue(resolved.assignee).trim();
+  const assigneeId = assigneeIdRaw ? Number.parseInt(assigneeIdRaw, 10) : null;
+  const status = firstValue(resolved.status).trim();
+
+  const pageParam = Number.parseInt(firstValue(resolved.page), 10);
+  const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
+
+  const hasActiveFilters = Boolean(assigneeIdRaw || status);
+
+  let assignmentUsers: Awaited<ReturnType<typeof listAssignmentUsers>> = [];
+  let result: Awaited<ReturnType<typeof listAssignedIssues>> | null = null;
+  let errorMessage: string | null = null;
+
+  try {
+    [assignmentUsers, result] = await Promise.all([
+      listAssignmentUsers(),
+      listAssignedIssues({ page, assigneeId, status }),
+    ]);
+  } catch (error) {
+    console.error("[dashboard/issues?tab=assigned] failed to load assigned issues:", error);
+    errorMessage = "Unable to load assigned issues right now. Please try again shortly.";
+  }
+
+  const linkParams = new URLSearchParams();
+  linkParams.set("tab", "assigned");
+  if (assigneeIdRaw) linkParams.set("assignee", assigneeIdRaw);
+  if (status) linkParams.set("status", status);
+
+  return (
+    <DashboardLayout>
+      <div className="flex flex-col gap-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 mb-1">
+            Open Issues
+          </h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            Issues currently assigned via the Assign To workflow.
+          </p>
+        </div>
+
+        <IssueTabs active="assigned" />
+
+        <AssignedIssuesFilters
+          assignmentUsers={assignmentUsers}
+          assigneeId={assigneeIdRaw}
+          status={status}
+          hasActiveFilters={hasActiveFilters}
+        />
+
+        {errorMessage ? (
+          <div className="rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-900/20 px-5 py-4 text-sm text-red-700 dark:text-red-400">
+            {errorMessage}
+          </div>
+        ) : (result?.issues.length ?? 0) === 0 ? (
+          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-5 py-12 text-center">
+            <p className="text-sm text-neutral-500 dark:text-neutral-400">
+              No assigned issues match the current filters.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-col gap-5">
+              {result!.issues.map((issue) => (
+                <AssignedIssueCard key={issue.issueId} issue={issue} />
+              ))}
+            </div>
+
+            {result && result.totalCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-neutral-500 dark:text-neutral-400">
+                <span>
+                  Showing {(result.page - 1) * result.pageSize + 1}–
+                  {Math.min(result.page * result.pageSize, result.totalCount)} of {result.totalCount}
+                </span>
+
+                <div className="flex items-center gap-3">
+                  {result.page > 1 ? (
+                    <Link
+                      href={buildPageHref("/dashboard/issues", linkParams, result.page - 1)}
+                      className="rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+                    >
+                      Previous
+                    </Link>
+                  ) : (
+                    <span className="rounded-lg border border-neutral-100 dark:border-neutral-900 px-3 py-1.5 font-medium text-neutral-300 dark:text-neutral-700">
+                      Previous
+                    </span>
+                  )}
+
+                  <span>
+                    Page {result.page} of {result.totalPages}
+                  </span>
+
+                  {result.page < result.totalPages ? (
+                    <Link
+                      href={buildPageHref("/dashboard/issues", linkParams, result.page + 1)}
+                      className="rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+                    >
+                      Next
+                    </Link>
+                  ) : (
+                    <span className="rounded-lg border border-neutral-100 dark:border-neutral-900 px-3 py-1.5 font-medium text-neutral-300 dark:text-neutral-700">
+                      Next
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </DashboardLayout>
   );
