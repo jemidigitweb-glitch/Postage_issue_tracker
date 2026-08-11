@@ -134,7 +134,13 @@ export default function DiscussionStatusPanel({
               </option>
             ))}
           </select>
-          {currentStatus === "GREEN" && !hasFinalOutcome && (
+          {/* This branch only renders when currentStatus is RED or AMBER (the
+              GREEN case returns above), so the hint is about the transition
+              *into* GREEN, not about already being GREEN. Show it exactly when
+              GREEN is the next allowed step — i.e. AMBER — and the server-side
+              final-outcome guard in lib/queries/discussionStatus.ts would
+              reject the change. */}
+          {ALLOWED_TRANSITIONS[currentStatus].includes("GREEN") && !hasFinalOutcome && (
             <span className="text-xs text-amber-600 dark:text-amber-400">
               Final outcome required before GREEN.
             </span>
