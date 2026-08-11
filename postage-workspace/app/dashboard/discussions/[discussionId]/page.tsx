@@ -8,7 +8,12 @@ import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { listDiscussionComments } from "@/lib/queries/discussionComments";
 import { getDiscussionGroupById } from "@/lib/queries/discussionGroups";
 import { listDiscussionParticipants } from "@/lib/queries/discussionParticipants";
-import { getAdjacentDiscussionIds, getDiscussionById, isValidDiscussionId } from "@/lib/queries/discussions";
+import {
+  getAdjacentDiscussionIds,
+  getDiscussionById,
+  isValidDiscussionId,
+  listDiscussionDomains,
+} from "@/lib/queries/discussions";
 import { listActiveStaff } from "@/lib/queries/staff";
 
 // Real, database-backed Discussion detail page — mirrors
@@ -97,15 +102,19 @@ export default async function DiscussionDetailPage({
   let participants: Awaited<ReturnType<typeof listDiscussionParticipants>> = [];
   let comments: Awaited<ReturnType<typeof listDiscussionComments>> = [];
   let staff: Awaited<ReturnType<typeof listActiveStaff>> = [];
+  // Existing Main Domains, offered as suggestions on the inline Main Domain
+  // editor — the same list that drives the Discussions list Domain filter.
+  let domains: Awaited<ReturnType<typeof listDiscussionDomains>> = [];
   let errorMessage: string | null = null;
 
   try {
-    [discussion, adjacent, participants, comments, staff] = await Promise.all([
+    [discussion, adjacent, participants, comments, staff, domains] = await Promise.all([
       getDiscussionById(discussionId),
       getAdjacentDiscussionIds(discussionId),
       listDiscussionParticipants(discussionId),
       listDiscussionComments(discussionId),
       listActiveStaff(),
+      listDiscussionDomains(),
     ]);
   } catch (error) {
     console.error(`[dashboard/discussions/${discussionId}] failed to load discussion:`, error);
@@ -157,6 +166,7 @@ export default async function DiscussionDetailPage({
           discussion={discussion}
           groupTitle={groupTitle}
           staff={staff}
+          domains={domains}
           canEdit={canEditParticipants}
           canChangeStatus={canChangeStatus}
           canLinkIssue={canLinkIssue}

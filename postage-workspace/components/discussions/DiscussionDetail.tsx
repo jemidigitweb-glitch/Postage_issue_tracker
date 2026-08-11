@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { DiscussionDetail as DiscussionDetailData } from "@/lib/queries/discussions";
 import type { StaffRecord } from "@/lib/queries/staff";
 import DiscussionActionSection from "./DiscussionActionSection";
+import DiscussionDomainField from "./DiscussionDomainField";
 import DiscussionIssueLinkPanel from "./DiscussionIssueLinkPanel";
 import DiscussionOperationalFields from "./DiscussionOperationalFields";
 import DiscussionStatusBadge from "./DiscussionStatusBadge";
@@ -161,11 +162,15 @@ export default function DiscussionDetail({
   discussion,
   groupTitle,
   staff,
+  domains,
   canEdit,
   canChangeStatus,
   canLinkIssue,
 }: {
   discussion: DiscussionDetailData;
+  /** Distinct existing Main Domains, used as datalist suggestions on the
+   *  inline Main Domain editor. Suggestions only — the column is free text. */
+  domains: string[];
   /** Name only of the Discussion Group this Discussion belongs to (if any)
    *  — the full banner (dates/objective/coordinator responsibilities) is
    *  deliberately not repeated here, only shown once on the Discussions
@@ -199,9 +204,14 @@ export default function DiscussionDetail({
             {formatMeetingDates(discussion.meetingDateStart, discussion.meetingDateEnd)}
           </Field>
           <Field label="Coordinator">{discussion.coordinatorName ?? "Not set"}</Field>
-          <Field label="Main Domain">
-            <span className="capitalize">{discussion.domain ?? "Not set"}</span>
-          </Field>
+          {/* Editable in place — same dl/dt/dd shape as <Field> so the grid
+              layout is unchanged whether or not the user can edit. */}
+          <DiscussionDomainField
+            discussionId={discussion.discussionId}
+            domain={discussion.domain}
+            domains={domains}
+            canEdit={canEdit}
+          />
         </dl>
 
         <div className="pb-6 mb-6 border-b border-neutral-100 dark:border-neutral-800">

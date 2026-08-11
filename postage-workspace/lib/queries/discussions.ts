@@ -768,3 +768,61 @@ export async function updateDiscussionOperationalFields(
     client.release();
   }
 }
+
+/** discussions.domain is VARCHAR(50) — see migration/007_discussions.sql. */
+export const DISCUSSION_DOMAIN_MAX_LENGTH = 50;
+
+export interface UpdateDiscussionDomainInput {
+  discussionId: string;
+  /** null clears the Discussion's own main domain. */
+  domain: string | null;
+}
+
+/**
+ * Updates ONLY issue_tracking.discussions.domain — the Discussion's own
+ * "Main Domain". Deliberately never touches discussion_points.domain, which
+ * is a separate per-point column with its own meaning (the same distinction
+ * listDiscussions() documents for the Domain filter).
+ *
+ * Separate from updateDiscussionOperationalFields() so the two edit forms
+ * stay independent: saving one can never blank a field owned by the other.
+ * Locks the row FOR UPDATE and rejects a soft-deleted or missing Discussion
+ * rather than silently updating zero rows.
+ */
+export async function updateDiscussionDomain(input: UpdateDiscussionDomainInput): Promise<void> {
+  const domain = input.domain?.trim() || null;
+  if (domain && domain.length > DISCUSSION_DOMAIN_MAX_LENGTH) {
+    throw new DiscussionValidationError(
+      `Main Domain must be ${DISCUSSION_DOMAIN_MAX_LENGTH} characters or fewer.`
+    );
+  }
+
+  const client = await getVerifiedClient();
+  try {
+    await client.query("BEGIN");
+
+    const current = await client.query<{ discussion_id: string }>(
+      `SELECT discussion_id FROM issue_tracking.discussions
+       WHERE discussion_id = $1 AND deleted_at IS NULL
+       FOR UPDATE`,
+      [input.discussionId]
+    );
+    if (!current.rows[0]) {
+      throw new DiscussionNotFoundError(`Discussion "${input.discussionId}" not found.`);
+    }
+
+    await client.query(
+      `UPDATE issue_tracking.discussions
+       SET domain = $2, updated_at = now()
+       WHERE discussion_id = $1`,
+      [input.discussionId, domain]
+    );
+
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
