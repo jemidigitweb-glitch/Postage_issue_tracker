@@ -65,9 +65,50 @@ export interface DiscussionListItem {
   linkedIssueId: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// Sorting whitelist — same rules as lib/queries/issues.ts.
+//
+// SECURITY: ?sort= is only ever a lookup key into this frozen map. Its value
+// is never interpolated into SQL; an unknown key falls back to the default
+// ORDER BY. Direction is narrowed to the literals "ASC"/"DESC". ORDER BY
+// cannot be parameterised in PostgreSQL, so a whitelist is the safe approach.
+// ---------------------------------------------------------------------------
+const DISCUSSION_SORT_COLUMNS = Object.freeze({
+  discussionId: "d.discussion_id",
+  title: "d.title",
+  domain: "d.domain",
+  coordinator: "d.coordinator_name",
+  // Workflow order (RED -> AMBER -> GREEN), not alphabetical.
+  status: "CASE d.status WHEN 'RED' THEN 1 WHEN 'AMBER' THEN 2 WHEN 'GREEN' THEN 3 ELSE 4 END",
+  started: "d.process_started",
+  estimatedFinish: "d.estimated_finish_date",
+  meetingDate: "d.meeting_date_start",
+  linkedIssue: "d.linked_issue_id",
+} as const);
+
+export type DiscussionSortKey = keyof typeof DISCUSSION_SORT_COLUMNS;
+
+/** Unchanged from the pre-sorting behaviour. */
+const DISCUSSION_DEFAULT_ORDER_BY = "d.updated_at DESC, d.discussion_id DESC";
+
+function buildDiscussionOrderBy(sort: string | undefined, order: string | undefined): string {
+  const column = sort && Object.prototype.hasOwnProperty.call(DISCUSSION_SORT_COLUMNS, sort)
+    ? DISCUSSION_SORT_COLUMNS[sort as DiscussionSortKey]
+    : null;
+  if (!column) {
+    return DISCUSSION_DEFAULT_ORDER_BY;
+  }
+  const direction = order === "desc" ? "DESC" : "ASC";
+  return `${column} ${direction} NULLS LAST, d.discussion_id ASC`;
+}
+
 export interface ListDiscussionsParams {
   page?: number;
   pageSize?: number;
+  /** Sort key resolved against DISCUSSION_SORT_COLUMNS; unknown = default. */
+  sort?: string;
+  /** "asc" | "desc" — anything else is treated as "asc". */
+  order?: string;
   /** Matches against discussion_id or title (case-insensitive, substring). */
   search?: string;
   status?: string;
@@ -132,6 +173,8 @@ export async function listDiscussions(params: ListDiscussionsParams = {}): Promi
   const domain = params.domain?.trim() || null;
   const member = params.member?.trim() || null;
   const showDeleted = params.showDeleted ?? false;
+  // Resolved from the frozen whitelist above — never from raw input.
+  const orderBy = buildDiscussionOrderBy(params.sort, params.order);
 
   const result = await query<DiscussionListRow>(
     `SELECT
@@ -166,7 +209,7 @@ export async function listDiscussions(params: ListDiscussionsParams = {}): Promi
             OR EXISTS (SELECT 1 FROM issue_tracking.discussion_participants p
                        WHERE p.discussion_id = d.discussion_id AND p.participant_name = $4))
        AND (($7::boolean AND d.deleted_at IS NOT NULL) OR (NOT $7::boolean AND d.deleted_at IS NULL))
-     ORDER BY d.updated_at DESC, d.discussion_id DESC
+     ORDER BY ${orderBy}
      LIMIT $5 OFFSET $6`,
     [search, status, domain, member, pageSize, offset, showDeleted]
   );

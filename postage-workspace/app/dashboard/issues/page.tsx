@@ -58,6 +58,13 @@ export default async function IssuesPage({
   const pageParam = Number.parseInt(firstValue(resolved.page), 10);
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
+  // Sort state lives in the URL. An unrecognized key is passed through to
+  // listIssues() unchanged, which resolves it against its whitelist and falls
+  // back to the default order — so a hand-edited ?sort= can never break the
+  // page or reach SQL.
+  const sort = firstValue(resolved.sort).trim();
+  const order = firstValue(resolved.order).trim() === "desc" ? "desc" : "asc";
+
   const hasActiveFilters = Boolean(search || staffCode || status || priority || category);
 
   let staff: Awaited<ReturnType<typeof listStaff>> = [];
@@ -71,7 +78,7 @@ export default async function IssuesPage({
       listStaff(),
       listCategories(),
       listAssignmentUsers(),
-      listIssues({ page, search, staffCode, status, priority, category }),
+      listIssues({ page, search, staffCode, status, priority, category, sort, order }),
     ]);
   } catch (error) {
     // Never surface the raw error (could include connection details) to
@@ -84,12 +91,22 @@ export default async function IssuesPage({
   const canAssign = currentUser ? await hasPermission(currentUser, "issue:assign") : false;
   const canManageStaff = currentUser ? await hasPermission(currentUser, "user:manage") : false;
 
-  const linkParams = new URLSearchParams();
-  if (search) linkParams.set("q", search);
-  if (staffCode) linkParams.set("staff", staffCode);
-  if (status) linkParams.set("status", status);
-  if (priority) linkParams.set("priority", priority);
-  if (category) linkParams.set("category", category);
+  // Search/filter params only — shared by the pagination links and the
+  // sortable headers. Sort is added on top of this for pagination (so paging
+  // keeps the chosen order) but deliberately NOT for the headers, which set
+  // their own sort/order and drop `page` to return to page 1.
+  const filterParams = new URLSearchParams();
+  if (search) filterParams.set("q", search);
+  if (staffCode) filterParams.set("staff", staffCode);
+  if (status) filterParams.set("status", status);
+  if (priority) filterParams.set("priority", priority);
+  if (category) filterParams.set("category", category);
+
+  const linkParams = new URLSearchParams(filterParams);
+  if (sort) {
+    linkParams.set("sort", sort);
+    linkParams.set("order", order);
+  }
 
   return (
     <DashboardLayout>
@@ -144,6 +161,9 @@ export default async function IssuesPage({
               issues={result?.issues ?? []}
               assignmentUsers={assignmentUsers}
               canAssign={canAssign}
+              sort={sort}
+              order={order}
+              baseParams={filterParams.toString()}
             />
 
             {result && result.totalCount > 0 && (

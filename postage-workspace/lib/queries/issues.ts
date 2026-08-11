@@ -47,6 +47,59 @@ export interface ListIssuesParams {
   /** false (default): only non-deleted issues. true: only soft-deleted
    *  issues — never both mixed together. */
   showDeleted?: boolean;
+  /** Sort key from the URL. Resolved against ISSUE_SORT_COLUMNS below;
+   *  anything unrecognized falls back to the default order. */
+  sort?: string;
+  /** "asc" | "desc" — anything else is treated as "asc". */
+  order?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Sorting whitelist.
+//
+// SECURITY: the URL's ?sort= value is NEVER interpolated into SQL. It is only
+// ever used as a lookup key into this frozen map; an unknown key resolves to
+// null and the default ORDER BY is used instead. The values below are fixed
+// literals written by hand in this file — no user input reaches them. The
+// direction is likewise narrowed to the two literals "ASC"/"DESC" before use.
+// This is the only safe way to do dynamic ordering, since PostgreSQL cannot
+// parameterise an ORDER BY expression.
+// ---------------------------------------------------------------------------
+const ISSUE_SORT_COLUMNS = Object.freeze({
+  issueId: "i.issue_id",
+  title: "i.issue_title",
+  staff: "s.staff_name",
+  assigned: "au.assignee_name",
+  domain: "i.category",
+  created: "i.created_date",
+  // extra_data is JSONB; ->> yields text. Present so ?sort=member works even
+  // though the list table has no Member column of its own.
+  member: "i.extra_data->>'member'",
+  // Workflow order, not alphabetical: RED -> AMBER -> GREEN. Alphabetical
+  // would give AMBER, GREEN, RED, which is meaningless to an operator.
+  status: "CASE i.status WHEN 'RED' THEN 1 WHEN 'AMBER' THEN 2 WHEN 'GREEN' THEN 3 ELSE 4 END",
+  // "Priority Score": low=1 … critical=4, so ascending runs least→most urgent
+  // and descending puts critical first.
+  priority:
+    "CASE i.priority WHEN 'low' THEN 1 WHEN 'medium' THEN 2 WHEN 'high' THEN 3 WHEN 'critical' THEN 4 ELSE 0 END",
+} as const);
+
+export type IssueSortKey = keyof typeof ISSUE_SORT_COLUMNS;
+
+/** The default applied when no (or an unrecognized) sort key is supplied —
+ *  identical to the ordering this query used before sorting existed. */
+const ISSUE_DEFAULT_ORDER_BY = "i.created_date DESC, i.issue_id DESC";
+
+function buildIssueOrderBy(sort: string | undefined, order: string | undefined): string {
+  const column = sort && Object.prototype.hasOwnProperty.call(ISSUE_SORT_COLUMNS, sort)
+    ? ISSUE_SORT_COLUMNS[sort as IssueSortKey]
+    : null;
+  if (!column) {
+    return ISSUE_DEFAULT_ORDER_BY;
+  }
+  const direction = order === "desc" ? "DESC" : "ASC";
+  // issue_id tiebreaker keeps paging stable when the sort column has ties.
+  return `${column} ${direction} NULLS LAST, i.issue_id ASC`;
 }
 
 export interface ListIssuesResult {
@@ -162,6 +215,8 @@ export async function listIssues(params: ListIssuesParams = {}): Promise<ListIss
   const priority = normalizeEnum(params.priority, VALID_PRIORITIES);
   const category = params.category?.trim() || null;
   const showDeleted = params.showDeleted ?? false;
+  // Resolved from the frozen whitelist above — never from raw input.
+  const orderBy = buildIssueOrderBy(params.sort, params.order);
 
   const result = await query<IssueRow>(
     `SELECT
@@ -186,7 +241,7 @@ export async function listIssues(params: ListIssuesParams = {}): Promise<ListIss
        AND ($4::text IS NULL OR i.priority = $4)
        AND (($7::boolean AND i.deleted_at IS NOT NULL) OR (NOT $7::boolean AND i.deleted_at IS NULL))
        AND ($8::text IS NULL OR i.category = $8)
-     ORDER BY i.created_date DESC, i.issue_id DESC
+     ORDER BY ${orderBy}
      LIMIT $5 OFFSET $6`,
     [search, staffCode, status, priority, pageSize, offset, showDeleted, category]
   );

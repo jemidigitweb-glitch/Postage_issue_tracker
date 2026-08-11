@@ -8,6 +8,11 @@ import type { IssueListItem } from "@/lib/queries/issues";
 import type { AssignmentUser } from "@/lib/queries/assignmentUsers";
 import { softDeleteIssuesAction, type DeleteState } from "@/app/dashboard/issues/delete-actions";
 import { assignIssuesAction, type AssignBulkState } from "@/app/dashboard/issues/assign-actions";
+// Shared inline-SVG icon set — the project has no icon library dependency,
+// so these live in one place and are reused rather than duplicated. Same
+// EyeIcon the Discussions table uses in its Actions column.
+import { EyeIcon } from "@/components/discussions/icons";
+import SortableHeader, { type SortOrder } from "@/components/common/SortableHeader";
 import IssuePriorityBadge from "./IssuePriorityBadge";
 import IssueStatusBadge from "./IssueStatusBadge";
 
@@ -35,6 +40,9 @@ export default function IssueTable({
   issues,
   assignmentUsers,
   canAssign,
+  sort = "",
+  order = "asc",
+  baseParams = "",
 }: {
   issues: IssueListItem[];
   assignmentUsers: AssignmentUser[];
@@ -42,7 +50,13 @@ export default function IssueTable({
    *  management only. The Assign control is hidden, not just disabled, for
    *  everyone else; the Server Action enforces this independently either way. */
   canAssign: boolean;
+  /** Current sort key/direction from the URL, for header indicators. */
+  sort?: string;
+  order?: SortOrder;
+  /** Serialized search/filter params to carry into each header link. */
+  baseParams?: string;
 }) {
+  const headerParams = new URLSearchParams(baseParams);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteState, deleteFormAction, deletePending] = useActionState(
     softDeleteIssuesAction,
@@ -188,29 +202,17 @@ export default function IssueTable({
                     className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700"
                   />
                 </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-32">
-                  Issue ID
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                  Title
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-40">
-                  Staff
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-32">
-                  Domain
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-40">
-                  Assigned To
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-32">
-                  Status
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-24">
-                  Priority
-                </th>
+                {/* Every data column is sortable; Actions deliberately is not. */}
+                <SortableHeader label="Issue ID" sortKey="issueId" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-32" />
+                <SortableHeader label="Title" sortKey="title" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} />
+                <SortableHeader label="Staff" sortKey="staff" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-40" />
+                <SortableHeader label="Domain" sortKey="domain" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-32" />
+                <SortableHeader label="Assigned To" sortKey="assigned" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-40" />
+                <SortableHeader label="Status" sortKey="status" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-32" />
+                <SortableHeader label="Priority" sortKey="priority" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-24" />
+                <SortableHeader label="Created" sortKey="created" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-28" />
                 <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-28">
-                  Created
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -259,6 +261,21 @@ export default function IssueTable({
                   </td>
                   <td className="px-5 py-3.5 text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
                     {formatCreatedDate(issue.createdDate)}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <div className="flex items-center gap-1">
+                      {/* Plain navigation link, deliberately not a <button> —
+                          it sits outside both toolbar forms and can never
+                          submit the delete/assign actions. */}
+                      <Link
+                        href={`/dashboard/issues/${issue.issueId}`}
+                        title="View issue"
+                        aria-label="View issue"
+                        className="inline-flex items-center justify-center rounded-md p-1.5 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors"
+                      >
+                        <EyeIcon />
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -38,6 +38,11 @@ export default async function DiscussionsPage({
   const pageParam = Number.parseInt(firstValue(resolved.page), 10);
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
+  // Sort state lives in the URL; listDiscussions() resolves the key against
+  // its whitelist, so an unrecognized ?sort= falls back to the default order.
+  const sort = firstValue(resolved.sort).trim();
+  const order = firstValue(resolved.order).trim() === "desc" ? "desc" : "asc";
+
   const hasActiveFilters = Boolean(search || status || domain || member);
 
   let domains: Awaited<ReturnType<typeof listDiscussionDomains>> = [];
@@ -49,7 +54,7 @@ export default async function DiscussionsPage({
     [domains, members, result] = await Promise.all([
       listDiscussionDomains(),
       listDiscussionMemberNames(),
-      listDiscussions({ page, search, status, domain, member }),
+      listDiscussions({ page, search, status, domain, member, sort, order }),
     ]);
   } catch (error) {
     console.error("[dashboard/discussions] failed to load discussions:", error);
@@ -60,11 +65,20 @@ export default async function DiscussionsPage({
   const canCreate = currentUser ? await hasPermission(currentUser, "discussion:create") : false;
   const canDelete = currentUser ? await hasPermission(currentUser, "discussion:delete") : false;
 
-  const linkParams = new URLSearchParams();
-  if (search) linkParams.set("q", search);
-  if (status) linkParams.set("status", status);
-  if (domain) linkParams.set("domain", domain);
-  if (member) linkParams.set("member", member);
+  // Search/filter params only — reused by the sortable headers (which add
+  // their own sort/order and drop `page`). Pagination gets sort added on top
+  // so paging preserves the chosen order.
+  const filterParams = new URLSearchParams();
+  if (search) filterParams.set("q", search);
+  if (status) filterParams.set("status", status);
+  if (domain) filterParams.set("domain", domain);
+  if (member) filterParams.set("member", member);
+
+  const linkParams = new URLSearchParams(filterParams);
+  if (sort) {
+    linkParams.set("sort", sort);
+    linkParams.set("order", order);
+  }
 
   return (
     <DashboardLayout>
@@ -104,7 +118,13 @@ export default async function DiscussionsPage({
           </div>
         ) : (
           <>
-            <DiscussionTable discussions={result?.discussions ?? []} canDelete={canDelete} />
+            <DiscussionTable
+              discussions={result?.discussions ?? []}
+              canDelete={canDelete}
+              sort={sort}
+              order={order}
+              baseParams={filterParams.toString()}
+            />
 
             {result && result.totalCount > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-neutral-500 dark:text-neutral-400">

@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { DiscussionListItem } from "@/lib/queries/discussions";
 import DeleteDiscussionButton from "./DeleteDiscussionButton";
 import DiscussionStatusBadge from "./DiscussionStatusBadge";
+import SortableHeader, { type SortOrder } from "@/components/common/SortableHeader";
 import { EyeIcon } from "./icons";
 import MemberOverflowCapsule from "./MemberOverflowCapsule";
 
@@ -43,6 +44,9 @@ function ProcessStartedBadge({ processStarted }: { processStarted: boolean | nul
 export default function DiscussionTable({
   discussions,
   canDelete,
+  sort = "",
+  order = "asc",
+  baseParams = "",
 }: {
   discussions: DiscussionListItem[];
   /** From the current user's permission check (discussion:delete) —
@@ -50,7 +54,14 @@ export default function DiscussionTable({
    *  disabled, for everyone else; the Server Action enforces this
    *  independently either way. */
   canDelete: boolean;
+  /** Current sort key/direction from the URL, for header indicators. */
+  sort?: string;
+  order?: SortOrder;
+  /** Serialized search/filter params to carry into each header link. */
+  baseParams?: string;
 }) {
+  const headerParams = new URLSearchParams(baseParams);
+
   if (discussions.length === 0) {
     return (
       <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-5 py-12 text-center">
@@ -67,33 +78,16 @@ export default function DiscussionTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950">
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-28">
-                Discussion ID
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
-                Title
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-32">
-                Domain
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-48">
-                Coordinator / Members
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-24">
-                Status
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-28">
-                Started
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-28">
-                Estimated Finish
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-28">
-                Linked Issues
-              </th>
-              <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-40">
-                Meeting Date
-              </th>
+              {/* Every data column is sortable; Actions deliberately is not. */}
+              <SortableHeader label="Discussion ID" sortKey="discussionId" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-28" />
+              <SortableHeader label="Title" sortKey="title" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} />
+              <SortableHeader label="Domain" sortKey="domain" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-32" />
+              <SortableHeader label="Coordinator / Members" sortKey="coordinator" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-48" />
+              <SortableHeader label="Status" sortKey="status" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-24" />
+              <SortableHeader label="Started" sortKey="started" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-28" />
+              <SortableHeader label="Estimated Finish" sortKey="estimatedFinish" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-28" />
+              <SortableHeader label="Linked Issues" sortKey="linkedIssue" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-28" />
+              <SortableHeader label="Meeting Date" sortKey="meetingDate" activeSort={sort} activeOrder={order} basePath="/dashboard/discussions" baseParams={headerParams} widthClassName="w-40" />
               <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 w-28">
                 Actions
               </th>

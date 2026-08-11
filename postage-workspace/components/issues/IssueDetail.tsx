@@ -53,6 +53,46 @@ function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value.trim());
 }
 
+// extra_data.images — written by the image-linking step, shape:
+//   [{ url, public_id, original_name }, ...]
+// extraData is Record<string, unknown>, so every field is validated here
+// rather than trusted; anything malformed is skipped instead of crashing
+// the page. Read-only: extra_data is never written back from this file.
+interface IssueImage {
+  url: string;
+  originalName?: string;
+}
+
+function toIssueImages(value: unknown): IssueImage[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const record = entry as Record<string, unknown>;
+    const url = typeof record.url === "string" ? record.url.trim() : "";
+    if (!url || !isHttpUrl(url)) return [];
+    const originalName =
+      typeof record.original_name === "string" && record.original_name.trim() !== ""
+        ? record.original_name.trim()
+        : undefined;
+    return [{ url, originalName }];
+  });
+}
+
+// Cloudinary delivery URLs accept inline transformations after /image/upload/.
+// Requesting a fitted, auto-format thumbnail avoids pulling the full-size
+// original (700KB+) just to paint a grid cell. c_fit (not c_fill) so evidence
+// images are never cropped. This uses ONLY the already-public delivery URL —
+// no cloud credentials, API key or secret is involved. Any non-Cloudinary URL
+// falls through unchanged.
+const CLOUDINARY_UPLOAD_MARKER = "/image/upload/";
+
+function thumbnailUrl(url: string): string {
+  const at = url.indexOf(CLOUDINARY_UPLOAD_MARKER);
+  if (at === -1) return url;
+  const cut = at + CLOUDINARY_UPLOAD_MARKER.length;
+  return `${url.slice(0, cut)}c_fit,w_400,h_400,q_auto,f_auto/${url.slice(cut)}`;
+}
+
 // Matches key.toLowerCase() after stripping spaces/underscores, so "Source
 // Id", "sourceId", and "source_id" are all treated the same regardless of
 // which casing convention a given row's extra_data happens to use.
@@ -139,10 +179,16 @@ function DataLinkCapsule({ value }: { value: string }) {
   );
 }
 
-const PULLED_OUT_KEYS = new Set(["member", "datalink"]);
+// "images" joins these because it gets its own gallery section below —
+// without this it would ALSO be dumped as raw JSON under "Additional
+// details". The stored value itself is unchanged.
+const PULLED_OUT_KEYS = new Set(["member", "datalink", "images"]);
 
 export default function IssueDetail({ issue }: { issue: IssueDetailData }) {
   const entries = Object.entries(issue.extraData).filter(([, value]) => value !== null && value !== "");
+
+  const imagesEntry = entries.find(([key]) => key.toLowerCase() === "images");
+  const images = imagesEntry ? toIssueImages(imagesEntry[1]) : [];
 
   const memberEntry = entries.find(([key]) => key.toLowerCase() === "member");
   const memberValue = memberEntry ? formatExtraValue(memberEntry[1]) : null;
@@ -195,6 +241,51 @@ export default function IssueDetail({ issue }: { issue: IssueDetailData }) {
           </p>
         </div>
       </div>
+
+      {/* Hidden entirely when the issue has no usable images — no empty card,
+          no heading. Scales to any number of images without further changes. */}
+      {images.length > 0 && (
+        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-5">
+            Images / Attachments
+          </h2>
+          <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {images.map((image, index) => (
+              <li key={`${image.url}-${index}`}>
+                <a
+                  href={image.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={image.originalName ?? "Open full image"}
+                  className="group block rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 dark:focus-visible:ring-neutral-500"
+                >
+                  <div className="aspect-square overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-800/60">
+                    {/* Plain <img>, not next/image: these are arbitrary remote
+                        URLs stored per-issue, and next/image would require
+                        whitelisting hosts in next.config.ts. Cloudinary already
+                        serves an optimised, correctly-sized asset. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={thumbnailUrl(image.url)}
+                      alt={image.originalName ?? `Attachment ${index + 1} for ${issue.issueId}`}
+                      loading="lazy"
+                      className="h-full w-full object-contain transition-transform duration-200 group-hover:scale-105"
+                    />
+                  </div>
+                  {image.originalName && (
+                    <p
+                      className="mt-1.5 truncate text-xs text-neutral-500 dark:text-neutral-400 group-hover:text-neutral-800 dark:group-hover:text-neutral-200 transition-colors"
+                      title={image.originalName}
+                    >
+                      {image.originalName}
+                    </p>
+                  )}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {extraEntries.length > 0 && (
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">

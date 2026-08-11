@@ -7,3 +7,4 @@ node_modules/
 *_backup*.sql
 migration/*.dump
 migration/*backup*.sql
+.vercel
