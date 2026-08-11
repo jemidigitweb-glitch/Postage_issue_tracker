@@ -56,7 +56,20 @@ export type Permission =
   | "issue:change_status_any"
   | "issue:assign"
   | "issue:approve_reopen"
-  | "user:manage";
+  | "user:manage"
+  // Discussions module (additive — approved permission model, see
+  // documentation for the Discussions feature). Distinct key namespace
+  // ("discussion:*") so nothing here can be confused with or accidentally
+  // widen an "issue:*" check.
+  | "discussion:view"
+  | "discussion:create"
+  | "discussion:edit"
+  | "discussion:comment"
+  | "discussion:change_status"
+  | "discussion:manage_points"
+  | "discussion:link_issue"
+  | "discussion:reopen"
+  | "discussion:delete";
 
 /**
  * Explicit, per-role permission table — the finalized matrix from
@@ -73,6 +86,10 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:create",
     "issue:comment",
     "issue:change_status_own_assigned",
+    // Discussions: staff can view and comment only — not create, edit,
+    // change status, manage points, link Issues, or reopen.
+    "discussion:view",
+    "discussion:comment",
   ]),
   management: new Set<Permission>([
     "issue:view_all",
@@ -81,6 +98,16 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:change_status_any",
     "issue:assign",
     "issue:approve_reopen",
+    // Discussions: full working access.
+    "discussion:view",
+    "discussion:create",
+    "discussion:edit",
+    "discussion:comment",
+    "discussion:change_status",
+    "discussion:manage_points",
+    "discussion:link_issue",
+    "discussion:reopen",
+    "discussion:delete",
   ]),
   admin: new Set<Permission>([
     "issue:view_all",
@@ -90,6 +117,16 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:assign",
     "issue:approve_reopen",
     "user:manage",
+    // Discussions: all Discussion permissions.
+    "discussion:view",
+    "discussion:create",
+    "discussion:edit",
+    "discussion:comment",
+    "discussion:change_status",
+    "discussion:manage_points",
+    "discussion:link_issue",
+    "discussion:reopen",
+    "discussion:delete",
   ]),
 };
 

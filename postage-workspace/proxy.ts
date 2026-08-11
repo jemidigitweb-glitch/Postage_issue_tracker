@@ -17,17 +17,20 @@ import { verifySession } from "@/lib/session";
 // own "optimistic checks" guidance exactly.
 //
 // Scope: Issue Tracker routes only. Enforcement is enabled here — but only
-// for /dashboard/issues and below. The rest of /dashboard (booking,
-// couriers, reports — pre-existing, already-in-use Postage department
-// pages, none of which this project is authorized to break) is
-// deliberately left outside PROTECTED_PATH_PREFIXES: only one account
-// exists in issue_tracking.management_users today, and there is no
+// for /dashboard/issues and /dashboard/discussions and below. The rest of
+// /dashboard (booking, couriers, reports — pre-existing, already-in-use
+// Postage department pages, none of which this project is authorized to
+// break) is deliberately left outside PROTECTED_PATH_PREFIXES: only one
+// account exists in issue_tracking.management_users today, and there is no
 // provisioning path yet for the other people who currently use those
 // pages. Widening protection to all of /dashboard is a separate decision,
 // not made here — see documentation/issue_tracker_auth_implementation_plan.md
 // Stage 14d.
+//
+// /dashboard/discussions added alongside /dashboard/issues (additive — the
+// Discussions module, same session-cookie-only check, same auth system).
 
-const PROTECTED_PATH_PREFIXES = ["/dashboard/issues"];
+const PROTECTED_PATH_PREFIXES = ["/dashboard/issues", "/dashboard/discussions"];
 
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -49,5 +52,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/issues/:path*"],
+  matcher: ["/dashboard/issues/:path*", "/dashboard/discussions/:path*"],
 };
