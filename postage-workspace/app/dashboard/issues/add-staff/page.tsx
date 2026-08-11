@@ -45,10 +45,11 @@ export default async function AddStaffPage() {
             ← Back to Issue List
           </Link>
           <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 mb-1">
-            Add Staff
+            Add Person
           </h1>
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Add a new staff record to issue_tracking.issue_staff.
+            Add an issue raiser (issue_tracking.issue_staff) or an assignee
+            (issue_tracking.assignment_users). One record, one table.
           </p>
         </div>
 

@@ -3,12 +3,24 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentUser, hasPermission } from "@/lib/auth";
+import {
+  createAssignmentUser,
+  DuplicateAssigneeNameError,
+} from "@/lib/queries/assignmentUsers";
 import { createStaff, DuplicateStaffCodeError } from "@/lib/queries/staff";
 
 export interface AddStaffState {
   error?: string;
   success?: string;
 }
+
+/** The two kinds of person this form can create. "staff" writes ONLY to
+ *  issue_tracking.issue_staff (issue raisers); "assignee" writes ONLY to
+ *  issue_tracking.assignment_users (the Assign To pool). Never both. */
+const PERSON_TYPES = ["staff", "assignee"] as const;
+type PersonType = (typeof PERSON_TYPES)[number];
+
+const ASSIGNEE_NAME_MAX_LENGTH = 100; // matches assignee_name VARCHAR(100)
 
 // Matches the staff_code convention already used across the app (the
 // alphanumeric prefix of an issue_id like "ND-001" — see
@@ -34,9 +46,50 @@ export async function addStaffAction(
     return { error: "You do not have permission to add staff." };
   }
 
+  // Shared by both branches — the Active checkbox applies to either table.
+  const active = formData.get("active") === "on";
+
+  // Branch on the Type selector. Validated against a fixed list — an
+  // unrecognized value is rejected outright rather than defaulted, so a
+  // tampered form cannot pick a write path by accident.
+  const rawType = String(formData.get("personType") ?? "staff").trim();
+  if (!(PERSON_TYPES as readonly string[]).includes(rawType)) {
+    return { error: "Select a valid person type." };
+  }
+  const personType = rawType as PersonType;
+
+  if (personType === "assignee") {
+    const assigneeName = String(formData.get("staffName") ?? "").trim();
+
+    if (!assigneeName) {
+      return { error: "Assignee name is required." };
+    }
+    if (assigneeName.length > ASSIGNEE_NAME_MAX_LENGTH) {
+      return { error: `Assignee name must be ${ASSIGNEE_NAME_MAX_LENGTH} characters or fewer.` };
+    }
+
+    try {
+      await createAssignmentUser({ assigneeName, active });
+    } catch (error) {
+      if (error instanceof DuplicateAssigneeNameError) {
+        return { error: `Assignee "${assigneeName}" already exists.` };
+      }
+      console.error("[dashboard/issues/add-staff] failed to create assignee:", error);
+      return { error: "Could not save this assignee. Please try again." };
+    }
+
+    // Every surface that reads listAssignmentUsers(): the Issues list (the
+    // table's "Assign to…" dropdown, both tabs) and each issue detail page's
+    // AssignmentPanel. Revalidating both makes the new person selectable
+    // immediately, with no redeploy.
+    revalidatePath("/dashboard/issues");
+    revalidatePath("/dashboard/issues/[issueId]", "page");
+
+    return { success: `Assignee "${assigneeName}" added successfully.` };
+  }
+
   const staffCode = String(formData.get("staffCode") ?? "").trim().toUpperCase();
   const staffName = String(formData.get("staffName") ?? "").trim();
-  const active = formData.get("active") === "on";
 
   if (!staffCode || !STAFF_CODE_PATTERN.test(staffCode)) {
     return { error: "Staff code is required and must be 1-10 letters/numbers (e.g. ND, SA)." };
