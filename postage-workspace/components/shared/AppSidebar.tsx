@@ -5,13 +5,43 @@ import { usePathname } from "next/navigation";
 
 import { logout } from "@/app/logout/actions";
 
-const navItems = [
-  { label: "Open Issues", href: "/dashboard/issues" },
-  { label: "Discussions", href: "/dashboard/discussions" },
-];
-
-export default function AppSidebar() {
+// Navigation is built from props resolved server-side in DashboardLayout —
+// never from a role read on the client. Hiding a link is presentation only;
+// each destination enforces its own access server-side (lib/routeGuards.ts
+// for admin pages, the Issue access scope for /dashboard/issues).
+//
+//   Super Admin -> Issues, Discussions, Tracker, Logout
+//   Assignee    -> Assigned Issues, Logout
+//
+// Tracker sits directly after Discussions and is Super Admin only. Its flag
+// is a SEPARATE prop from showDiscussions rather than being derived from it,
+// because they come from different permissions (discussion:view vs
+// tracker:view) and only 'admin' holds the latter — 'management' holds
+// discussion:view but must not get Tracker.
+export default function AppSidebar({
+  showDiscussions,
+  showTracker,
+  issuesLabel,
+}: {
+  /** discussion:view — false for an Assignee. */
+  showDiscussions: boolean;
+  /** tracker:view — true for role 'admin' only. False for an Assignee, so
+   *  the link is absent from their sidebar entirely. Hiding it is
+   *  presentation; /dashboard/tracker enforces the same permission
+   *  server-side and redirects anyone else. */
+  showTracker: boolean;
+  /** "Issues" for the Super Admin (unchanged), "Assigned Issues" for an
+   *  Assignee. Resolved server-side in DashboardLayout — this component
+   *  never reads a role. */
+  issuesLabel: string;
+}) {
   const pathname = usePathname();
+
+  const navItems = [
+    { label: issuesLabel, href: "/dashboard/issues" },
+    ...(showDiscussions ? [{ label: "Discussions", href: "/dashboard/discussions" }] : []),
+    ...(showTracker ? [{ label: "Tracker", href: "/dashboard/tracker" }] : []),
+  ];
 
   return (
     <aside className="w-56 shrink-0 flex flex-col border-r border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 overflow-y-auto">

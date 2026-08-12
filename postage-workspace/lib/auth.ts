@@ -2,27 +2,35 @@ import "server-only";
 
 import { verifySession } from "./session";
 import { findUserById } from "./queries/users";
+import { findAssigneeIdForUser } from "./queries/assigneeLink";
+import {
+  resolveIssueAccessScope,
+  roleHasPermission,
+  SCOPE_NONE,
+  type IssueAccessScope,
+  type Permission,
+  type Role,
+} from "./access/permissions";
 
-// Authentication helpers — Stage 14 (session) + Stage 14b (database-backed
-// identity) implementation.
+// Server-side authentication + authorization entry point.
 //
-// Session verification (via lib/session.ts, jose-based) and database-backed
-// user identity resolution (via lib/queries/users.ts) are both real as of
-// this stage. getCurrentUser() re-fetches role/active on every call — never
-// trusts a role embedded in the cookie (there isn't one to trust; see
-// SessionPayload).
+// The permission vocabulary and every authorization DECISION now live in
+// lib/access/permissions.ts — a pure module with no server-only/next/database
+// import, so the rules are directly unit-testable (tests/access.test.ts).
+// This file is the server wrapper: it resolves the real session and user,
+// resolves the assignee link, and delegates the decision.
 //
 // Approved decisions this file follows:
 // - Custom signed httpOnly session cookie — issue_tracker_auth_architecture_decision.md §1
 // - issue_tracking.management_users is the identity source — §2
-// - Roles are exactly "staff" | "management" | "admin" — §2/§3
+// - Roles are exactly "staff" | "management" | "admin" — §2/§3; no
+//   `super_admin` DB role. Super Admin IS role 'admin'.
 // - No automatic role-hierarchy inheritance — Stage 12A DECISION-001
-// - Finalized permission matrix (including the previously-open
-//   Management/Admin create-issue and add-comment questions, resolved in
-//   documentation/issue_tracker_auth_implementation_plan.md §3)
+// - Stage 3 model — documentation/issue_tracker_assignee_auth_design.md
 
-/** The three roles approved for issue_tracking.management_users.role. */
-export type Role = "staff" | "management" | "admin";
+// Re-exported so existing imports (`import type { Role } from "@/lib/auth"`)
+// keep working unchanged.
+export type { Permission, Role, IssueAccessScope };
 
 /**
  * The minimal, non-sensitive payload signed into the session cookie.
@@ -47,89 +55,6 @@ export interface CurrentUser {
   active: boolean;
 }
 
-/** Every permission this application currently recognizes. */
-export type Permission =
-  | "issue:view_all"
-  | "issue:create"
-  | "issue:comment"
-  | "issue:change_status_own_assigned"
-  | "issue:change_status_any"
-  | "issue:assign"
-  | "issue:approve_reopen"
-  | "user:manage"
-  // Discussions module (additive — approved permission model, see
-  // documentation for the Discussions feature). Distinct key namespace
-  // ("discussion:*") so nothing here can be confused with or accidentally
-  // widen an "issue:*" check.
-  | "discussion:view"
-  | "discussion:create"
-  | "discussion:edit"
-  | "discussion:comment"
-  | "discussion:change_status"
-  | "discussion:manage_points"
-  | "discussion:link_issue"
-  | "discussion:reopen"
-  | "discussion:delete";
-
-/**
- * Explicit, per-role permission table — the finalized matrix from
- * documentation/issue_tracker_auth_implementation_plan.md §3. Deliberately
- * a literal list per role, not derived from any rank/hierarchy comparison,
- * per DECISION-001 ("no automatic permission inheritance"). Admin's
- * "full permissions" is this table containing every permission for the
- * "admin" key explicitly — not a fallthrough from being "above" the other
- * roles.
- */
-const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
-  staff: new Set<Permission>([
-    "issue:view_all",
-    "issue:create",
-    "issue:comment",
-    "issue:change_status_own_assigned",
-    // Discussions: staff can view and comment only — not create, edit,
-    // change status, manage points, link Issues, or reopen.
-    "discussion:view",
-    "discussion:comment",
-  ]),
-  management: new Set<Permission>([
-    "issue:view_all",
-    "issue:create",
-    "issue:comment",
-    "issue:change_status_any",
-    "issue:assign",
-    "issue:approve_reopen",
-    // Discussions: full working access.
-    "discussion:view",
-    "discussion:create",
-    "discussion:edit",
-    "discussion:comment",
-    "discussion:change_status",
-    "discussion:manage_points",
-    "discussion:link_issue",
-    "discussion:reopen",
-    "discussion:delete",
-  ]),
-  admin: new Set<Permission>([
-    "issue:view_all",
-    "issue:create",
-    "issue:comment",
-    "issue:change_status_any",
-    "issue:assign",
-    "issue:approve_reopen",
-    "user:manage",
-    // Discussions: all Discussion permissions.
-    "discussion:view",
-    "discussion:create",
-    "discussion:edit",
-    "discussion:comment",
-    "discussion:change_status",
-    "discussion:manage_points",
-    "discussion:link_issue",
-    "discussion:reopen",
-    "discussion:delete",
-  ]),
-};
-
 /** Thrown by requireUser() when there is no valid, active session. */
 export class UnauthenticatedError extends Error {
   constructor() {
@@ -148,11 +73,8 @@ export class ForbiddenError extends Error {
 
 /**
  * Verifies only the session cookie's signature and expiry — no database
- * lookup. Thin wrapper over lib/session.ts's verifySession(), kept under
- * this name for continuity with the design documented across
- * issue_tracker_auth_architecture_decision.md and
- * issue_tracker_application_structure.md. This is the only kind of check
- * that belongs in proxy.ts (see postage-workspace/proxy.ts).
+ * lookup. This is the only kind of check that belongs in proxy.ts (see
+ * postage-workspace/proxy.ts).
  */
 export async function validateSession(): Promise<SessionPayload | null> {
   return verifySession();
@@ -163,9 +85,8 @@ export async function validateSession(): Promise<SessionPayload | null> {
  * role/active status from issue_tracking.management_users — never trusts a
  * role embedded in the cookie (there isn't one; see SessionPayload).
  * Resolves to null for: no valid session, user_id no longer exists, or the
- * account is deactivated (`active = false`) — all three are treated
- * identically as "not authenticated." Callers must never assume any role
- * when this resolves to null.
+ * account is deactivated — all three treated identically as "not
+ * authenticated." Callers must never assume any role when this is null.
  */
 export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await validateSession();
@@ -183,12 +104,9 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
 /**
  * Resolves the current user or throws UnauthenticatedError. Deliberately
- * throws rather than redirecting (unlike the Next.js docs' single-context
- * example): this helper is meant to be callable from Server Components,
- * Server Actions, and Route Handlers alike, and only a Server Component
- * can safely call redirect() as navigation — a Route Handler needs to
- * return a 401 Response instead. Callers decide how to handle the error
- * for their own context.
+ * throws rather than redirecting: this helper is callable from Server
+ * Components, Server Actions, and Route Handlers alike, and only a Server
+ * Component can safely call redirect(). Callers decide how to handle it.
  */
 export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
@@ -200,10 +118,8 @@ export async function requireUser(): Promise<CurrentUser> {
 
 /**
  * Requires the current user to hold exactly the given role. Deliberately
- * NOT a hierarchy/rank comparison (per DECISION-001) — use only where an
- * action is restricted to exactly one named role (e.g. "only admin may
- * manage user accounts"). For anything resembling "this role or higher,"
- * use hasPermission() against the explicit per-role table instead.
+ * NOT a hierarchy/rank comparison (per DECISION-001). For anything
+ * resembling "this role or higher," use hasPermission() instead.
  */
 export async function requireRole(role: Role): Promise<CurrentUser> {
   const user = await requireUser();
@@ -214,25 +130,74 @@ export async function requireRole(role: Role): Promise<CurrentUser> {
 }
 
 /**
- * Explicit, single-permission authorization check against the finalized
- * per-role permission table above — the enforcement point for
- * DECISION-001's "no automatic role inheritance" rule. Every Server Action
- * / Route Handler that mutates or reads sensitive data must call this (or
- * requireRole()) rather than writing an inline role comparison.
+ * Explicit, single-permission authorization check against the per-role table
+ * in lib/access/permissions.ts. Every Server Action / Route Handler that
+ * mutates or reads sensitive data must call this (or requireRole()) rather
+ * than writing an inline role comparison.
+ *
+ * Stays `async` purely for call-site compatibility — the underlying lookup
+ * is synchronous and does no I/O.
  */
 export async function hasPermission(
   user: CurrentUser,
   permission: Permission
 ): Promise<boolean> {
-  return ROLE_PERMISSIONS[user.role].has(permission);
+  return roleHasPermission(user.role, permission);
 }
 
 /**
- * Narrow role-equality check — deliberately NOT a hierarchy/rank
- * comparison (there is no ranking between "staff" | "management" | "admin"
- * in this codebase). Prefer requireRole() at call sites that should throw;
- * this is for call sites that need a boolean instead (e.g. conditional UI).
+ * Narrow role-equality check — deliberately NOT a hierarchy comparison.
  */
 export function isRole(user: CurrentUser, role: Role): boolean {
   return user.role === role;
+}
+
+/** True for the Super Admin. Super Admin is the existing DB role 'admin';
+ *  there is no `super_admin` role in the database. */
+export function isSuperAdmin(user: CurrentUser): boolean {
+  return user.role === "admin";
+}
+
+/**
+ * Resolves how much of issue_tracking.issues this request may reach.
+ *
+ * MUST be called (and its result threaded into the query layer) by every
+ * Issue read path. The three outcomes are:
+ *   - "all"      : holder of issue:view_all (Super Admin / management)
+ *   - "assignee" : holder of issue:view_own_assigned WITH a resolved
+ *                  assignee link
+ *   - "none"     : everyone else, including an assignee whose login is not
+ *                  linked to an assignment_users row — and, today, EVERY
+ *                  assignee, because migration 011 has not been applied.
+ *                  "none" yields an empty result set, never an error and
+ *                  never someone else's data.
+ *
+ * Ownership comes only from
+ *   management_users.user_id -> assignment_users.user_id -> issue_assignments.assignee_id.
+ * issue_staff / "Raised By" is never an ownership source.
+ */
+export async function getIssueAccessScope(
+  user: CurrentUser | null
+): Promise<IssueAccessScope> {
+  if (!user) {
+    return SCOPE_NONE;
+  }
+
+  // Only look up the link for a role that could actually use it — the Super
+  // Admin short-circuits to "all" without a second query.
+  if (roleHasPermission(user.role, "issue:view_all")) {
+    return resolveIssueAccessScope({ role: user.role, assigneeId: null });
+  }
+
+  const assigneeId = await findAssigneeIdForUser(user.userId);
+  return resolveIssueAccessScope({ role: user.role, assigneeId });
+}
+
+/** Convenience: current user + their Issue scope in one call. */
+export async function getCurrentUserWithScope(): Promise<{
+  user: CurrentUser | null;
+  scope: IssueAccessScope;
+}> {
+  const user = await getCurrentUser();
+  return { user, scope: await getIssueAccessScope(user) };
 }

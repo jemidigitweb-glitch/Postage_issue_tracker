@@ -1,4 +1,11 @@
-export default function AppHeader() {
+export default function AppHeader({
+  /** The Assignee's assignment_users.assignee_name, or null. Null for the
+   *  Super Admin (who shows no name) and for any staff login without a
+   *  valid assignee link. No role badge is rendered for anyone. */
+  displayName = null,
+}: {
+  displayName?: string | null;
+} = {}) {
   const date = new Date();
   const formatted = date.toLocaleDateString("en-GB", {
     weekday: "long",
@@ -21,9 +28,12 @@ export default function AppHeader() {
         </span>
       </div>
 
-      <span className="text-xs text-neutral-400 dark:text-neutral-500">
-        {formatted}
-      </span>
+      <div className="flex items-center gap-3">
+        {displayName && (
+          <span className="text-xs text-neutral-600 dark:text-neutral-300">{displayName}</span>
+        )}
+        <span className="text-xs text-neutral-400 dark:text-neutral-500">{formatted}</span>
+      </div>
     </header>
   );
 }

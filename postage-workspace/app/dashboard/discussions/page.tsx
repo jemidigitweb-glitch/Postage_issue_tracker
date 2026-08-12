@@ -4,6 +4,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DiscussionFilters from "@/components/discussions/DiscussionFilters";
 import DiscussionTable from "@/components/discussions/DiscussionTable";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
 import { listDiscussionDomains, listDiscussionMemberNames, listDiscussions } from "@/lib/queries/discussions";
 
 // Real, database-backed Discussion list — mirrors app/dashboard/issues/page.tsx's
@@ -28,7 +29,33 @@ export default async function DiscussionsPage({
 }: {
   searchParams: Promise<RawSearchParams>;
 }) {
+  // Assignees have no Discussions access at all — send them home rather than
+  // showing a denial panel for a section they can never use (Stage 5 §12).
+  await redirectAssigneeToOwnIssues();
+
   const resolved = await searchParams;
+
+  // Discussion list gate (Stage 3). The detail page already enforced
+  // "discussion:view"; the list did not, so it would have been reachable by
+  // any authenticated account. Under the Stage 3 model the assignee role
+  // ('staff') holds no discussion:* permission at all, so this gate is what
+  // keeps Discussions out of their reach. Super Admin and management hold
+  // discussion:view and are unaffected.
+  const currentUser = await getCurrentUser();
+  if (!currentUser || !(await hasPermission(currentUser, "discussion:view"))) {
+    return (
+      <DashboardLayout>
+        <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-6 py-10 text-center">
+          <h1 className="text-lg font-semibold text-neutral-900 dark:text-neutral-50 mb-1">
+            Not authorized
+          </h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">
+            You don&apos;t have permission to view discussions.
+          </p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   const search = firstValue(resolved.q).trim();
   const status = firstValue(resolved.status).trim();
@@ -61,9 +88,10 @@ export default async function DiscussionsPage({
     errorMessage = "Unable to load discussions right now. Please try again shortly.";
   }
 
-  const currentUser = await getCurrentUser();
-  const canCreate = currentUser ? await hasPermission(currentUser, "discussion:create") : false;
-  const canDelete = currentUser ? await hasPermission(currentUser, "discussion:delete") : false;
+  // currentUser is already resolved (and proven to hold discussion:view) by
+  // the gate at the top of this function.
+  const canCreate = await hasPermission(currentUser, "discussion:create");
+  const canDelete = await hasPermission(currentUser, "discussion:delete");
 
   // Search/filter params only — reused by the sortable headers (which add
   // their own sort/order and drop `page`). Pagination gets sort added on top

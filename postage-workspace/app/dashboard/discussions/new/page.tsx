@@ -2,9 +2,12 @@ import Link from "next/link";
 
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
 import NewDiscussionForm from "./NewDiscussionForm";
 
 export default async function NewDiscussionPage() {
+  await redirectAssigneeToOwnIssues();
+
   const user = await getCurrentUser();
   const canCreate = user ? await hasPermission(user, "discussion:create") : false;
 

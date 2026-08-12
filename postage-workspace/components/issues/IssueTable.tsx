@@ -40,6 +40,7 @@ export default function IssueTable({
   issues,
   assignmentUsers,
   canAssign,
+  canDelete,
   sort = "",
   order = "asc",
   baseParams = "",
@@ -50,6 +51,9 @@ export default function IssueTable({
    *  management only. The Assign control is hidden, not just disabled, for
    *  everyone else; the Server Action enforces this independently either way. */
   canAssign: boolean;
+  /** From issue:delete — Super Admin only. Same rule: the Server Action
+   *  (delete-actions.ts) is the guard; hiding the button is defense in depth. */
+  canDelete: boolean;
   /** Current sort key/direction from the URL, for header indicators. */
   sort?: string;
   order?: SortOrder;
@@ -57,6 +61,10 @@ export default function IssueTable({
   baseParams?: string;
 }) {
   const headerParams = new URLSearchParams(baseParams);
+  // Row checkboxes exist only to feed the bulk assign/delete forms. With
+  // neither permission there is nothing to select for, so the whole
+  // selection column and toolbar are dropped.
+  const showBulkControls = canAssign || canDelete;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteState, deleteFormAction, deletePending] = useActionState(
     softDeleteIssuesAction,
@@ -119,6 +127,7 @@ export default function IssueTable({
 
   return (
     <div>
+      {showBulkControls && (
       <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
         <span className="text-sm text-neutral-500 dark:text-neutral-400">
           {selected.size > 0 ? `${selected.size} selected` : "Select issues to assign or delete"}
@@ -154,18 +163,21 @@ export default function IssueTable({
             </form>
           )}
 
-          <form action={deleteFormAction} onSubmit={handleDeleteSubmit}>
-            {hiddenSelectedInputs}
-            <button
-              type="submit"
-              disabled={selected.size === 0 || deletePending}
-              className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {deletePending ? "Deleting…" : "Delete Selected"}
-            </button>
-          </form>
+          {canDelete && (
+            <form action={deleteFormAction} onSubmit={handleDeleteSubmit}>
+              {hiddenSelectedInputs}
+              <button
+                type="submit"
+                disabled={selected.size === 0 || deletePending}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {deletePending ? "Deleting…" : "Delete Selected"}
+              </button>
+            </form>
+          )}
         </div>
       </div>
+      )}
 
       {assignState.error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400 mb-3">
@@ -193,15 +205,17 @@ export default function IssueTable({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950">
-                <th className="px-5 py-3 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleAll}
-                    aria-label="Select all issues"
-                    className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700"
-                  />
-                </th>
+                {showBulkControls && (
+                  <th className="px-5 py-3 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      aria-label="Select all issues"
+                      className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700"
+                    />
+                  </th>
+                )}
                 {/* Every data column is sortable; Actions deliberately is not. */}
                 <SortableHeader label="Issue ID" sortKey="issueId" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} widthClassName="w-32" />
                 <SortableHeader label="Title" sortKey="title" activeSort={sort} activeOrder={order} basePath="/dashboard/issues" baseParams={headerParams} />
@@ -222,15 +236,17 @@ export default function IssueTable({
                   key={issue.issueId}
                   className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
                 >
-                  <td className="px-5 py-3.5">
-                    <input
-                      type="checkbox"
-                      checked={selected.has(issue.issueId)}
-                      onChange={() => toggleOne(issue.issueId)}
-                      aria-label={`Select ${issue.issueId}`}
-                      className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700"
-                    />
-                  </td>
+                  {showBulkControls && (
+                    <td className="px-5 py-3.5">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(issue.issueId)}
+                        onChange={() => toggleOne(issue.issueId)}
+                        aria-label={`Select ${issue.issueId}`}
+                        className="h-4 w-4 rounded border-neutral-300 dark:border-neutral-700"
+                      />
+                    </td>
+                  )}
                   <td className="px-5 py-3.5 font-mono text-xs text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
                     <Link
                       href={`/dashboard/issues/${issue.issueId}`}

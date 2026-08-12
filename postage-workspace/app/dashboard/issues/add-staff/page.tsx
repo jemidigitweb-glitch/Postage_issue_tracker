@@ -4,11 +4,19 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
 import AddStaffForm from "./AddStaffForm";
 
-// Page-level authorization gate — defense in depth alongside the
-// server-action check in ./actions.ts (which is the check that actually
-// matters; this just avoids showing the form to someone who can't submit
-// it). Mirrors the getCurrentUser()/hasPermission() pattern already used in
-// app/dashboard/issues/page.tsx for canAssign/canManageStaff.
+// Add Person — Super Admin only (user:manage). Page-level gate is defense in
+// depth alongside the server-action check in ./actions.ts, which is the
+// check that actually matters.
+//
+// One section: Add Person — Raised By (issue_staff, no login) or Assignee
+// (assignment_users + a role='staff' login, created atomically).
+//
+// The "Assignee Logins" management panel that briefly lived here has been
+// removed by request. Only its UI is gone: the transactional query layer in
+// lib/queries/assigneeAccounts.ts is intact and still exercised by
+// scripts/verify-assignee-transactions.ts, and remains the intended entry
+// point for the separate, secure provisioning process that will give the 10
+// pre-existing assignees their logins.
 
 const backLinkClassName =
   "rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors";
@@ -29,7 +37,7 @@ export default async function AddStaffPage() {
               Not authorized
             </h1>
             <p className="text-sm text-neutral-500 dark:text-neutral-400">
-              You don&apos;t have permission to add staff.
+              You don&apos;t have permission to manage people.
             </p>
           </div>
         </div>
@@ -39,7 +47,7 @@ export default async function AddStaffPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-8">
         <div>
           <Link href="/dashboard/issues" className={`${backLinkClassName} mb-4 inline-block`}>
             ← Back to Issue List
@@ -48,8 +56,8 @@ export default async function AddStaffPage() {
             Add Person
           </h1>
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Add an issue raiser (issue_tracking.issue_staff) or an assignee
-            (issue_tracking.assignment_users). One record, one table.
+            Add a Raised By person (issue_tracking.issue_staff — no login) or an Assignee
+            (issue_tracking.assignment_users plus their own login). One person, one record.
           </p>
         </div>
 

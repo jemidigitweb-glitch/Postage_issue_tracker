@@ -5,6 +5,7 @@ import DiscussionCommentsPanel from "@/components/discussions/DiscussionComments
 import DiscussionDetail from "@/components/discussions/DiscussionDetail";
 import DiscussionParticipantsPanel from "@/components/discussions/DiscussionParticipantsPanel";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
 import { listDiscussionComments } from "@/lib/queries/discussionComments";
 import { getDiscussionGroupById } from "@/lib/queries/discussionGroups";
 import { listDiscussionParticipants } from "@/lib/queries/discussionParticipants";
@@ -71,6 +72,8 @@ export default async function DiscussionDetailPage({
 }: {
   params: Promise<{ discussionId: string }>;
 }) {
+  await redirectAssigneeToOwnIssues();
+
   const { discussionId: rawDiscussionId } = await params;
   const discussionId = decodeURIComponent(rawDiscussionId);
 

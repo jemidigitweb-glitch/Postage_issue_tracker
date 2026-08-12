@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { getCurrentUser, getIssueAccessScope, hasPermission } from "@/lib/auth";
 import type { DiscussionStatus } from "@/lib/queries/discussions";
 import {
   addDiscussionPoint,
@@ -178,7 +178,10 @@ export async function searchIssuesForLinkingAction(searchTerm: string): Promise<
   const trimmed = searchTerm.trim();
   if (!trimmed) return [];
 
-  const result = await listIssues({ search: trimmed, pageSize: 10 });
+  // Scoped to the caller — see the identical note in issue-link-actions.ts's
+  // searchIssuesForDiscussionLinkingAction.
+  const scope = await getIssueAccessScope(auth.user);
+  const result = await listIssues(scope, { search: trimmed, pageSize: 10 });
   return result.issues;
 }
 

@@ -29,8 +29,20 @@ import { verifySession } from "@/lib/session";
 //
 // /dashboard/discussions added alongside /dashboard/issues (additive — the
 // Discussions module, same session-cookie-only check, same auth system).
+//
+// /dashboard/tracker added the same way: a new Issue Tracker route, same
+// session-cookie-only check. Purely ADDITIVE — no existing prefix or matcher
+// entry is changed, so booking/couriers/reports remain outside protection
+// exactly as before, and no existing route's behaviour moves. This only
+// ensures a signed-out request to the Tracker lands on /login rather than
+// reaching the page; the page itself still enforces `tracker:view`, which is
+// the check that actually decides access.
 
-const PROTECTED_PATH_PREFIXES = ["/dashboard/issues", "/dashboard/discussions"];
+const PROTECTED_PATH_PREFIXES = [
+  "/dashboard/issues",
+  "/dashboard/discussions",
+  "/dashboard/tracker",
+];
 
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
@@ -52,5 +64,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/issues/:path*", "/dashboard/discussions/:path*"],
+  matcher: [
+    "/dashboard/issues/:path*",
+    "/dashboard/discussions/:path*",
+    "/dashboard/tracker/:path*",
+  ],
 };

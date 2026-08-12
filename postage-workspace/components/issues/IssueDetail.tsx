@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { IssueDetail as IssueDetailData } from "@/lib/queries/issues";
+import IssueAudioAttachments from "./IssueAudioAttachments";
 import IssuePriorityBadge from "./IssuePriorityBadge";
 import IssueStatusBadge from "./IssueStatusBadge";
 
@@ -182,9 +183,37 @@ function DataLinkCapsule({ value }: { value: string }) {
 // "images" joins these because it gets its own gallery section below —
 // without this it would ALSO be dumped as raw JSON under "Additional
 // details". The stored value itself is unchanged.
-const PULLED_OUT_KEYS = new Set(["member", "datalink", "images"]);
+// "attachments" joins these for the same reason "images" did: it has its own
+// section (IssueAudioAttachments) and would otherwise ALSO be dumped as raw
+// JSON under "Additional details". The stored value itself is unchanged.
+const PULLED_OUT_KEYS = new Set(["member", "datalink", "images", "attachments"]);
 
-export default function IssueDetail({ issue }: { issue: IssueDetailData }) {
+export default function IssueDetail({
+  issue,
+  // ── ASSIGNEE PORTAL additions ──────────────────────────────────────────
+  // Both are OPTIONAL and default to undefined, so a caller that does not
+  // pass them gets byte-for-byte the markup this component produced before.
+  // The Super Admin's detail page passes neither: it already shows the
+  // assignment in its own AssignmentPanel, and its layout is frozen by the
+  // no-regression requirement.
+  /** assignment_users.assignee_name for the current assignment. Read-only
+   *  text — never a picker; assignment remains a Super Admin operation. */
+  assignedToName,
+  /** issues.resolution — the historical intake-time "Fix & Action Required"
+   *  text. NOT the Stage 6 outcome (that is Final Resolution, rendered by
+   *  components/issues/IssueWorkProgress.tsx from issues.final_resolution).
+   *  These two are never merged and never written to each other. */
+  fixAndActionRequired,
+  /** True only for the Super Admin, who sees the imported historical audio
+   *  evidence. Defaults to false so the Assignee portal's audio section keeps
+   *  showing exactly what it showed before this stage. */
+  includeHistoricalAudio = false,
+}: {
+  issue: IssueDetailData;
+  assignedToName?: string | null;
+  fixAndActionRequired?: string | null;
+  includeHistoricalAudio?: boolean;
+}) {
   const entries = Object.entries(issue.extraData).filter(([, value]) => value !== null && value !== "");
 
   const imagesEntry = entries.find(([key]) => key.toLowerCase() === "images");
@@ -227,6 +256,8 @@ export default function IssueDetail({ issue }: { issue: IssueDetailData }) {
             <span className="capitalize">{issue.category}</span>
           </Field>
           {memberValue && <Field label="Member">{memberValue}</Field>}
+          {/* Rendered only when the caller supplies it — see the prop docs. */}
+          {assignedToName != null && <Field label="Assigned To">{assignedToName}</Field>}
           <Field label="Updated">
             {issue.updatedAt ? formatIsoTimestamp(issue.updatedAt) : "—"}
           </Field>
@@ -240,6 +271,18 @@ export default function IssueDetail({ issue }: { issue: IssueDetailData }) {
             {issue.description}
           </p>
         </div>
+
+        {/* Same rule: absent unless the caller asks for it. */}
+        {fixAndActionRequired != null && (
+          <div className="mt-6">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-2">
+              Fix &amp; Action Required
+            </h2>
+            <p className="text-sm text-neutral-700 dark:text-neutral-300 leading-relaxed whitespace-pre-wrap">
+              {fixAndActionRequired.trim() || "Not Available in the Evidence"}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Hidden entirely when the issue has no usable images — no empty card,
@@ -286,6 +329,16 @@ export default function IssueDetail({ issue }: { issue: IssueDetailData }) {
           </ul>
         </div>
       )}
+
+      {/* Audio evidence. Renders nothing at all unless the Issue has
+          extra_data.attachments entries of type "audio" — which no historical
+          Issue does — so this is inert for every pre-existing Issue and for
+          any Issue created without audio. Display only: no control, so it
+          changes nothing about either portal's workflow. */}
+      <IssueAudioAttachments
+        extraData={issue.extraData}
+        includeHistorical={includeHistoricalAudio}
+      />
 
       {extraEntries.length > 0 && (
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">

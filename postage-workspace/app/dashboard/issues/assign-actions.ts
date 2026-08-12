@@ -30,8 +30,12 @@ export async function assignIssuesAction(
   if (!user) {
     return { error: "You must be signed in to assign issues." };
   }
-  // Permission matrix (documentation/issue_tracker_auth_implementation_plan.md §3):
-  // admin and management hold "issue:assign"; staff does not.
+  // Permission matrix (lib/access/permissions.ts): admin and management hold
+  // "issue:assign"; the assignee role ('staff') does not, and so cannot
+  // assign, bulk-assign, or reassign — including by POSTing directly at this
+  // action with the UI controls hidden. Verified by tests/access.test.ts
+  // ("assignee cannot assign"). This is the guard; hiding the dropdown in
+  // IssueTable/AssignmentPanel is only defense in depth.
   if (!(await hasPermission(user, "issue:assign"))) {
     return { error: "You do not have permission to assign issues." };
   }

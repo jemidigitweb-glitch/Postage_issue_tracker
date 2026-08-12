@@ -6,8 +6,11 @@ import CourierStatus from "@/components/dashboard/CourierStatus";
 import UnshippedOrders from "@/components/dashboard/UnshippedOrders";
 import PostageUpdates from "@/components/dashboard/PostageUpdates";
 import OpenIssuesSummary from "@/components/dashboard/OpenIssuesSummary";
+import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  await redirectAssigneeToOwnIssues();
+
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-8">

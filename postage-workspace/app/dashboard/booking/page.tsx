@@ -1,6 +1,11 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
 
-export default function BookingPage() {
+export default async function BookingPage() {
+  // Assignees are confined to their own Issue list. Unauthenticated access to
+  // this page is unchanged (see lib/routeGuards.ts).
+  await redirectAssigneeToOwnIssues();
+
   return (
     <DashboardLayout>
       <div>

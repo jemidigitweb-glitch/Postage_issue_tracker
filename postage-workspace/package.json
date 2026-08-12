@@ -7,7 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "create-first-admin": "tsx scripts/create-first-admin.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "create-first-admin": "tsx scripts/create-first-admin.ts",
+    "verify:scope": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-issue-scope.ts",
+    "verify:assignee-tx": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-assignee-transactions.ts",
+    "verify:work-progress": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-issue-work-progress.ts",
+    "import:historical-audio": "node --import tsx --conditions=react-server --env-file=.env.local scripts/import-historical-audio.ts",
+    "verify:historical-audio": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-historical-audio.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

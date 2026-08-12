@@ -1,12 +1,53 @@
 import "server-only";
 
 import { getVerifiedClient, query } from "../db";
+import { issueScopeQueryArgs, type IssueAccessScope } from "../access/permissions";
 
 // Queries against issue_tracking.issues, joined to issue_tracking.issue_staff
 // for the staff name. Never a DELETE statement anywhere in this file —
 // "deletion" is soft (deleted_at/deleted_by columns, see
 // migration/004_soft_delete.sql); issue rows are never physically removed
 // and issue_id is never altered or renumbered.
+//
+// ── ACCESS SCOPE (Stage 3) ──────────────────────────────────────────────────
+// Every read in this file that can return an Issue takes an IssueAccessScope
+// as a REQUIRED argument — deliberately not optional and not defaulted, so a
+// new call site cannot silently get unrestricted access by forgetting it.
+// The scope is resolved server-side from the session (lib/auth.ts's
+// getIssueAccessScope) and is never taken from a query parameter, a form
+// field, or any other client-controlled input.
+//
+// The predicate is identical everywhere:
+//
+//   AND ($u::boolean OR EXISTS (
+//         SELECT 1 FROM issue_tracking.issue_assignments sa
+//         WHERE sa.issue_id = <issue> AND sa.is_current = true
+//           AND sa.assignee_id = $a::int))
+//
+// with $u/$a from issueScopeQueryArgs(). A "none" scope binds $u = false and
+// $a = NULL; `assignee_id = NULL` is never true, so the fail-closed case
+// returns zero rows through the same code path as everything else.
+//
+// Ownership is defined ONLY by a current row in issue_assignments.
+// issue_staff ("Raised By") is never used as an ownership source.
+
+/** The scope predicate, parameterized. `issueColumn` is a hard-coded column
+ *  reference supplied by the CALLING MODULE only — never user input.
+ *
+ *  Exported (Stage 6) so lib/queries/issueWorkProgress.ts scopes its reads
+ *  with the identical predicate rather than hand-rolling a second copy that
+ *  could drift. Every caller must keep passing a literal column reference. */
+export function scopePredicate(
+  issueColumn: string,
+  unrestrictedParam: number,
+  assigneeParam: number
+): string {
+  return `($${unrestrictedParam}::boolean OR EXISTS (
+            SELECT 1 FROM issue_tracking.issue_assignments sa
+            WHERE sa.issue_id = ${issueColumn}
+              AND sa.is_current = true
+              AND sa.assignee_id = $${assigneeParam}::int))`;
+}
 
 export type IssueStatus = "RED" | "AMBER" | "GREEN";
 export type IssuePriority = "critical" | "high" | "medium" | "low";
@@ -148,6 +189,46 @@ export interface IssueDetail {
   /** ISO timestamp (UTC), or null if not deleted. See
    *  migration/004_soft_delete.sql. */
   deletedAt: string | null;
+  /** issue_tracking.issues.resolution — the historical intake-time
+   *  "Fix & Action Required" text. NOT the Stage 6 outcome: that is
+   *  work.finalResolution below, and this column is never written by the
+   *  work-progress workflow.
+   *
+   *  Rendered only where a caller explicitly asks for it (the Assignee
+   *  detail view). components/issues/IssueDetail.tsx does not display it by
+   *  default, so the Super Admin's detail page output is unchanged. */
+  resolution: string | null;
+  // ── Work / implementation details (Stage 6) ──────────────────────────────
+  // Source: the five columns added by migration/012_issue_work_details.sql,
+  // plus the pre-existing (previously unused) issues.completed_date. All are
+  // null on an Issue where work has not started. Read-only here; every write
+  // goes through lib/queries/issueStatus.ts or lib/queries/issueWorkProgress.ts,
+  // which enforce ownership and atomicity.
+  //
+  // NOT to be confused with `resolution` above — that is the historical
+  // intake-time "Fix & Action Required" text and is never written by the
+  // Stage 6 workflow.
+  work: IssueWorkDetails;
+}
+
+/** The Stage 6 "WORK PROGRESS" block for one Issue. */
+export interface IssueWorkDetails {
+  /** Current "Implementation In Progress" text (RED -> AMBER, refreshed by
+   *  later progress updates). Superseded values are preserved in the work
+   *  log — see lib/queries/issueWorkProgress.ts. */
+  implementationProgress: string | null;
+  /** "Implementation Done" — what was actually fixed (set on -> GREEN). */
+  implementationDone: string | null;
+  /** "Final Resolution" — the outcome and why it is considered solved
+   *  (set on -> GREEN). */
+  finalResolution: string | null;
+  /** ISO timestamp (UTC) when work started, or null if not started. */
+  processStartedAt: string | null;
+  /** ISO timestamp (UTC) when the Issue was completed, or null. */
+  completedAt: string | null;
+  /** ISO calendar date (YYYY-MM-DD) of completion — the pre-existing
+   *  issues.completed_date column, written alongside completedAt. */
+  completedDate: string | null;
 }
 
 export interface AdjacentIssueIds {
@@ -168,6 +249,13 @@ interface IssueDetailRow {
   updated_at: string | null;
   extra_data: Record<string, unknown> | null;
   deleted_at: string | null;
+  resolution: string | null;
+  implementation_progress: string | null;
+  implementation_done: string | null;
+  final_resolution: string | null;
+  process_started_at: string | null;
+  completed_at: string | null;
+  completed_date: string | null;
 }
 
 interface IssueRow {
@@ -184,8 +272,12 @@ interface IssueRow {
 }
 
 /** Escapes ILIKE wildcard characters so a search term like "50%" or "a_b" is
- *  matched literally rather than as a pattern. */
-function escapeLikePattern(input: string): string {
+ *  matched literally rather than as a pattern.
+ *
+ *  Exported (Assignee Portal stage) so the assignee list in
+ *  lib/queries/issueAssignments.ts escapes search input exactly the same way
+ *  rather than growing a second, divergent copy. */
+export function escapeLikePattern(input: string): string {
   return input.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 }
 
@@ -203,7 +295,11 @@ function normalizeEnum<T extends string>(value: string | undefined, allowed: rea
  * unrecognized filter value can never cause a wrong write, only a wider
  * result set than intended.
  */
-export async function listIssues(params: ListIssuesParams = {}): Promise<ListIssuesResult> {
+export async function listIssues(
+  scope: IssueAccessScope,
+  params: ListIssuesParams = {}
+): Promise<ListIssuesResult> {
+  const { unrestricted, assigneeId: scopeAssigneeId } = issueScopeQueryArgs(scope);
   const page = Math.max(1, Math.floor(params.page ?? 1));
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(params.pageSize ?? DEFAULT_PAGE_SIZE)));
   const offset = (page - 1) * pageSize;
@@ -241,9 +337,21 @@ export async function listIssues(params: ListIssuesParams = {}): Promise<ListIss
        AND ($4::text IS NULL OR i.priority = $4)
        AND (($7::boolean AND i.deleted_at IS NOT NULL) OR (NOT $7::boolean AND i.deleted_at IS NULL))
        AND ($8::text IS NULL OR i.category = $8)
+       AND ${scopePredicate("i.issue_id", 9, 10)}
      ORDER BY ${orderBy}
      LIMIT $5 OFFSET $6`,
-    [search, staffCode, status, priority, pageSize, offset, showDeleted, category]
+    [
+      search,
+      staffCode,
+      status,
+      priority,
+      pageSize,
+      offset,
+      showDeleted,
+      category,
+      unrestricted,
+      scopeAssigneeId,
+    ]
   );
 
   const totalCount = result.rows[0] ? Number(result.rows[0].total_count) : 0;
@@ -299,9 +407,11 @@ export async function listCategories(): Promise<string[]> {
  */
 export async function getIssueById(
   issueId: string,
+  scope: IssueAccessScope,
   options: { includeDeleted?: boolean } = {}
 ): Promise<IssueDetail | null> {
   const includeDeleted = options.includeDeleted ?? false;
+  const { unrestricted, assigneeId } = issueScopeQueryArgs(scope);
 
   const result = await query<IssueDetailRow>(
     `SELECT
@@ -316,13 +426,21 @@ export async function getIssueById(
        to_char(i.created_date, 'YYYY-MM-DD') AS created_date,
        to_char(i.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at,
        i.extra_data,
-       to_char(i.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at
+       to_char(i.deleted_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS deleted_at,
+       i.resolution,
+       i.implementation_progress,
+       i.implementation_done,
+       i.final_resolution,
+       to_char(i.process_started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS process_started_at,
+       to_char(i.completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS completed_at,
+       to_char(i.completed_date, 'YYYY-MM-DD') AS completed_date
      FROM issue_tracking.issues i
      JOIN issue_tracking.issue_staff s ON s.staff_code = i.staff_code
      WHERE i.issue_id = $1
        AND ($2::boolean OR i.deleted_at IS NULL)
+       AND ${scopePredicate("i.issue_id", 3, 4)}
      LIMIT 1`,
-    [issueId, includeDeleted]
+    [issueId, includeDeleted, unrestricted, assigneeId]
   );
 
   const row = result.rows[0];
@@ -343,6 +461,15 @@ export async function getIssueById(
     updatedAt: row.updated_at,
     extraData: row.extra_data ?? {},
     deletedAt: row.deleted_at,
+    resolution: row.resolution,
+    work: {
+      implementationProgress: row.implementation_progress,
+      implementationDone: row.implementation_done,
+      finalResolution: row.final_resolution,
+      processStartedAt: row.process_started_at,
+      completedAt: row.completed_at,
+      completedDate: row.completed_date,
+    },
   };
 }
 
@@ -354,21 +481,36 @@ export async function getIssueById(
  * returns the nearest neighbors on either side, which is harmless since the
  * detail page only renders these as "Previous"/"Next" links.
  */
-export async function getAdjacentIssueIds(issueId: string): Promise<AdjacentIssueIds> {
+export async function getAdjacentIssueIds(
+  issueId: string,
+  scope: IssueAccessScope
+): Promise<AdjacentIssueIds> {
+  const { unrestricted, assigneeId } = issueScopeQueryArgs(scope);
+
+  // Scoped identically to the list and the detail page: an assignee can only
+  // ever step to another Issue that is currently assigned to them, so
+  // Previous/Next can never be used to discover someone else's issue_id.
   const [previousResult, nextResult] = await Promise.all([
+    // The `i` alias is REQUIRED, not cosmetic: an unqualified `issue_id`
+    // inside the EXISTS subquery would resolve to the subquery's own
+    // issue_tracking.issue_assignments.issue_id column, making the
+    // correlation `sa.issue_id = sa.issue_id` — trivially true, and the
+    // scope filter would silently do nothing. Always correlate on i.issue_id.
     query<{ issue_id: string }>(
-      `SELECT issue_id FROM issue_tracking.issues
-       WHERE issue_id < $1 AND deleted_at IS NULL
-       ORDER BY issue_id DESC
+      `SELECT i.issue_id FROM issue_tracking.issues i
+       WHERE i.issue_id < $1 AND i.deleted_at IS NULL
+         AND ${scopePredicate("i.issue_id", 2, 3)}
+       ORDER BY i.issue_id DESC
        LIMIT 1`,
-      [issueId]
+      [issueId, unrestricted, assigneeId]
     ),
     query<{ issue_id: string }>(
-      `SELECT issue_id FROM issue_tracking.issues
-       WHERE issue_id > $1 AND deleted_at IS NULL
-       ORDER BY issue_id ASC
+      `SELECT i.issue_id FROM issue_tracking.issues i
+       WHERE i.issue_id > $1 AND i.deleted_at IS NULL
+         AND ${scopePredicate("i.issue_id", 2, 3)}
+       ORDER BY i.issue_id ASC
        LIMIT 1`,
-      [issueId]
+      [issueId, unrestricted, assigneeId]
     ),
   ]);
 
@@ -384,6 +526,10 @@ export interface CreateIssueInput {
   description: string;
   category: string;
   priority: IssuePriority | null;
+  /** issues.resolution — the historical intake-time "Fix & Action Required".
+   *  Optional. NOT final_resolution, which is the Stage 6 completion outcome
+   *  and is written only by the work-progress workflow. */
+  resolution?: string | null;
   /** Anything collected by the form that doesn't map to a real column. */
   extraData?: Record<string, unknown>;
 }
@@ -437,8 +583,8 @@ export async function createIssue(input: CreateIssueInput): Promise<string> {
 
     await client.query(
       `INSERT INTO issue_tracking.issues
-         (issue_id, staff_code, issue_title, issue_description, category, status, priority, created_date, extra_data)
-       VALUES ($1, $2, $3, $4, $5, 'RED', $6, CURRENT_DATE, $7::jsonb)`,
+         (issue_id, staff_code, issue_title, issue_description, category, status, priority, resolution, created_date, extra_data)
+       VALUES ($1, $2, $3, $4, $5, 'RED', $6, $7, CURRENT_DATE, $8::jsonb)`,
       [
         issueId,
         input.staffCode,
@@ -446,6 +592,7 @@ export async function createIssue(input: CreateIssueInput): Promise<string> {
         input.description,
         input.category,
         input.priority,
+        input.resolution ?? null,
         JSON.stringify(input.extraData ?? {}),
       ]
     );

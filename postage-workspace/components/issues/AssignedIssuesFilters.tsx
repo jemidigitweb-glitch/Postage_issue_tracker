@@ -19,11 +19,17 @@ export default function AssignedIssuesFilters({
   assigneeId,
   status,
   hasActiveFilters,
+  showAssigneeFilter = true,
 }: {
   assignmentUsers: AssignmentUser[];
   assigneeId: string;
   status: string;
   hasActiveFilters: boolean;
+  /** False for an assignee: they may only ever see their own Issues, so an
+   *  "Assigned To" picker would be meaningless. Hiding it is cosmetic — the
+   *  server discards any `assignee` value such a user submits regardless
+   *  (see app/dashboard/issues/page.tsx and lib/queries/issueAssignments.ts). */
+  showAssigneeFilter?: boolean;
 }) {
   // Keyed off the current filter values so the form remounts (and its
   // uncontrolled <select> defaultValues re-sync) whenever the URL's filters
@@ -42,25 +48,27 @@ export default function AssignedIssuesFilters({
           instead of falling back to the default tab. */}
       <input type="hidden" name="tab" value="assigned" />
 
-      <div className="flex flex-col gap-1">
-        <label htmlFor="assignee" className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
-          Assigned To
-        </label>
-        <select
-          id="assignee"
-          name="assignee"
-          defaultValue={assigneeId}
-          onChange={submitOnChange}
-          className={selectClassName}
-        >
-          <option value="">Everyone</option>
-          {assignmentUsers.map((user) => (
-            <option key={user.assigneeId} value={user.assigneeId}>
-              {user.assigneeName}
-            </option>
-          ))}
-        </select>
-      </div>
+      {showAssigneeFilter && (
+        <div className="flex flex-col gap-1">
+          <label htmlFor="assignee" className="text-xs font-medium text-neutral-500 dark:text-neutral-400">
+            Assigned To
+          </label>
+          <select
+            id="assignee"
+            name="assignee"
+            defaultValue={assigneeId}
+            onChange={submitOnChange}
+            className={selectClassName}
+          >
+            <option value="">Everyone</option>
+            {assignmentUsers.map((user) => (
+              <option key={user.assigneeId} value={user.assigneeId}>
+                {user.assigneeName}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1">
         <label htmlFor="status" className="text-xs font-medium text-neutral-500 dark:text-neutral-400">

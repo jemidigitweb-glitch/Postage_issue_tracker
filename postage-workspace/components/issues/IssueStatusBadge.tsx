@@ -11,7 +11,24 @@ const STATUS_STYLES: Record<IssueStatus, string> = {
   GREEN: "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400",
 };
 
-export default function IssueStatusBadge({ status }: { status: IssueStatus }) {
+export default function IssueStatusBadge({
+  status,
+  /**
+   * Optional display text. Defaults to the raw database value, so every
+   * existing call site — the Super Admin's Issues table, the Assigned Issues
+   * cards, the Assignee's Assigned Issues table — renders exactly the markup
+   * it always has.
+   *
+   * The Assignee's Issue-detail status block passes the workflow wording
+   * ("Not Solved" / "Partially Solved" / "Completely Solved") so it can reuse
+   * this badge's colours, radius, and typography instead of hand-rolling a
+   * second, drifting pill. Only the text differs; the styling is identical.
+   */
+  label,
+}: {
+  status: IssueStatus;
+  label?: string;
+}) {
   return (
     <span
       className={[
@@ -19,7 +36,7 @@ export default function IssueStatusBadge({ status }: { status: IssueStatus }) {
         STATUS_STYLES[status],
       ].join(" ")}
     >
-      {status}
+      {label ?? status}
     </span>
   );
 }

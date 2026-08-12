@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { getCurrentUser, getIssueAccessScope, hasPermission } from "@/lib/auth";
 import {
   createIssueForDiscussion,
   DiscussionNotFoundError,
@@ -44,7 +44,14 @@ export async function searchIssuesForDiscussionLinkingAction(searchTerm: string)
   const trimmed = searchTerm.trim();
   if (!trimmed) return [];
 
-  const result = await listIssues({ search: trimmed, pageSize: 10 });
+  // Scoped to the caller, like every other Issue read. In practice only
+  // admin/management reach this line (discussion:link_issue), and both hold
+  // issue:view_all, so the scope resolves to "all" and the search behaves
+  // exactly as before. Passing the real scope rather than hardcoding "all"
+  // means this search can never become a way to read Issues that the caller
+  // is not otherwise allowed to see.
+  const scope = await getIssueAccessScope(auth.user);
+  const result = await listIssues(scope, { search: trimmed, pageSize: 10 });
   return result.issues;
 }
 

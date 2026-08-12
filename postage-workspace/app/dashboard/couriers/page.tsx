@@ -1,6 +1,9 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
 
-export default function CouriersPage() {
+export default async function CouriersPage() {
+  await redirectAssigneeToOwnIssues();
+
   return (
     <DashboardLayout>
       <div>
