@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 
+import { formatZonedTimestamp } from "@/lib/datetime";
 import type { DiscussionComment } from "@/lib/queries/discussionComments";
 import {
   addDiscussionCommentAction,
@@ -10,11 +11,10 @@ import {
 
 const initialState: CommentActionState = {};
 
+// Genuine timestamp — converted to Asia/Colombo for display, same as every
+// other converted timestamp in the application.
 function formatIsoTimestamp(isoTimestamp: string): string {
-  const [datePart, timePart] = isoTimestamp.split("T");
-  const [year, month, day] = datePart.split("-");
-  const time = timePart.replace("Z", "").slice(0, 5);
-  return `${day}/${month}/${year} ${time} UTC`;
+  return formatZonedTimestamp(isoTimestamp);
 }
 
 export default function DiscussionCommentsPanel({

@@ -2,14 +2,16 @@
 
 import { useActionState } from "react";
 
+import { formatZonedDate } from "@/lib/datetime";
 import type { AssignmentUser } from "@/lib/queries/assignmentUsers";
 import { assignIssuesAction, type AssignBulkState } from "@/app/dashboard/issues/assign-actions";
 
 const initialState: AssignBulkState = {};
 
+// A genuine timestamp shown as a bare date — converted to Asia/Colombo so a
+// late-evening UTC stamp shows the Sri Lankan calendar day, not the one before.
 function formatIsoTimestampAsDate(isoTimestamp: string): string {
-  const [year, month, day] = isoTimestamp.split("T")[0].split("-");
-  return `${day}/${month}/${year}`;
+  return formatZonedDate(isoTimestamp);
 }
 
 // An issue can only be assigned once — there is no reassignment from the

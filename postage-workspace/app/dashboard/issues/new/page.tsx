@@ -60,7 +60,7 @@ export default async function NewIssuePage() {
             New Issue
           </h1>
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Create a new issue in issue_tracking.issues.
+            Create a new issue.
           </p>
         </div>
 

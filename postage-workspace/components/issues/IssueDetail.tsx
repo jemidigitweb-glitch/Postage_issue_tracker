@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { formatZonedTimestamp } from "@/lib/datetime";
 import type { IssueDetail as IssueDetailData } from "@/lib/queries/issues";
 import IssueAudioAttachments from "./IssueAudioAttachments";
 import IssuePriorityBadge from "./IssuePriorityBadge";
@@ -16,17 +17,17 @@ import IssueStatusBadge from "./IssueStatusBadge";
 // capsule instead of a raw entry); everything else in extraData still
 // renders in "Additional details", unchanged in substance.
 
+// Genuine DATE column (issues.created_date) — no time-of-day, so no
+// timezone conversion. Formatting only.
 function formatIsoDate(isoDate: string): string {
   const [year, month, day] = isoDate.split("-");
   return `${day}/${month}/${year}`;
 }
 
+// Genuine timestamp — converted to Asia/Colombo for display.
+// e.g. "2026-08-12T09:46:00Z" -> "12/08/2026 15:16 Asia/Colombo (UTC+05:30)"
 function formatIsoTimestamp(isoTimestamp: string): string {
-  // e.g. "2026-06-25T18:30:00Z" -> "25/06/2026 18:30 UTC"
-  const [datePart, timePart] = isoTimestamp.split("T");
-  const [year, month, day] = datePart.split("-");
-  const time = timePart.replace("Z", "").slice(0, 5);
-  return `${day}/${month}/${year} ${time} UTC`;
+  return formatZonedTimestamp(isoTimestamp);
 }
 
 // Title-cases each word so keys like "whatIsHappening" / "root_cause" read

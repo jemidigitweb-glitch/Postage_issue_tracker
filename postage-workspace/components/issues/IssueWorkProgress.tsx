@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { WORK_DETAIL_LABELS } from "@/lib/access/issueWorkDetails";
+import { formatZonedTimestamp } from "@/lib/datetime";
 import { cardClassName, sectionHeadingClassName } from "@/components/common/formStyles";
 import type { IssueStatus, IssueWorkDetails } from "@/lib/queries/issues";
 import type { IssueProgressEntry } from "@/lib/queries/issueWorkProgress";
@@ -37,12 +38,10 @@ import IssueProgressUpdateForm from "./IssueProgressUpdateForm";
 // Everything else on the detail page — Description, Images/Attachments,
 // Additional details, assignment panel — is untouched by this component.
 
+// Genuine timestamp — converted to Asia/Colombo for display.
+// e.g. "2026-08-12T09:46:00Z" -> "12/08/2026 15:16 Asia/Colombo (UTC+05:30)"
 function formatIsoTimestamp(isoTimestamp: string): string {
-  // e.g. "2026-06-25T18:30:00Z" -> "25/06/2026 18:30 UTC"
-  const [datePart, timePart] = isoTimestamp.split("T");
-  const [year, month, day] = datePart.split("-");
-  const time = (timePart ?? "").replace("Z", "").slice(0, 5);
-  return `${day}/${month}/${year} ${time} UTC`;
+  return formatZonedTimestamp(isoTimestamp);
 }
 
 function Block({ title, children }: { title: string; children: ReactNode }) {

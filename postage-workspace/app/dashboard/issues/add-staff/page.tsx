@@ -55,10 +55,6 @@ export default async function AddStaffPage() {
           <h1 className="text-2xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 mb-1">
             Add Person
           </h1>
-          <p className="text-sm text-neutral-500 dark:text-neutral-400">
-            Add a Raised By person (issue_tracking.issue_staff — no login) or an Assignee
-            (issue_tracking.assignment_users plus their own login). One person, one record.
-          </p>
         </div>
 
         <AddStaffForm />

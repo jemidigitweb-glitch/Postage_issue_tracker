@@ -128,7 +128,8 @@ describe("Super Admin markup — original content is intact", () => {
     "Member",
     "Laksika",
     "Updated",
-    "12/08/2026 09:15 UTC",
+    // updatedAt is stored as 09:15 UTC and DISPLAYED in Asia/Colombo.
+    "12/08/2026 14:45 Asia/Colombo (UTC+05:30)",
     "Description",
     "The DHL label printed without a tracking barcode.",
     "Additional details",

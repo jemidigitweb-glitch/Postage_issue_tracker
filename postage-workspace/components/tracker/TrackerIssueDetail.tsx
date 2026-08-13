@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { formatZonedTimestamp } from "@/lib/datetime";
 import type { TrackerIssueDetail as TrackerIssueDetailData } from "@/lib/queries/tracker";
 import { cardClassName, sectionHeadingClassName } from "@/components/common/formStyles";
 import IssuePriorityBadge from "@/components/issues/IssuePriorityBadge";
@@ -23,12 +24,10 @@ function formatIsoDate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
+// Genuine timestamp — converted to Asia/Colombo for display.
+// e.g. "2026-08-12T09:46:00Z" -> "12/08/2026 15:16 Asia/Colombo (UTC+05:30)"
 function formatIsoTimestamp(isoTimestamp: string): string {
-  // e.g. "2026-06-25T18:30:00Z" -> "25/06/2026 18:30 UTC"
-  const [datePart, timePart] = isoTimestamp.split("T");
-  const [year, month, day] = datePart.split("-");
-  const time = (timePart ?? "").replace("Z", "").slice(0, 5);
-  return `${day}/${month}/${year} ${time} UTC`;
+  return formatZonedTimestamp(isoTimestamp);
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

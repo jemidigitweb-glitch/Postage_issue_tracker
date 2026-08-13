@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { formatZonedDate, formatZonedTimestamp } from "@/lib/datetime";
 import type { TrackerIssueRow } from "@/lib/queries/tracker";
 import type { TrackingState } from "@/lib/access/tracker";
 import { EyeIcon } from "@/components/discussions/icons";
@@ -30,15 +31,16 @@ function formatIsoDate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
+// A genuine timestamp shown as a bare date — converted to Asia/Colombo so a
+// late-evening UTC stamp shows the Sri Lankan calendar day, not the one before.
 function formatIsoTimestampAsDate(isoTimestamp: string): string {
-  return formatIsoDate(isoTimestamp.split("T")[0]);
+  return formatZonedDate(isoTimestamp);
 }
 
+// Genuine timestamp — converted to Asia/Colombo for display.
+// e.g. "2026-08-12T09:46:00Z" -> "12/08/2026 15:16 Asia/Colombo (UTC+05:30)"
 function formatIsoTimestamp(isoTimestamp: string): string {
-  const [datePart, timePart] = isoTimestamp.split("T");
-  const [year, month, day] = datePart.split("-");
-  const time = (timePart ?? "").replace("Z", "").slice(0, 5);
-  return `${day}/${month}/${year} ${time} UTC`;
+  return formatZonedTimestamp(isoTimestamp);
 }
 
 // Tracking State is a MANAGEMENT signal and is shown ALONGSIDE the real

@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { formatZonedTimestamp } from "@/lib/datetime";
 import type { TrackerAssigneeSummary } from "@/lib/queries/tracker";
 
 // SUPER ADMIN TRACKER — Staff Tracking.
@@ -24,12 +25,10 @@ function formatIsoDate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
+// Genuine timestamp — converted to Asia/Colombo for display.
+// e.g. "2026-08-12T09:46:00Z" -> "12/08/2026 15:16 Asia/Colombo (UTC+05:30)"
 function formatIsoTimestamp(isoTimestamp: string): string {
-  // e.g. "2026-06-25T18:30:00Z" -> "25/06/2026 18:30 UTC"
-  const [datePart, timePart] = isoTimestamp.split("T");
-  const [year, month, day] = datePart.split("-");
-  const time = (timePart ?? "").replace("Z", "").slice(0, 5);
-  return `${day}/${month}/${year} ${time} UTC`;
+  return formatZonedTimestamp(isoTimestamp);
 }
 
 // ── Compact + sticky header ─────────────────────────────────────────────────

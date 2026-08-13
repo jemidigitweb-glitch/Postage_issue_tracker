@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import Link from "next/link";
 
+import { formatZonedDate } from "@/lib/datetime";
 import type { AssignedIssueCardData } from "@/lib/queries/issueAssignments";
 import type { IssueStatus } from "@/lib/queries/issues";
 import { WORK_DETAIL_LABELS } from "@/lib/access/issueWorkDetails";
@@ -39,8 +40,10 @@ function formatIsoDate(isoDate: string): string {
   return `${day}/${month}/${year}`;
 }
 
+// A genuine timestamp shown as a bare date — converted to Asia/Colombo so a
+// late-evening UTC stamp shows the Sri Lankan calendar day, not the one before.
 function formatIsoTimestampAsDate(isoTimestamp: string): string {
-  return formatIsoDate(isoTimestamp.split("T")[0]);
+  return formatZonedDate(isoTimestamp);
 }
 
 function Section({ title, children }: { title: string; children: string }) {

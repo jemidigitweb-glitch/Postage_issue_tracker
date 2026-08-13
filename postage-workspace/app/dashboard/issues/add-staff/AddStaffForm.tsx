@@ -64,11 +64,12 @@ export default function AddStaffForm() {
           <option value="staff">Raised By</option>
           <option value="assignee">Assignee</option>
         </select>
-        <p className={hintClassName}>
-          {isAssignee
-            ? "Creates an assignee and their individual login. They can sign in and work only the Issues assigned to them."
-            : "Creates an issue raiser only. No login, no email, no username — Raised By never owns an Issue."}
-        </p>
+        {isAssignee && (
+          <p className={hintClassName}>
+            Creates an assignee and their individual login. They can sign in and work only the Issues
+            assigned to them.
+          </p>
+        )}
       </div>
 
       {/* ── RAISED BY fields ─────────────────────────────────────────────── */}
@@ -88,7 +89,7 @@ export default function AddStaffForm() {
             placeholder="e.g. ND, SA, ST"
             className={`${inputClassName} uppercase`}
           />
-          <p className={hintClassName}>1-10 letters/numbers. Automatically uppercased. Must be unique.</p>
+          <p className={hintClassName}>1-10 letters/numbers. Automatically uppercased.</p>
         </div>
       )}
 

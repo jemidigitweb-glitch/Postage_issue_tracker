@@ -1,6 +1,7 @@
 import type { IssueStatus } from "@/lib/queries/issues";
 import type { TrackerTimelineEvent } from "@/lib/queries/tracker";
 import { actorLabel, eventLabel, UNKNOWN_ACTOR } from "@/lib/access/trackerTimeline";
+import { formatZonedDate, formatZonedTimeWithSeconds } from "@/lib/datetime";
 import { cardClassName, sectionHeadingClassName } from "@/components/common/formStyles";
 
 // SUPER ADMIN TRACKER — the chronological workflow history.
@@ -35,15 +36,14 @@ const KIND_DOT: Record<TrackerTimelineEvent["kind"], string> = {
   note: "bg-neutral-300 dark:bg-neutral-600",
 };
 
+// Both halves come from the same Asia/Colombo conversion, so the date and the
+// time on an entry always belong to the same converted instant.
 function formatDate(isoTimestamp: string): string {
-  const [datePart] = isoTimestamp.split("T");
-  const [year, month, day] = datePart.split("-");
-  return `${day}/${month}/${year}`;
+  return formatZonedDate(isoTimestamp);
 }
 
 function formatTime(isoTimestamp: string): string {
-  const [, timePart] = isoTimestamp.split("T");
-  return `${(timePart ?? "").replace("Z", "").slice(0, 8)} UTC`;
+  return formatZonedTimeWithSeconds(isoTimestamp);
 }
 
 /** How the `detail` column should be introduced, per kind — so a bare name

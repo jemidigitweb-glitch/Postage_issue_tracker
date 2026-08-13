@@ -132,7 +132,7 @@ export default function NewIssueForm({
               <option value="medium">Medium</option>
               <option value="low">Low</option>
             </select>
-            <p className={hintClassName}>Optional — most existing Issues leave this unset.</p>
+            <p className={hintClassName}>Optional.</p>
           </div>
         </div>
       </section>
@@ -178,9 +178,7 @@ export default function NewIssueForm({
             placeholder="https://…"
             className={inputClassName}
           />
-          <p className={hintClassName}>
-            Link to supporting data elsewhere. Shown on the Issue as a &ldquo;View Data&rdquo; button.
-          </p>
+          <p className={hintClassName}>Link to supporting data elsewhere.</p>
         </div>
       </section>
 
@@ -201,7 +199,6 @@ export default function NewIssueForm({
             What Is Happening
           </label>
           <textarea id="whatIsHappening" name="whatIsHappening" rows={4} className={inputClassName} />
-          <p className={hintClassName}>The observed behaviour, in operational terms.</p>
         </div>
 
         <div>
@@ -222,10 +219,6 @@ export default function NewIssueForm({
             Fix &amp; Action Required
           </label>
           <textarea id="resolution" name="resolution" rows={4} className={inputClassName} />
-          <p className={hintClassName}>
-            The recommended fix at intake. This is separate from the Final Resolution the assignee
-            records when the Issue is completed.
-          </p>
         </div>
       </section>
 
