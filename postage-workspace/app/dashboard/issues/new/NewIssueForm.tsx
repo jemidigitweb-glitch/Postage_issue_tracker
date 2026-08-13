@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState, type ReactNode } from "react";
 
 import type { StaffRecord } from "@/lib/queries/staff";
 import {
@@ -46,6 +46,126 @@ function Required() {
   return <span className="text-red-600 dark:text-red-400"> *</span>;
 }
 
+/**
+ * One collapsed-by-default section. Used twice — Additional Details and
+ * Evidence / Attachments — and each use owns its own independent state, so
+ * opening one can never open or close the other. There is no shared context
+ * and no sibling coordination: two instances, two `useState`s.
+ *
+ * ── WHY THE PANEL IS HIDDEN, NOT UNMOUNTED ──────────────────────────────────
+ * The panel is hidden with the `hidden` attribute while everything inside it
+ * stays mounted in the DOM at all times. Three consequences, all deliberate:
+ *
+ *  1. Typed values survive collapsing and re-opening — the elements holding
+ *     them are never destroyed.
+ *  2. A SELECTED FILE survives too. A file input's FileList lives on the DOM
+ *     node and cannot be restored by React; unmounting one silently discards
+ *     the user's choice. The same applies to the recorder's own React state,
+ *     its in-memory blob, and its preview object URL — VoiceRecorder's unmount
+ *     cleanup revokes that URL and stops the stream, so unmounting it would
+ *     throw away a recording the user had already made.
+ *  3. The FormData this form submits is byte-for-byte what it was before these
+ *     controls existed — every field is present and named whether its section
+ *     is open or closed. A CSS-hidden input is still submitted (unlike a
+ *     disabled one), so the Server Action, its validation, the upload path and
+ *     every mapping see exactly what they saw before.
+ *
+ * ── THE "Added" INDICATOR ───────────────────────────────────────────────────
+ * Rather than controlling any field, the panel listens for events bubbling up
+ * from its own subtree and then asks the DOM whether ANY control inside it now
+ * holds a value. Every field stays UNCONTROLLED — no `value` prop anywhere —
+ * so this state can never become the source of truth for what gets submitted;
+ * it only decides whether a badge is painted.
+ *
+ * `onClick` is listened to as well as `onChange` because "Attach recording"
+ * populates its file input programmatically (via DataTransfer), which fires no
+ * change event. The click bubbles after the recorder's own handler has run, so
+ * by then the input reflects the attachment.
+ *
+ * ── ACCESSIBILITY ───────────────────────────────────────────────────────────
+ * A heading containing a real <button type="button"> — the standard accordion
+ * pattern. It is focusable and operable with Enter and Space for free, and
+ * `type="button"` means it can never submit the form. State is exposed with
+ * aria-expanded, the panel is wired to it with aria-controls, and the panel is
+ * a region labelled by the header text. The chevron is decorative and marked
+ * aria-hidden.
+ *
+ * No new dependency: local state and one DOM query.
+ */
+function CollapsibleSection({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const [hasContent, setHasContent] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const panelId = `${id}-panel`;
+  const labelId = `${id}-label`;
+
+  // React's synthetic change event bubbles, so one handler on the panel sees
+  // every input, textarea and select inside it — including on each keystroke.
+  function recomputeHasContent() {
+    const panel = panelRef.current;
+    if (!panel) {
+      return;
+    }
+    const fields = panel.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+      "input, textarea, select"
+    );
+    setHasContent(Array.from(fields).some((field) => field.value.trim() !== ""));
+  }
+
+  return (
+    <section className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900">
+      <h2>
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((wasOpen) => !wasOpen)}
+          className="w-full flex items-center justify-between gap-3 rounded-xl px-5 py-4 text-left hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors"
+        >
+          <span id={labelId} className={sectionHeadingClassName}>
+            {title}
+          </span>
+          <span className="flex items-center gap-2">
+            {hasContent && (
+              <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                Added
+              </span>
+            )}
+            <span aria-hidden="true" className="text-xs text-neutral-400 dark:text-neutral-500">
+              {open ? "▴" : "▾"}
+            </span>
+          </span>
+        </button>
+      </h2>
+
+      {/* `hidden` (the attribute) rather than conditional rendering — see the
+          note above. It also removes the panel from the accessibility tree
+          while collapsed, which hiding with CSS alone would not. */}
+      <div
+        id={panelId}
+        ref={panelRef}
+        role="region"
+        aria-labelledby={labelId}
+        hidden={!open}
+        onChange={recomputeHasContent}
+        onClick={recomputeHasContent}
+        className="px-5 pb-5 flex flex-col gap-4"
+      >
+        {children}
+      </div>
+    </section>
+  );
+}
+
 export default function NewIssueForm({
   staff,
   categories,
@@ -65,10 +185,12 @@ export default function NewIssueForm({
 
   return (
     <form action={formAction} className="flex flex-col gap-5 max-w-3xl">
-      {/* ── ISSUE DETAILS ──────────────────────────────────────────────── */}
+      {/* ── MAIN FIELDS — ALWAYS VISIBLE ───────────────────────────────────
+          Deliberately carries NO section heading: these four fields are the
+          form, and a label above them ("Required Information" or similar)
+          would be a caption for the obvious. Required validation and every
+          field name are exactly as they were. */}
       <section className={sectionClassName}>
-        <h2 className={sectionHeadingClassName}>Issue Details</h2>
-
         <div>
           <label htmlFor="staffCode" className={labelClassName}>
             Raised By
@@ -98,48 +220,62 @@ export default function NewIssueForm({
           <input id="title" name="title" type="text" required maxLength={200} className={inputClassName} />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="category" className={labelClassName}>
-              Domain
-              <Required />
-            </label>
-            <input
-              id="category"
-              name="category"
-              type="text"
-              required
-              maxLength={50}
-              list="issue-categories"
-              placeholder="e.g. postage, listing, purchase"
-              className={inputClassName}
-            />
-            <datalist id="issue-categories">
-              {categories.map((category) => (
-                <option key={category} value={category} />
-              ))}
-            </datalist>
-          </div>
+        <div>
+          <label htmlFor="category" className={labelClassName}>
+            Domain
+            <Required />
+          </label>
+          <input
+            id="category"
+            name="category"
+            type="text"
+            required
+            maxLength={50}
+            list="issue-categories"
+            placeholder="e.g. postage, listing, purchase"
+            className={inputClassName}
+          />
+          <datalist id="issue-categories">
+            {categories.map((category) => (
+              <option key={category} value={category} />
+            ))}
+          </datalist>
+        </div>
 
-          <div>
-            <label htmlFor="priority" className={labelClassName}>
-              Priority
-            </label>
-            <select id="priority" name="priority" defaultValue="" className={inputClassName}>
-              <option value="">Not set</option>
-              <option value="critical">Critical</option>
-              <option value="high">High</option>
-              <option value="medium">Medium</option>
-              <option value="low">Low</option>
-            </select>
-            <p className={hintClassName}>Optional.</p>
-          </div>
+        <div>
+          <label htmlFor="description" className={labelClassName}>
+            Description
+            <Required />
+          </label>
+          <textarea id="description" name="description" required rows={6} className={inputClassName} />
         </div>
       </section>
 
-      {/* ── SOURCE / CONTEXT ───────────────────────────────────────────── */}
-      <section className={sectionClassName}>
-        <h2 className={sectionHeadingClassName}>Source / Context</h2>
+      {/* ── ADDITIONAL DETAILS — COLLAPSED BY DEFAULT ──────────────────────
+          Every OPTIONAL field, in one place, immediately after Description.
+          None of them became required, none was renamed, and none changed
+          where it is stored:
+            priority        -> issues.priority
+            member          -> extra_data.member
+            sku             -> extra_data.sku
+            dataLink        -> extra_data.dataLink
+            whatIsHappening -> extra_data.whatIsHappening
+            rootCause       -> extra_data.rootCause
+            resolution      -> issues.resolution (NOT final_resolution) */}
+      <CollapsibleSection id="additional-details" title="Additional Details">
+        <div>
+          <label htmlFor="priority" className={labelClassName}>
+            Priority
+          </label>
+          <select id="priority" name="priority" defaultValue="" className={inputClassName}>
+            <option value="">Not set</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+          <p className={hintClassName}>Optional.</p>
+        </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -180,19 +316,6 @@ export default function NewIssueForm({
           />
           <p className={hintClassName}>Link to supporting data elsewhere.</p>
         </div>
-      </section>
-
-      {/* ── DESCRIPTION ────────────────────────────────────────────────── */}
-      <section className={sectionClassName}>
-        <h2 className={sectionHeadingClassName}>Description</h2>
-
-        <div>
-          <label htmlFor="description" className={labelClassName}>
-            Description
-            <Required />
-          </label>
-          <textarea id="description" name="description" required rows={6} className={inputClassName} />
-        </div>
 
         <div>
           <label htmlFor="whatIsHappening" className={labelClassName}>
@@ -208,11 +331,6 @@ export default function NewIssueForm({
           <textarea id="rootCause" name="rootCause" rows={4} className={inputClassName} />
           <p className={hintClassName}>Why it is happening, if known.</p>
         </div>
-      </section>
-
-      {/* ── FIX / ACTION REQUIRED ──────────────────────────────────────── */}
-      <section className={sectionClassName}>
-        <h2 className={sectionHeadingClassName}>Fix / Action Required</h2>
 
         <div>
           <label htmlFor="resolution" className={labelClassName}>
@@ -220,12 +338,20 @@ export default function NewIssueForm({
           </label>
           <textarea id="resolution" name="resolution" rows={4} className={inputClassName} />
         </div>
-      </section>
+      </CollapsibleSection>
 
-      {/* ── EVIDENCE / ATTACHMENTS ─────────────────────────────────────── */}
-      <section className={sectionClassName}>
-        <h2 className={sectionHeadingClassName}>Evidence / Attachments</h2>
+      {/* ── EVIDENCE / ATTACHMENTS — COLLAPSED BY DEFAULT ──────────────────
+          A SEPARATE, independent section — deliberately NOT inside Additional
+          Details. Its contents are unchanged: the same two file inputs with
+          the same names, accept lists and limits, and the same VoiceRecorder
+          with all of its record / stop / preview / attach / remove / re-record
+          behaviour. Only the wrapper around them changed.
 
+          Everything here stays MOUNTED while collapsed (see CollapsibleSection
+          above) — a file input's FileList and the recorder's blob, preview URL
+          and attached state cannot survive an unmount, so collapsing must
+          never be allowed to destroy them. */}
+      <CollapsibleSection id="evidence" title="Evidence / Attachments">
         <div>
           <label htmlFor="imageFiles" className={labelClassName}>
             Images (JPG / JPEG)
@@ -262,7 +388,7 @@ export default function NewIssueForm({
         </div>
 
         <VoiceRecorder inputName="voiceRecording" />
-      </section>
+      </CollapsibleSection>
 
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
         New Issues are always created with status <span className="font-semibold">RED</span> and a
