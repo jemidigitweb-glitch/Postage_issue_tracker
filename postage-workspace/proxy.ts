@@ -38,10 +38,18 @@ import { verifySession } from "@/lib/session";
 // reaching the page; the page itself still enforces `tracker:view`, which is
 // the check that actually decides access.
 
+// /dashboard/account-settings added the same way again: a new Issue Tracker
+// route, same session-cookie-only check, purely ADDITIVE. No existing prefix
+// or matcher entry changes, so booking/couriers/reports stay outside
+// protection exactly as before. This only ensures a signed-out request lands
+// on /login; the page itself resolves the user and redirects anyone who is
+// not an Assignee, and its Server Actions re-check independently.
+
 const PROTECTED_PATH_PREFIXES = [
   "/dashboard/issues",
   "/dashboard/discussions",
   "/dashboard/tracker",
+  "/dashboard/account-settings",
 ];
 
 export async function proxy(request: NextRequest) {
@@ -68,5 +76,6 @@ export const config = {
     "/dashboard/issues/:path*",
     "/dashboard/discussions/:path*",
     "/dashboard/tracker/:path*",
+    "/dashboard/account-settings/:path*",
   ],
 };

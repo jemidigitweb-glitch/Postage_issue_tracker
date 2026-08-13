@@ -11,6 +11,7 @@
     "create-first-admin": "tsx scripts/create-first-admin.ts",
     "verify:scope": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-issue-scope.ts",
     "verify:assignee-tx": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-assignee-transactions.ts",
+    "verify:account-settings": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-account-settings.ts",
     "verify:work-progress": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-issue-work-progress.ts",
     "import:historical-audio": "node --import tsx --conditions=react-server --env-file=.env.local scripts/import-historical-audio.ts",
     "verify:historical-audio": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-historical-audio.ts"

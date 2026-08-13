@@ -37,8 +37,12 @@ export const PASSWORD_MIN_LENGTH = 8;
 
 /** Letters, digits, dot, underscore, hyphen. No spaces, no '@' (so a
  *  username can never be mistaken for an email at the login prompt, where
- *  findUserForLogin() accepts either). */
-const USERNAME_PATTERN = /^[A-Za-z0-9._-]+$/;
+ *  findUserForLogin() accepts either).
+ *
+ *  Exported so lib/access/accountSettings.ts (an Assignee editing their own
+ *  username) applies the SAME rule rather than growing a second, divergent
+ *  copy. Export only — the value and every rule below are unchanged. */
+export const USERNAME_PATTERN = /^[A-Za-z0-9._-]+$/;
 
 /**
  * Deliberately conservative: a non-empty local part, a single '@', a domain
@@ -46,8 +50,11 @@ const USERNAME_PATTERN = /^[A-Za-z0-9._-]+$/;
  * This is a sanity check for typos, not an RFC 5322 implementation — the
  * authoritative test of an address is whether mail reaches it, which is out
  * of scope for this stage (no email is sent).
+ *
+ * Exported for the same reason as USERNAME_PATTERN above: one email rule,
+ * used both when an account is created and when its owner edits it.
  */
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[A-Za-z]{2,}$/;
+export const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[A-Za-z]{2,}$/;
 
 export interface AssigneeLoginInput {
   assigneeName: string;

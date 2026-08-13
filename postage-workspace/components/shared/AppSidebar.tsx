@@ -11,16 +11,20 @@ import { logout } from "@/app/logout/actions";
 // for admin pages, the Issue access scope for /dashboard/issues).
 //
 //   Super Admin -> Issues, Discussions, Tracker, Logout
-//   Assignee    -> Assigned Issues, Logout
+//   Assignee    -> Assigned Issues, Account Settings, Logout
 //
 // Tracker sits directly after Discussions and is Super Admin only. Its flag
 // is a SEPARATE prop from showDiscussions rather than being derived from it,
 // because they come from different permissions (discussion:view vs
 // tracker:view) and only 'admin' holds the latter — 'management' holds
 // discussion:view but must not get Tracker.
+//
+// Account Settings is the mirror image: ASSIGNEE ONLY, so its flag is false
+// for the Super Admin and their sidebar renders exactly as it did before.
 export default function AppSidebar({
   showDiscussions,
   showTracker,
+  showAccountSettings,
   issuesLabel,
 }: {
   /** discussion:view — false for an Assignee. */
@@ -30,6 +34,11 @@ export default function AppSidebar({
    *  presentation; /dashboard/tracker enforces the same permission
    *  server-side and redirects anyone else. */
   showTracker: boolean;
+  /** Assignee only — false for the Super Admin and for a signed-out request,
+   *  so nothing changes in the Super Admin's sidebar. Hiding it is
+   *  presentation; /dashboard/account-settings redirects anyone else and its
+   *  Server Actions refuse them independently. */
+  showAccountSettings: boolean;
   /** "Issues" for the Super Admin (unchanged), "Assigned Issues" for an
    *  Assignee. Resolved server-side in DashboardLayout — this component
    *  never reads a role. */
@@ -41,6 +50,9 @@ export default function AppSidebar({
     { label: issuesLabel, href: "/dashboard/issues" },
     ...(showDiscussions ? [{ label: "Discussions", href: "/dashboard/discussions" }] : []),
     ...(showTracker ? [{ label: "Tracker", href: "/dashboard/tracker" }] : []),
+    ...(showAccountSettings
+      ? [{ label: "Account Settings", href: "/dashboard/account-settings" }]
+      : []),
   ];
 
   return (

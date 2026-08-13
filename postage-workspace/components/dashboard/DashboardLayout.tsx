@@ -51,6 +51,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
         <AppSidebar
           showDiscussions={canViewDiscussions}
           showTracker={canViewTracker}
+          // ASSIGNEE ONLY: signed in, and NOT a holder of issue:view_all.
+          // False for the Super Admin, so their sidebar is unchanged.
+          showAccountSettings={user !== null && !canViewAllIssues}
           issuesLabel={canViewAllIssues ? "Issues" : "Assigned Issues"}
         />
 
