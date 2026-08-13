@@ -28,6 +28,20 @@ export type Permission =
   | "issue:comment"
   | "issue:change_status_own_assigned"
   | "issue:change_status_any"
+  // AI investigation assistance, as TWO separate keys rather than one shared
+  // one. The distinction is the point:
+  //
+  //   issue:analyse_own_assigned — the ASSIGNEE. Necessary but not
+  //     sufficient: the specific Issue must ALSO be currently assigned to
+  //     them, which the scope predicate enforces in SQL.
+  //   issue:analyse_any — the SUPER ADMIN. No assignment ownership required,
+  //     because an admin already has authority over every Issue.
+  //
+  // Keeping them apart means widening admin access can never widen assignee
+  // access, and 'management' — which holds neither — cannot acquire either by
+  // accident. There is no role hierarchy here (DECISION-001).
+  | "issue:analyse_own_assigned"
+  | "issue:analyse_any"
   | "issue:assign"
   | "issue:delete"
   | "issue:approve_reopen"
@@ -64,7 +78,11 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   // ASSIGNEE. Both permissions are necessary-but-not-sufficient: every call
   // site must ALSO check that the specific Issue is currently assigned to
   // this user (see IssueAccessScope).
-  staff: new Set<Permission>(["issue:view_own_assigned", "issue:change_status_own_assigned"]),
+  staff: new Set<Permission>([
+    "issue:view_own_assigned",
+    "issue:change_status_own_assigned",
+    "issue:analyse_own_assigned",
+  ]),
 
   // Unchanged from the pre-Stage-3 matrix. No account holds this role.
   management: new Set<Permission>([
@@ -94,6 +112,7 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:assign",
     "issue:delete",
     "issue:approve_reopen",
+    "issue:analyse_any",
     "user:manage",
     "tracker:view",
     "discussion:view",

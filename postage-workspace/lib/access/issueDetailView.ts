@@ -69,6 +69,15 @@ export interface IssueDetailView {
    *  part of the Super Admin's pre-Stage-6 detail page, so it stays off
    *  there — restoring that page means not adding sections to it either. */
   showFixAndActionRequired: boolean;
+  /** The AI Investigation Assistant panel.
+   *
+   *  Now true for BOTH portals, but for different reasons and under different
+   *  permissions: the Assignee holds issue:analyse_own_assigned and may only
+   *  analyse an Issue currently assigned to them, while the Super Admin holds
+   *  issue:analyse_any and needs no assignment. It stays false for everyone
+   *  else. Rendering the panel is presentation; the Server Action checks the
+   *  matching permission independently. */
+  showAiAssistant: boolean;
 }
 
 /** Every flag off. The shape "other" resolves to, and the safe default. */
@@ -77,6 +86,7 @@ const NOTHING_EXTRA: Omit<IssueDetailView, "kind"> = {
   showAssigneeStatusControl: false,
   showAssignedTo: false,
   showFixAndActionRequired: false,
+  showAiAssistant: false,
 };
 
 /**
@@ -90,7 +100,9 @@ const NOTHING_EXTRA: Omit<IssueDetailView, "kind"> = {
  */
 export function resolveIssueDetailView(input: IssueDetailViewerInput): IssueDetailView {
   if (input.canChangeStatusAny) {
-    return { kind: "admin", ...NOTHING_EXTRA };
+    // The Super Admin's page is otherwise unchanged — every Stage 6 flag stays
+    // off. The AI panel is the one deliberate addition.
+    return { kind: "admin", ...NOTHING_EXTRA, showAiAssistant: true };
   }
 
   if (input.canChangeStatusOwnAssigned) {
@@ -100,6 +112,7 @@ export function resolveIssueDetailView(input: IssueDetailViewerInput): IssueDeta
       showAssigneeStatusControl: true,
       showAssignedTo: true,
       showFixAndActionRequired: true,
+      showAiAssistant: true,
     };
   }
 

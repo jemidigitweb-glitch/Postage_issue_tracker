@@ -72,6 +72,10 @@ describe("access — Tracker is Super Admin only", () => {
     // are independent literals, so staff's set must stay tiny.
     const staffPermissions = [...permissionsForRole(ASSIGNEE)];
     assert.deepEqual(staffPermissions.sort(), [
+      // Assignee-only AI assistance, added deliberately. The point of this
+      // assertion is that the set stays SMALL and explicit — every addition
+      // has to be made here as well as in the matrix.
+      "issue:analyse_own_assigned",
       "issue:change_status_own_assigned",
       "issue:view_own_assigned",
     ]);

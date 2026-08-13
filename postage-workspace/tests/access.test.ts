@@ -43,6 +43,7 @@ describe("permission matrix — Super Admin (role 'admin')", () => {
     "issue:assign",
     "issue:delete",
     "issue:approve_reopen",
+    "issue:analyse_any",
     "user:manage",
     "tracker:view",
     "discussion:view",
@@ -66,17 +67,37 @@ describe("permission matrix — Super Admin (role 'admin')", () => {
     assert.deepEqual([...permissionsForRole(SUPER_ADMIN_ROLE)].sort(), [...expected].sort());
   });
 
+  it("holds issue:analyse_any — the Super Admin needs no assignment ownership", () => {
+    assert.equal(roleHasPermission(SUPER_ADMIN_ROLE, "issue:analyse_any"), true);
+  });
+
+  it("does NOT hold the Assignee's AI key — the two are separate permissions", () => {
+    assert.equal(roleHasPermission(SUPER_ADMIN_ROLE, "issue:analyse_own_assigned"), false);
+    assert.equal(roleHasPermission(null, "issue:analyse_own_assigned"), false);
+  });
+
+  it("'management' gains NEITHER AI permission automatically", () => {
+    assert.equal(roleHasPermission("management", "issue:analyse_any"), false);
+    assert.equal(roleHasPermission("management", "issue:analyse_own_assigned"), false);
+    assert.equal(roleHasPermission(null, "issue:analyse_any"), false);
+  });
+
   it("does not hold issue:view_own_assigned — it sees everything, not a filtered slice", () => {
     assert.equal(roleHasPermission(SUPER_ADMIN_ROLE, "issue:view_own_assigned"), false);
   });
 });
 
 describe("permission matrix — Assignee (role 'staff')", () => {
-  it("holds exactly two permissions", () => {
+  it("holds exactly three permissions", () => {
     assert.deepEqual([...permissionsForRole(ASSIGNEE_ROLE)].sort(), [
+      "issue:analyse_own_assigned",
       "issue:change_status_own_assigned",
       "issue:view_own_assigned",
     ]);
+  });
+
+  it("holds issue:analyse_own_assigned — AI assistance is Assignee-only", () => {
+    assert.equal(roleHasPermission(ASSIGNEE_ROLE, "issue:analyse_own_assigned"), true);
   });
 
   // Each of these maps to a real guard. The Server Action that enforces it is

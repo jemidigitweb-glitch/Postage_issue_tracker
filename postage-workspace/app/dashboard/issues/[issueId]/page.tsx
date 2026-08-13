@@ -5,12 +5,17 @@ import AssignmentPanel from "@/components/issues/AssignmentPanel";
 import IssueDetail from "@/components/issues/IssueDetail";
 import IssueWorkProgress from "@/components/issues/IssueWorkProgress";
 import AssigneeStatusControl from "@/components/issues/AssigneeStatusControl";
+import IssueAiAssistant from "@/components/issues/IssueAiAssistant";
 import { getCurrentUserWithScope, hasPermission } from "@/lib/auth";
 import { resolveIssueDetailView } from "@/lib/access/issueDetailView";
 import { listAssignmentUsers } from "@/lib/queries/assignmentUsers";
 import { getCurrentIssueAssignment } from "@/lib/queries/issueAssignments";
 import { getAdjacentIssueIds, getIssueById, isValidIssueId } from "@/lib/queries/issues";
 import { listIssueProgressEntries } from "@/lib/queries/issueWorkProgress";
+import {
+  ADMIN_AI_ASSISTANT_PREFERENCE_KEY,
+  AI_ASSISTANT_PREFERENCE_KEY,
+} from "@/lib/access/aiAssistantPreference";
 
 // Real, database-backed issue detail page.
 //
@@ -136,10 +141,16 @@ export default async function IssueDetailPage({
     // Progress entry ever recorded, which the Work Progress block renders in
     // full. Scoped like every other read on this page, and skipped entirely
     // for a viewer who does not see that block.
+    // listAssignmentUsers() feeds ONLY the AssignmentPanel, which renders only
+    // for a holder of issue:assign. Skipping it for everyone else removes one
+    // database round trip per Assignee page view. It changes nothing visible:
+    // when the panel is not rendered, the list has no reader, and the variable
+    // keeps its existing [] default — the same value the panel would have been
+    // given. Same conditional shape already used for listIssueProgressEntries.
     [issue, adjacent, assignmentUsers, assignment, progressEntries] = await Promise.all([
       getIssueById(issueId, scope),
       getAdjacentIssueIds(issueId, scope),
-      listAssignmentUsers(),
+      canAssign ? listAssignmentUsers() : Promise.resolve([]),
       getCurrentIssueAssignment(issueId),
       view.showWorkProgress ? listIssueProgressEntries(issueId, scope) : Promise.resolve([]),
     ]);
@@ -209,6 +220,23 @@ export default async function IssueDetailPage({
             work={issue.work}
             progressEntries={progressEntries}
             canRecordProgress
+          />
+        )}
+        {/* ASSIGNEE ONLY. Advisory AI guidance, below the assignee's own work
+            fields so it reads as a consultation rather than an instruction.
+            The flag is false for a Super Admin (resolveIssueDetailView returns
+            NOTHING_EXTRA on that branch first and absolutely), and
+            analyseIssueAction re-checks the permission independently — hiding
+            the panel is defense in depth, not the guard. */}
+        {view.showAiAssistant && (
+          <IssueAiAssistant
+            issueId={issue.issueId}
+            // Separate localStorage keys per portal, chosen server-side.
+            preferenceKey={
+              view.kind === "admin"
+                ? ADMIN_AI_ASSISTANT_PREFERENCE_KEY
+                : AI_ASSISTANT_PREFERENCE_KEY
+            }
           />
         )}
         {/* Assignment is a Super Admin operation. The panel is not rendered
