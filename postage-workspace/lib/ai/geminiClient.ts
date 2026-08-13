@@ -110,10 +110,27 @@ export async function runGeminiSyntheticCheck(): Promise<GeminiSyntheticOutcome>
   });
 }
 
-/** Hard ceiling on an analysis request. Longer than the connectivity probe:
- *  a Flash model reasoning over ~3k tokens with thinking enabled is expected
- *  to take seconds, not milliseconds. */
+/** Hard ceiling on an analysis request. Deliberately unchanged and generous:
+ *  it is a safety net against a stuck socket, NOT a performance control. The
+ *  speed-up comes from a smaller prompt, minimal thinking and a tighter output
+ *  budget — not from cutting a valid response short. */
 const ANALYSIS_TIMEOUT_MS = 45_000;
+
+/**
+ * Output-token budget for one analysis.
+ *
+ * Sized from the schema's own maximums rather than guessed: at their caps the
+ * response is summary 400 + suggestedFix 400 + 2 root causes (~700) + 3 areas
+ * (~900) + 4 steps (~1200) + 2 alternatives (~600) + warnings, i.e. roughly
+ * 4,200 characters ≈ 1,100 tokens of JSON in the absolute worst case, and far
+ * less in practice now that every section is capped low.
+ *
+ * 900 sits inside the requested 600–1000 band and comfortably fits a typical
+ * concise response, while staying well clear of the point where valid JSON
+ * would be truncated mid-object. Truncation is the one failure this must not
+ * cause: a cut-off response fails JSON.parse and the user sees an error.
+ */
+const ANALYSIS_MAX_OUTPUT_TOKENS = 900;
 
 /**
  * The structured-analysis transport for app/dashboard/issues/ai-actions.ts.
@@ -157,6 +174,17 @@ export async function sendAnalysisRequest(request: {
           type: "text",
           mime_type: "application/json",
           schema: ANALYSIS_JSON_SCHEMA,
+        },
+        generation_config: {
+          // Verified against the installed types: GenerationConfig_2 declares
+          // thinking_level as "minimal" | "low" | "medium" | "high".
+          // "minimal" is correct for this workload — a short, structured
+          // triage answer over four fields does not need deep deliberation,
+          // and thinking tokens are the dominant cost and latency here.
+          thinking_level: "minimal",
+          // Sized in ANALYSIS_MAX_OUTPUT_TOKENS — large enough that the full
+          // structured JSON cannot be truncated at its schema maximums.
+          max_output_tokens: ANALYSIS_MAX_OUTPUT_TOKENS,
         },
       }),
       ANALYSIS_TIMEOUT_MS

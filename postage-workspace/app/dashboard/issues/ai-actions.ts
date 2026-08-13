@@ -3,14 +3,9 @@
 import { getCurrentUser, getIssueAccessScope, hasPermission } from "@/lib/auth";
 import { sanitizeIssueForAi } from "@/lib/access/aiSanitization";
 import { getIssueById, isValidIssueId } from "@/lib/queries/issues";
-import { findSimilarPastIssues } from "@/lib/ai/similarIssueRetrieval";
 import { getGeminiFeatureStatus } from "@/lib/ai/geminiConfig";
 import { sendAnalysisRequest } from "@/lib/ai/geminiClient";
-import {
-  MAX_SIMILAR_FOR_ANALYSIS,
-  runIssueAnalysis,
-  type AnalysisOutcome,
-} from "@/lib/ai/analysisFlow";
+import { runIssueAnalysis, type AnalysisOutcome } from "@/lib/ai/analysisFlow";
 
 // ASSIGNEE PORTAL — the "Analyse with AI" Server Action.
 //
@@ -24,10 +19,12 @@ import {
 // Issue that is not currently assigned to this caller comes back as null and
 // is indistinguishable from one that does not exist.
 //
-// No assignee id, user id or role is ever read from the form. The only thing
-// taken from the request is `issueId`, which is shape-checked and then used
-// solely as a bind parameter to an ownership-filtered lookup. Changing the URL
-// or the payload therefore cannot reach another Assignee's Issue, and a
+// No assignee id, user id or role is ever read from the form. Only two fields
+// are taken from the request: `issueId`, which is shape-checked and then used
+// solely as a bind parameter to an ownership-filtered lookup, and `runId`, an
+// opaque digits-only token echoed straight back so the browser can discard a
+// reply to a run the user abandoned. Neither influences authorization, so
+// changing the URL or the payload cannot reach another Assignee's Issue, and a
 // superseded (is_current = false) assignment authorizes nothing.
 //
 // issue_tracking.issue_staff / "Raised By" is never consulted for ownership.
@@ -49,6 +46,11 @@ export interface AnalyseIssueState {
   outcome?: AnalysisOutcome;
   /** Set only for authorization/input failures, which never reach the flow. */
   error?: string;
+  /** Echo of the client's request id, so the panel can tell WHICH run a reply
+   *  belongs to and discard one the user abandoned by switching the toggle
+   *  off. It is compared and nothing else — never trusted, never used for
+   *  authorization, and it takes no part in any query. */
+  runId?: string;
 }
 
 /** Identical wording whether the Issue belongs to someone else or does not
@@ -59,9 +61,13 @@ export async function analyseIssueAction(
   _prevState: AnalyseIssueState,
   formData: FormData
 ): Promise<AnalyseIssueState> {
+  // Opaque correlation token, echoed on every return path. Capped and
+  // stripped to digits so nothing else can ride along in it.
+  const runId = String(formData.get("runId") ?? "").replace(/[^0-9]/g, "").slice(0, 12);
+
   const user = await getCurrentUser();
   if (!user) {
-    return { error: "You must be signed in to use AI assistance." };
+    return { runId, error: "You must be signed in to use AI assistance." };
   }
 
   // TWO permissions, checked separately. `management` holds neither and is
@@ -71,7 +77,7 @@ export async function analyseIssueAction(
     hasPermission(user, "issue:analyse_own_assigned"),
   ]);
   if (!canAnalyseAny && !canAnalyseOwn) {
-    return { error: "You do not have permission to use AI assistance." };
+    return { runId, error: "You do not have permission to use AI assistance." };
   }
 
   // The scope does the rest. For a Super Admin it resolves to "all", so no
@@ -81,17 +87,17 @@ export async function analyseIssueAction(
   const scope = await getIssueAccessScope(user);
   if (canAnalyseAny) {
     if (scope.kind !== "all") {
-      return { error: NOT_YOURS };
+      return { runId, error: NOT_YOURS };
     }
   } else if (scope.kind !== "assignee") {
     // Holds the assignee permission but has no assignee identity (unlinked
     // account). Fail closed rather than falling through to a wider read.
-    return { error: NOT_YOURS };
+    return { runId, error: NOT_YOURS };
   }
 
   const issueId = String(formData.get("issueId") ?? "").trim();
   if (!isValidIssueId(issueId)) {
-    return { error: "Invalid issue." };
+    return { runId, error: "Invalid issue." };
   }
 
   try {
@@ -99,45 +105,28 @@ export async function analyseIssueAction(
     // session's assignee.
     const issue = await getIssueById(issueId, scope);
     if (!issue) {
-      return { error: NOT_YOURS };
+      return { runId, error: NOT_YOURS };
     }
 
     // Only sanitized content may go further. The sanitizer builds a new object
-    // from a seven-field allow-list; the raw row stops here.
+    // from a FOUR-field allow-list — title, description, domain and the
+    // reported root cause; the raw row stops here.
+    //
+    // No other Issue is read. There is no historical, resolved or similar-Issue
+    // retrieval on this path or on the page-render path, so an analysis costs
+    // exactly one Issue lookup.
     const sanitizedIssue = sanitizeIssueForAi(issue);
-
-    // HIDDEN CONTEXT: at most two genuinely strong past Issues, already
-    // reduced to four fields by the retrieval layer's sanitizer. They exist
-    // only to improve the analysis — they are never returned to the browser
-    // and never listed back to the user, and their real references are not
-    // sent to the model.
-    const similar = await findSimilarPastIssues(
-      {
-        issueId: issue.issueId,
-        title: issue.title,
-        description: issue.description,
-        category: issue.category,
-        priority: issue.priority,
-        whatIsHappening:
-          typeof issue.extraData.whatIsHappening === "string"
-            ? issue.extraData.whatIsHappening
-            : null,
-        rootCause:
-          typeof issue.extraData.rootCause === "string" ? issue.extraData.rootCause : null,
-      },
-      { limit: MAX_SIMILAR_FOR_ANALYSIS }
-    );
 
     const outcome = await runIssueAnalysis(
       getGeminiFeatureStatus(),
-      { issue: sanitizedIssue, history: similar.map((entry) => entry.issue) },
+      { issue: sanitizedIssue },
       sendAnalysisRequest
     );
 
-    return { outcome };
+    return { runId, outcome };
   } catch (error) {
     // Never surface the raw error: it can carry connection details.
     console.error(`[dashboard/issues] AI analysis failed for ${issueId}:`, error);
-    return { error: "Could not complete the analysis. Please try again." };
+    return { runId, error: "Could not complete the analysis. Please try again." };
   }
 }

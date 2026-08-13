@@ -53,19 +53,18 @@ export type ConfidenceLevel = (typeof CONFIDENCE_LEVELS)[number];
  * guaranteed one out.
  */
 export const ANALYSIS_LIMITS = {
-  /** Two or three short sentences. Tightened from 600 — a summary that runs
-   *  longer than the Issue it summarises is not a summary. */
-  summaryMaxLength: 400,
+  /** One or two short sentences. */
+  summaryMaxLength: 300,
   /** ONE concise, actionable recommendation. */
-  suggestedFixMaxLength: 400,
+  suggestedFixMaxLength: 300,
   /** Applies to every other individual string in the response. */
-  itemMaxLength: 300,
+  itemMaxLength: 250,
   minRootCauses: 1,
-  maxRootCauses: 3,
+  maxRootCauses: 2,
   minAreasToCheck: 1,
-  maxAreasToCheck: 4,
+  maxAreasToCheck: 3,
   minInvestigationSteps: 1,
-  maxInvestigationSteps: 5,
+  maxInvestigationSteps: 4,
   maxAlternativeSolutions: 2,
   maxWarnings: 3,
 } as const;

@@ -14,17 +14,11 @@ import {
   ANALYSIS_SYSTEM_INSTRUCTIONS,
   BLOCKED_MESSAGES,
   buildAnalysisPrompt,
-  MAX_SIMILAR_FOR_ANALYSIS,
-  pastContextLabelFor,
   runIssueAnalysis,
   type AnalysisSender,
 } from "../lib/ai/analysisFlow";
 import { HUMAN_VERIFICATION_WARNING } from "../lib/ai/analysisSchema";
-import {
-  sanitizeHistoricalIssueForAi,
-  sanitizeIssueForAi,
-  type SanitizedHistoricalIssueForAi,
-} from "../lib/access/aiSanitization";
+import { sanitizeIssueForAi } from "../lib/access/aiSanitization";
 import { hasMeaningfulOverlap, rankHistoricalCandidates, scoreBreakdown } from "../lib/ai/similarityRanking";
 import type { GeminiFeatureStatus } from "../lib/ai/geminiPolicy";
 
@@ -46,34 +40,17 @@ const ISSUE = sanitizeIssueForAi({
   title: "Barcode missing from printed shipping label",
   description: "The printed label shows a blank barcode block.",
   category: "postage",
-  priority: "high",
-  resolution: "Reprint after confirming the billing account.",
   extraData: {
-    whatIsHappening: "Labels print but the barcode block is empty.",
     rootCause: "Wrong billing account selected.",
+    // All excluded from AI input; present to prove they cannot escape.
+    priority: "high",
+    resolution: "Reprint after confirming the billing account.",
+    whatIsHappening: "Labels print but the barcode block is empty.",
     member: "Laksika",
     dataLink: "https://dashboard.internal.example/x",
   },
 });
 
-const HISTORY: SanitizedHistoricalIssueForAi[] = [
-  sanitizeHistoricalIssueForAi({
-    issueId: "ND-011",
-    title: "Label printed without barcode",
-    category: "postage",
-    resolution: "Reprint the label.",
-    finalResolution: null,
-    extraData: { rootCause: "Billing account was wrong." },
-  }),
-  sanitizeHistoricalIssueForAi({
-    issueId: "SA-009",
-    title: "Blank barcode area on label",
-    category: "postage",
-    resolution: null,
-    finalResolution: "Billing account corrected.",
-    extraData: { rootCause: null },
-  }),
-];
 
 function validResponse(): string {
   return JSON.stringify({
@@ -189,8 +166,6 @@ describe("only sanitized content can enter the request", () => {
       title: "Short title",
       description: "Short description.",
       category: "postage",
-      priority: null,
-      resolution: null,
       extraData: {},
     });
     const prompt = buildAnalysisPrompt(sparse);
@@ -205,31 +180,37 @@ describe("only sanitized content can enter the request", () => {
       title: "Short title",
       description: "Short description.",
       category: "postage",
-      priority: null,
-      resolution: null,
       extraData: {},
     });
     assert.ok(buildAnalysisPrompt(sparse).length < buildAnalysisPrompt(ISSUE).length);
   });
 
-  it("labels intake text as unconfirmed, never as a proven resolution", () => {
+  it("labels the root cause as a REPORTED, UNVERIFIED hypothesis", () => {
     const prompt = buildAnalysisPrompt(ISSUE);
-    assert.ok(prompt.includes("unconfirmed"));
+    assert.ok(prompt.includes("Reported / suspected root cause"));
+    assert.ok(prompt.includes("UNVERIFIED"));
     assert.equal(/\bResolved Issues\b/.test(prompt), false);
+  });
+
+  it("sends EXACTLY the four approved fields and nothing else", () => {
+    const prompt = buildAnalysisPrompt(ISSUE);
+    assert.ok(prompt.includes("Domain:"));
+    assert.ok(prompt.includes("Title:"));
+    assert.ok(prompt.includes("Description:"));
+    assert.ok(prompt.includes("Reported / suspected root cause"));
+    for (const excluded of ["Priority", "What is happening", "Fix proposed", "BACKGROUND EVIDENCE"]) {
+      assert.equal(prompt.includes(excluded), false, `prompt still carries "${excluded}"`);
+    }
   });
 
   it("states the mandatory instructions", () => {
     for (const phrase of [
       "ADVISORY ONLY",
-      "BE CONCISE",
       "no chain-of-thought",
+      "HYPOTHESIS",
+      "no other Issue, no history and no past cases",
+      "Never invent facts",
       "Do not claim certainty",
-      "Do not invent facts",
-      "Do not invent company system names",
-      "PREVIOUSLY COMPLETED Issue",
-      "supporting investigation evidence",
-      "NEVER mention, quote, label, number or otherwise identify",
-      "UNCONFIRMED",
       "You cannot change any record",
       "LOW, MEDIUM or HIGH",
     ]) {
@@ -238,84 +219,6 @@ describe("only sanitized content can enter the request", () => {
   });
 });
 
-describe("past Issues are HIDDEN CONTEXT, never shown back", () => {
-  it("labels contexts A, B — never as numbered Issues", () => {
-    assert.equal(pastContextLabelFor(0), "Past Context A");
-    assert.equal(pastContextLabelFor(1), "Past Context B");
-  });
-
-  it("PERFORMANCE: sends at most two, even when more are supplied", () => {
-    const many = Array.from({ length: 6 }, (_v, index) =>
-      sanitizeHistoricalIssueForAi({
-        issueId: `AA-${String(index).padStart(3, "0")}`,
-        title: `Past issue ${index}`,
-        category: "postage",
-        resolution: null,
-        finalResolution: null,
-        extraData: {},
-      })
-    );
-    const prompt = buildAnalysisPrompt(ISSUE, many);
-    assert.ok(prompt.includes("Past Context A"));
-    assert.ok(prompt.includes("Past Context B"));
-    assert.equal(prompt.includes("Past Context C"), false);
-    assert.equal(MAX_SIMILAR_FOR_ANALYSIS, 2);
-  });
-
-  it("PERFORMANCE: 0 stays 0 — no background section at all", () => {
-    const prompt = buildAnalysisPrompt(ISSUE, []);
-    assert.equal(prompt.includes("BACKGROUND EVIDENCE"), false);
-    assert.equal(prompt.includes("Past Context"), false);
-  });
-
-  it("PERFORMANCE: 1 stays 1 — the slots are never padded", () => {
-    const prompt = buildAnalysisPrompt(ISSUE, [HISTORY[0]]);
-    assert.ok(prompt.includes("Past Context A"));
-    assert.equal(prompt.includes("Past Context B"), false);
-  });
-
-  it("never sends a real historical Issue reference to the model", () => {
-    const prompt = buildAnalysisPrompt(ISSUE, HISTORY);
-    assert.equal(prompt.includes("ND-011"), false);
-    assert.equal(prompt.includes("SA-009"), false);
-  });
-
-  it("sends no staff name, attachment, link or raw extra_data as context", () => {
-    const prompt = buildAnalysisPrompt(ISSUE, HISTORY);
-    for (const forbidden of ["Laksika", "Nanthi", "dataLink", "images", "extraData", "sourceFile"]) {
-      assert.equal(prompt.includes(forbidden), false, `context leaked ${forbidden}`);
-    }
-    assert.equal(/https?:\/\//.test(prompt), false);
-  });
-
-  it("presents past context as COMPLETED with a CONFIRMED resolution", () => {
-    const prompt = buildAnalysisPrompt(ISSUE, HISTORY);
-    assert.ok(prompt.includes("previously COMPLETED Issues with confirmed resolutions"));
-    assert.ok(prompt.includes("Confirmed resolution:"));
-    // The current Issue's own intake text is still marked unconfirmed.
-    assert.ok(prompt.includes("Root cause recorded at intake (unconfirmed)"));
-  });
-
-  it("instructs the model not to assume the past root cause applies", () => {
-    assert.ok(
-      ANALYSIS_SYSTEM_INSTRUCTIONS.includes(
-        "Do NOT assume a past context's root cause automatically applies here"
-      )
-    );
-    assert.ok(ANALYSIS_SYSTEM_INSTRUCTIONS.includes("PREVIOUSLY COMPLETED Issue"));
-    assert.ok(ANALYSIS_SYSTEM_INSTRUCTIONS.includes("If you are given no past context, that is normal"));
-  });
-
-  it("the outcome carries no historical data back to the browser", async () => {
-    const { send } = fakeSender(validResponse());
-    const outcome = await runIssueAnalysis(status(), { issue: ISSUE, history: HISTORY }, send);
-    assert.ok(outcome.status === "ok");
-    const serialized = JSON.stringify(outcome);
-    for (const forbidden of ["ND-011", "SA-009", "Past Context", "similarIssues"]) {
-      assert.equal(serialized.includes(forbidden), false, `outcome leaked ${forbidden}`);
-    }
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Response handling
@@ -533,9 +436,19 @@ describe("Stage 4 structure", () => {
     }
   });
 
-  it("reads only issueId from the request", () => {
+  it("reads only issueId and the opaque runId from the request", () => {
+    // runId is an echo token used to discard an abandoned run. It is stripped
+    // to digits, never trusted, and takes no part in authorization — what this
+    // test protects is that NO identity field is ever read from the client.
     const reads = action.match(/formData\.get\((["'][^"']+["'])\)/g) ?? [];
-    assert.deepEqual(reads, ['formData.get("issueId")']);
+    assert.deepEqual(reads.sort(), ['formData.get("issueId")', 'formData.get("runId")']);
+    for (const identityField of ["assigneeId", "userId", "role", "active", "scope"]) {
+      assert.equal(
+        new RegExp(`formData\\.get\\(["']${identityField}["']\\)`).test(action),
+        false,
+        `action reads ${identityField} from the form`
+      );
+    }
   });
 
   it("checks the Assignee-only permission", () => {
@@ -569,10 +482,11 @@ describe("Stage 4 structure", () => {
     assert.ok(page.includes("<IssueAiAssistant"));
   });
 
-  it("past context is retrieved server-side and capped at two", () => {
+  it("performs NO historical retrieval at all", () => {
     const action = codeOnly("app/dashboard/issues/ai-actions.ts");
-    assert.ok(action.includes("findSimilarPastIssues("));
-    assert.ok(action.includes("limit: MAX_SIMILAR_FOR_ANALYSIS"));
+    const page = codeOnly("app/dashboard/issues/[issueId]/page.tsx");
+    assert.equal(action.includes("findSimilarPastIssues"), false);
+    assert.equal(page.includes("findSimilarPastIssues"), false);
   });
 
   it("no Similar Past Issues section exists in the UI", () => {

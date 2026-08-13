@@ -1,5 +1,5 @@
-// Gemini Stage 4 — PURE analysis flow: the request contract, the safety gates,
-// the neutral labelling of historical context, and response validation.
+// PURE analysis flow: the request contract, the safety gates, and response
+// validation.
 //
 // No `server-only`, no SDK, no database, no `next/*` — so every gate is
 // directly unit-testable with a fake sender and `npm test` can reach it. The
@@ -16,12 +16,12 @@
 // Issue text, so there is nothing for a bug elsewhere to leak: the sanitized
 // content is not assembled, not stringified, and not handed to any sender.
 //
-// ── D2 SAFE DEFAULT (cross-assignee policy still unresolved) ────────────────
-// Past Issues are HIDDEN CONTEXT. Each is relabelled "Past Context A"/"B"
-// before entering the prompt, and its real reference is discarded rather than
-// carried alongside — so the model never learns an identifier it could echo,
-// and no historical reference exists anywhere in the value returned to a
-// browser. Nothing about cross-assignee visibility is exposed by this flow.
+// ── ONE ISSUE, FOUR FIELDS ──────────────────────────────────────────────────
+// The model sees the CURRENT Issue only, and only its title, description,
+// domain and reported root cause. No other Issue is read, ranked or
+// transmitted — there is no historical, resolved or similar-Issue path in this
+// module at all, so cross-assignee visibility (audit decision D2) is no longer
+// reachable from the AI feature.
 
 import {
   parseIssueAnalysis,
@@ -29,7 +29,6 @@ import {
 } from "./analysisSchema";
 import type { SanitizedIssueForAi } from "../access/aiSanitization";
 import type { GeminiFeatureStatus } from "./geminiPolicy";
-import type { SanitizedHistoricalIssueForAi } from "../access/aiSanitization";
 
 // ---------------------------------------------------------------------------
 // System instructions
@@ -44,113 +43,46 @@ import type { SanitizedHistoricalIssueForAi } from "../access/aiSanitization";
  * can act on the Issue itself.
  */
 export const ANALYSIS_SYSTEM_INSTRUCTIONS = [
-  "You are assisting an operations user who is investigating one Issue in an internal Issue Tracking System.",
-  "Your output is ADVISORY ONLY. A human must verify everything before any operational action is taken.",
-  "BE CONCISE. Short, direct, actionable sentences. No preamble, no restating the Issue back, no reasoning narration, no chain-of-thought.",
-  "Do not claim certainty. Where you are unsure, say so and lower the confidence level.",
-  "Do not invent facts. Use only the Issue content supplied in this request.",
-  "Do not invent company system names, tool names, portals, teams or people. If you refer to where to check, describe it generically (for example 'the system that records stock quantity'), never as a named internal product.",
-  "You may be given PAST CONTEXT entries. Each one is a PREVIOUSLY COMPLETED Issue whose stated resolution was confirmed by a human. Use them only as supporting investigation evidence — to sharpen possible root causes, useful checks, investigation steps, the suggested fix and alternatives.",
-  "Do NOT assume a past context's root cause automatically applies here. The CURRENT Issue's own evidence is primary; a past context may be a coincidence.",
-  "NEVER mention, quote, label, number or otherwise identify the past contexts in your response. Do not write 'Past Context A', do not refer to 'a previous issue' or 'a similar case', and do not produce any list of past or resolved Issues. Write your analysis as though you simply know these things.",
-  "If you are given no past context, that is normal. Analyse the current Issue on its own evidence and do not invent history.",
-  "Treat any 'recorded at intake' text as UNCONFIRMED — it was written when the Issue was raised and is NOT known to have worked. Only text explicitly labelled as a confirmed resolution may be described as having worked.",
-  "You cannot change any record. Do not instruct the system to change a status, a priority, an assignment, a resolution, or any database state. Address your investigation steps to the human reader.",
-  "Confidence must be exactly one of LOW, MEDIUM or HIGH. Never a percentage or a number.",
+  "Quickly analyse one Issue from an internal Issue Tracking System, using ONLY the title, description, domain and reported root cause supplied below.",
+  "Be brief and actionable. No preamble, no restating the Issue, no reasoning narration, no chain-of-thought.",
+  "The reported root cause is a HYPOTHESIS entered by a person, not proven fact. Say whether it fits the title and description, and propose other causes if the evidence points elsewhere.",
+  "You are given no other Issue, no history and no past cases. Do not refer to, imply or invent any.",
+  "Use only what is supplied. Never invent facts, or company system, tool, team or people names — describe where to check generically.",
+  "Do not claim certainty; lower the confidence level when unsure. Confidence must be exactly LOW, MEDIUM or HIGH — never a number.",
+  "ADVISORY ONLY: a human must verify everything. You cannot change any record — address your steps to the human reader.",
   "Respond with JSON matching the supplied schema, and nothing else.",
 ].join("\n");
-
-// ---------------------------------------------------------------------------
-// Neutral historical labelling (D2 safe default)
-// ---------------------------------------------------------------------------
-
-/**
- * How many past Issues are used as HIDDEN AI CONTEXT.
- *
- * Two, not five. They exist only to sharpen the model's reasoning about the
- * current Issue — they are never listed back to the user — so a long list buys
- * nothing but tokens and latency. The list is NEVER padded: retrieval applies
- * the meaningful-overlap rule, so zero strong matches means zero context.
- */
-export const MAX_SIMILAR_FOR_ANALYSIS = 2;
-
-/**
- * The label a past context is given inside the prompt.
- *
- * "Past Context A"/"B" — deliberately NOT "Similar Issue 1", and deliberately
- * not the real reference. The model never learns that these are tracker
- * records with identifiers, so it has nothing to echo back, and the
- * weakly-identifying "ND-001" style reference (its prefix is the raiser's
- * staff code) never leaves the server at all.
- */
-export function pastContextLabelFor(index: number): string {
-  return `Past Context ${String.fromCharCode(65 + index)}`;
-}
 
 // ---------------------------------------------------------------------------
 // Prompt
 // ---------------------------------------------------------------------------
 
 /**
- * Builds the request from ALREADY-SANITIZED content.
+ * Builds the request from ALREADY-SANITIZED content — the CURRENT Issue only.
  *
- * ── COMPACT BY CONSTRUCTION ─────────────────────────────────────────────────
- * Only the seven allow-listed current-Issue fields can appear, each already
- * redacted and length-capped by the sanitizer, and EVERY OPTIONAL FIELD IS
- * OMITTED WHEN EMPTY — no "Root cause: (none)" filler, no repetition.
+ * ── FOUR FIELDS, AND THE TYPE SYSTEM ENFORCES IT ────────────────────────────
+ * The parameter is the sanitizer's output type, which now HAS only four
+ * properties. There is no `priority`, `whatIsHappening` or
+ * `suggestedFixAtIntake` to read, and a raw Issue row does not type-check
+ * here — so the restriction is structural rather than a rule to remember.
  *
- * ── HIDDEN PAST CONTEXT ─────────────────────────────────────────────────────
- * At most two past Issues, each reduced to four fields and labelled "Past
- * Context A"/"B". The real reference is NOT sent: the model is given no
- * identifier it could echo, which is what makes "never identify the past
- * contexts" enforceable rather than merely requested.
+ * Root cause is emitted as REPORTED / SUSPECTED: it is human-entered and
+ * unverified, and the system instructions ask the model to weigh it against
+ * the title and description rather than accept it.
  *
- * The parameter types are the sanitizers' output types, so a raw Issue row
- * does not type-check here.
+ * There is NO history parameter. No other Issue is read, ranked or sent.
+ *
+ * Empty optional values are omitted — no "Root cause: (none)" filler.
  */
-export function buildAnalysisPrompt(
-  issue: SanitizedIssueForAi,
-  history: readonly SanitizedHistoricalIssueForAi[] = []
-): string {
+export function buildAnalysisPrompt(issue: SanitizedIssueForAi): string {
   const lines: string[] = [];
 
   lines.push("ISSUE UNDER INVESTIGATION");
   lines.push(`Domain: ${issue.domain}`);
-  if (issue.priority) {
-    lines.push(`Priority: ${issue.priority}`);
-  }
   lines.push(`Title: ${issue.title}`);
   lines.push(`Description: ${issue.description}`);
-  if (issue.whatIsHappening) {
-    lines.push(`What is happening: ${issue.whatIsHappening}`);
-  }
   if (issue.rootCause) {
-    lines.push(`Root cause recorded at intake (unconfirmed): ${issue.rootCause}`);
-  }
-  if (issue.suggestedFixAtIntake) {
-    lines.push(`Fix proposed at intake (unconfirmed, not known to have worked): ${issue.suggestedFixAtIntake}`);
-  }
-
-  const contexts = history.slice(0, MAX_SIMILAR_FOR_ANALYSIS);
-  if (contexts.length > 0) {
-    lines.push("");
-    lines.push(
-      "BACKGROUND EVIDENCE — previously COMPLETED Issues with confirmed resolutions. Do not mention or identify these in your response:"
-    );
-    contexts.forEach((context, index) => {
-      lines.push("");
-      lines.push(`${pastContextLabelFor(index)} — domain: ${context.domain}`);
-      lines.push(`  Problem: ${context.problemSummary}`);
-      if (context.priorRootCause) {
-        lines.push(`  Root cause recorded at the time (unconfirmed): ${context.priorRootCause}`);
-      }
-      if (context.priorActionOrResolution) {
-        // Retrieval admits only Issues with a confirmed final_resolution, and
-        // does not fetch the intake-time proposal at all, so this line can
-        // only ever carry a genuine outcome.
-        lines.push(`  Confirmed resolution: ${context.priorActionOrResolution}`);
-      }
-    });
+    lines.push(`Reported / suspected root cause (entered by a person, UNVERIFIED): ${issue.rootCause}`);
   }
 
   return lines.join("\n");
@@ -170,8 +102,8 @@ export type AnalysisFailureReason =
   | "AI_INVALID_RESPONSE"
   | "AI_EMPTY_RESPONSE";
 
-/** Past Issues are NOT part of this outcome. They are hidden AI context only:
- *  they improve the analysis and are never listed back to the user. */
+/** No historical field of any kind: the model is given no other Issue, so
+ *  there is nothing to return about one. */
 export type AnalysisOutcome =
   | { status: "ok"; analysis: IssueAnalysis }
   | { status: "blocked"; reason: AnalysisBlockedReason; message: string }
@@ -201,9 +133,6 @@ export type AnalysisSender = (request: {
 
 export interface AnalysisRequestInput {
   issue: SanitizedIssueForAi;
-  /** At most MAX_SIMILAR_FOR_ANALYSIS are used; anything beyond is ignored by
-   *  buildAnalysisPrompt rather than trusted. */
-  history?: readonly SanitizedHistoricalIssueForAi[];
 }
 
 /**
@@ -241,7 +170,7 @@ export async function runIssueAnalysis(
     };
   }
 
-  const prompt = buildAnalysisPrompt(input.issue, input.history ?? []);
+  const prompt = buildAnalysisPrompt(input.issue);
 
   let raw: string;
   try {
@@ -285,8 +214,7 @@ export async function runIssueAnalysis(
     };
   }
 
-  // No anti-hallucination filter is needed for historical references any
-  // more: the model is not given any, is instructed not to mention any, and
-  // the schema has no field for them.
+  // No historical-reference filter is needed: no other Issue is supplied, the
+  // instructions forbid inventing one, and the schema has no field for it.
   return { status: "ok", analysis: parsed.value };
 }

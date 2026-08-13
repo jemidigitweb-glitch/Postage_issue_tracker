@@ -64,7 +64,7 @@ export const GEMINI_SYNTHETIC_PROMPT =
  * such Issue in the database.
  */
 export const GEMINI_SYNTHETIC_ANALYSIS_PROMPT =
-  "ISSUE UNDER INVESTIGATION\nDomain: Demo Systems\nPriority: medium\nTitle: Demo printer queue stops after synthetic test job\nDescription: This is fictional test data created only to verify structured Gemini output.\nWhat is happening: Synthetic print jobs remain queued.\nRoot cause recorded at intake (unconfirmed): Unknown synthetic cause.\nFix proposed at intake (unconfirmed, not known to have worked): Restart fictional demo queue service.\n\nBACKGROUND EVIDENCE — previously COMPLETED Issues with confirmed resolutions. Do not mention or identify these in your response:\n\nPast Context A — domain: Demo Systems\n  Problem: Fictional demo queue paused during an earlier synthetic test\n  Root cause recorded at the time (unconfirmed): Synthetic placeholder cause.\n  Confirmed resolution: Fictional demo service was restarted and the queue cleared.\n\nPast Context B — domain: Demo Systems\n  Problem: Fictional demo job stayed queued in an unrelated synthetic scenario\n  Confirmed resolution: Synthetic placeholder outcome recorded.";
+  "ISSUE UNDER INVESTIGATION\nDomain: Demo Systems\nTitle: Demo printer queue stops after synthetic test job\nDescription: This is fictional test data created only to verify structured Gemini output.\nReported / suspected root cause (entered by a person, UNVERIFIED): Unknown synthetic cause.";
 
 /** The complete set of texts transmittable while the real-data gate is shut.
  *  Two frozen constants, matched by exact equality — nothing else, ever. */

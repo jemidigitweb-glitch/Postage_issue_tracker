@@ -43,10 +43,10 @@
 export const SANITIZED_FIELD_LIMITS = {
   title: 200,
   description: 1500,
-  whatIsHappening: 1000,
   rootCause: 1500,
-  suggestedFixAtIntake: 1500,
-  /** Historical context is deliberately tighter than current-Issue context. */
+  /** Historical context is deliberately tighter than current-Issue context.
+   *  Retained for sanitizeHistoricalIssueForAi(), which is no longer part of
+   *  the AI path — see the note on that function. */
   historicalSummary: 300,
   historicalRootCause: 600,
   historicalResolution: 600,
@@ -240,33 +240,35 @@ export interface IssueForAiInput {
   description: string;
   /** issues.category — the "Domain". */
   category: string;
-  priority: string | null;
-  /** issues.resolution — the intake-time "Fix & Action Required". NOT
-   *  final_resolution, which is the completion outcome. */
-  resolution: string | null;
-  /** The raw JSONB blob. Only two keys are ever read out of it. */
+  /** The raw JSONB blob. Exactly ONE key is ever read out of it. */
   extraData: Record<string, unknown>;
 }
 
 /**
  * The OUTPUT shape — the complete, exhaustive list of what may ever leave this
- * system for the current Issue. Seven fields, all diagnostic.
+ * system for the current Issue. FOUR fields.
  *
- * Note what is NOT here, and cannot be added by any input: issueId, staffCode,
- * staffName, member, assignee, dataLink, images, attachments, sourceFile,
- * sourceId, originalOwner, evidence/provenance metadata, timestamps, deletion
- * state, user ids, assignment ids, or anything else from extra_data.
+ * Reduced from seven by owner decision: the model analyses the problem
+ * statement (title, description, domain) and the human's suspected cause, and
+ * nothing else. Priority, "What Is Happening" and the intake-time
+ * "Fix & Action Required" were removed from the AI path — they remain in the
+ * database and in the normal UI, untouched; they are simply not analysis
+ * input.
+ *
+ * Note what is NOT here, and cannot be added by any input: issueId, status,
+ * priority, whatIsHappening, resolution, final_resolution, implementation
+ * fields, comments, history, staffCode, staffName, member, assignee, sku,
+ * dataLink, images, attachments, sourceFile, sourceId, originalOwner,
+ * provenance, timestamps, deletion state, user/assignment ids, or anything
+ * else from extra_data.
  */
 export interface SanitizedIssueForAi {
   title: string;
   description: string;
   domain: string;
-  priority: string | null;
-  whatIsHappening: string | null;
+  /** extra_data.rootCause — human-entered and UNVERIFIED. Presented to the
+   *  model as a REPORTED / SUSPECTED cause to weigh, never as fact. */
   rootCause: string | null;
-  /** issues.resolution, renamed so a model cannot mistake an intake-time
-   *  suggestion for a confirmed outcome. */
-  suggestedFixAtIntake: string | null;
 }
 
 /**
@@ -276,34 +278,16 @@ export interface SanitizedIssueForAi {
  * reference with it.
  */
 export function sanitizeIssueForAi(issue: IssueForAiInput): SanitizedIssueForAi {
-  // Read the only two extra_data keys that are allow-listed. Every other key
-  // — including keys nobody has seen yet — is unreachable from here.
+  // ONE allow-listed extra_data key. Every other key — including keys nobody
+  // has seen yet — is unreachable from here, because nothing iterates the blob.
   const extra = issue.extraData ?? {};
 
   return {
     title: cleanRequiredText(issue.title, SANITIZED_FIELD_LIMITS.title),
     description: cleanRequiredText(issue.description, SANITIZED_FIELD_LIMITS.description),
     domain: cleanRequiredText(issue.category, 100),
-    // An enum in practice ("critical" | "high" | "medium" | "low"); passed
-    // through a strict allow-list anyway so a corrupted row cannot inject text.
-    priority: normalizePriority(issue.priority),
-    whatIsHappening: cleanOptionalText(extra.whatIsHappening, SANITIZED_FIELD_LIMITS.whatIsHappening),
     rootCause: cleanOptionalText(extra.rootCause, SANITIZED_FIELD_LIMITS.rootCause),
-    suggestedFixAtIntake: cleanOptionalText(
-      issue.resolution,
-      SANITIZED_FIELD_LIMITS.suggestedFixAtIntake
-    ),
   };
-}
-
-const ALLOWED_PRIORITIES: readonly string[] = ["critical", "high", "medium", "low"];
-
-function normalizePriority(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const normalized = value.trim().toLowerCase();
-  return ALLOWED_PRIORITIES.includes(normalized) ? normalized : null;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useSyncExternalStore } from "react";
+import { useActionState, useMemo, useState, useSyncExternalStore } from "react";
 
 import {
   AI_ASSISTANT_DEFAULT_ENABLED,
@@ -21,13 +21,12 @@ import type { IssueAnalysis } from "@/lib/ai/analysisSchema";
 // Admin (issue:analyse_any, no assignment needed). Everyone else gets nothing,
 // and analyseIssueAction re-checks the matching permission independently.
 //
-// ── NO "SIMILAR PAST ISSUES" SECTION ────────────────────────────────────────
-// Past Issues are HIDDEN AI CONTEXT: at most two, sanitized, labelled "Past
-// Context A/B" inside the prompt, used to sharpen the analysis and never shown
-// back. The user therefore sees no historical Issue IDs, no reporter or
-// assignee names, no historical descriptions and no clickable history — which
-// also means audit decision D2 (cross-assignee visibility) is not touched by
-// this UI at all.
+// ── NO OTHER ISSUE IS INVOLVED ──────────────────────────────────────────────
+// The analysis uses the current Issue's title, description, domain and
+// reported root cause, and nothing else. No historical, resolved or similar
+// Issue is read, sent or displayed, so there is no "Similar Past Issues"
+// section and audit decision D2 (cross-assignee visibility) is not reachable
+// from this feature at all.
 //
 // Read-only by construction: the only controls are the toggle and one submit
 // button. Nothing here writes to an Issue, and the action performs no database
@@ -330,13 +329,29 @@ function AiActionButton({ pending }: { pending: boolean }) {
         />
       </button>
       {/* Tooltip: the wording still exists, it is simply not printed inside
-          the button. Shown on hover AND on keyboard focus. */}
-      <span
-        role="tooltip"
-        className="pointer-events-none absolute top-full mt-2 whitespace-nowrap rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-100 dark:text-neutral-900"
-      >
-        {pending ? "Analysing…" : "Analyse with AI"}
-      </span>
+          the button. Shown on hover AND on keyboard focus. Suppressed while
+          analysing so it cannot overlap the "Analyzing..." label below. */}
+      {!pending && (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute top-full mt-2 whitespace-nowrap rounded-md bg-neutral-900 px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-md transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-neutral-100 dark:text-neutral-900"
+        >
+          Analyse with AI
+        </span>
+      )}
+
+      {/* Live status, directly beneath the animated icon. Rendered only while
+          a request is genuinely in flight, so it disappears on success, on
+          failure, and the moment the toggle is switched off (the whole panel
+          body is gated on `enabled`). */}
+      {pending && (
+        <span
+          role="status"
+          className="pointer-events-none absolute top-full mt-2 whitespace-nowrap text-[11px] font-medium text-neutral-500 dark:text-neutral-400"
+        >
+          Analyzing...
+        </span>
+      )}
     </span>
   );
 }
@@ -351,10 +366,41 @@ export default function IssueAiAssistant({
   preferenceKey?: string;
 }) {
   const [state, formAction, pending] = useActionState(analyseIssueAction, initialState);
-  const outcome = state.outcome;
 
   // One store per key, stable for the life of this component instance.
   const store = useMemo(() => createPreferenceStore(preferenceKey), [preferenceKey]);
+
+  // ── STALE-RESULT GUARD ────────────────────────────────────────────────────
+  // `runId` increments on every submission; `voidedRunId` records a run whose
+  // result must never be shown — set when the Assignee switches the panel off
+  // mid-flight.
+  //
+  // A Server Action invoked through useActionState cannot be aborted from the
+  // browser, so the request may still complete on the server. What this guard
+  // guarantees is that a voided run's answer is never RENDERED: it is dropped
+  // on arrival, no error is shown for it, and switching the panel back on
+  // returns to the ready state rather than resurrecting it or restarting it.
+  const [runId, setRunId] = useState(0);
+  const [voidedRunId, setVoidedRunId] = useState<number | null>(null);
+
+  const currentRunIsVoided = voidedRunId === runId;
+
+  // THE KEY LINE. `pending` stays true until the server replies, even after
+  // the run has been voided — so every loading affordance is driven by this,
+  // not by `pending`. Switching the toggle off stops the analysis instantly:
+  // the spinner, the "Analyzing..." label and the disabled button all clear in
+  // the same render, and switching back on returns to the READY state rather
+  // than showing a run the user already abandoned.
+  const analysing = pending && !currentRunIsVoided;
+
+  // A voided or superseded run may not render. `state.runId` is echoed back by
+  // the Server Action, so a late reply is matched to the run that asked for
+  // it: if the user abandoned run 1, re-enabled and started run 2, run 1's
+  // answer is discarded instead of being painted as run 2's.
+  const stateBelongsToCurrentRun = state.runId === String(runId);
+  const showResult = !currentRunIsVoided && stateBelongsToCurrentRun;
+  const outcome = showResult ? state.outcome : undefined;
+  const errorMessage = showResult ? state.error : undefined;
 
   // ── HYDRATION SAFETY ──────────────────────────────────────────────────────
   // useSyncExternalStore is the hydration-safe way to read a browser-only
@@ -376,7 +422,14 @@ export default function IssueAiAssistant({
   );
 
   function toggle() {
-    store.set(!enabled);
+    const next = !enabled;
+    // Switching OFF mid-analysis voids the run in flight IMMEDIATELY: the
+    // loading state stops on this render, the result is discarded when it
+    // eventually arrives, and switching back ON does not restart it.
+    if (!next && pending) {
+      setVoidedRunId(runId);
+    }
+    store.set(next);
   }
 
   return (
@@ -398,16 +451,20 @@ export default function IssueAiAssistant({
         {/* The action is not rendered at all while the Assignee has the panel
             switched off — there is nothing to click, and nothing to mislead. */}
         {enabled && (
-          <form action={formAction}>
+          <form action={formAction} onSubmit={() => setRunId((previous) => previous + 1)}>
             <input type="hidden" name="issueId" value={issueId} />
-            <AiActionButton pending={pending} />
+            {/* Echoed back by the action so a late reply can be matched to
+                the run that asked for it. Not identity, and not trusted for
+                anything: it is compared, never acted on. */}
+            <input type="hidden" name="runId" value={String(runId + 1)} />
+            <AiActionButton pending={analysing} />
           </form>
         )}
       </div>
 
       {!enabled && <p className={mutedClassName}>AI Assistant is turned off.</p>}
 
-      {enabled && !outcome && !state.error && !pending && (
+      {enabled && !outcome && !errorMessage && !analysing && (
         <p className={mutedClassName}>
           AI-assisted investigation guidance. Suggestions are advisory and are not saved
           automatically.
@@ -415,16 +472,17 @@ export default function IssueAiAssistant({
       )}
 
       {/* Everything below is hidden while the toggle is off, so a result from
-          an earlier run is not left on screen after switching off. */}
-      {enabled && pending && (
+          an earlier run is not left on screen after switching off — and a
+          voided run's outcome is dropped by the stale-result guard above. */}
+      {enabled && analysing && (
         <p role="status" className={mutedClassName}>
           Analysing… this can take up to a minute.
         </p>
       )}
 
-      {enabled && state.error && (
+      {enabled && errorMessage && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
-          {state.error}
+          {errorMessage}
         </p>
       )}
 
