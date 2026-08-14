@@ -20,6 +20,7 @@ export default function AssignedIssuesFilters({
   status,
   hasActiveFilters,
   showAssigneeFilter = true,
+  totalCount,
 }: {
   assignmentUsers: AssignmentUser[];
   assigneeId: string;
@@ -30,6 +31,15 @@ export default function AssignedIssuesFilters({
    *  server discards any `assignee` value such a user submits regardless
    *  (see app/dashboard/issues/page.tsx and lib/queries/issueAssignments.ts). */
   showAssigneeFilter?: boolean;
+  /** TOTAL number of Issues matching the current filters — the same
+   *  `totalCount` the page already has from listAssignedIssues(), which comes
+   *  from COUNT(*) OVER() across the whole filtered set. It is therefore the
+   *  full result count, NOT the number of rows on this page, and it changes
+   *  with every filter because the query it came from does.
+   *
+   *  Null/undefined when the list could not be loaded, in which case nothing
+   *  is rendered rather than a misleading "0". */
+  totalCount?: number | null;
 }) {
   // Keyed off the current filter values so the form remounts (and its
   // uncontrolled <select> defaultValues re-sync) whenever the URL's filters
@@ -89,6 +99,20 @@ export default function AssignedIssuesFilters({
           ))}
         </select>
       </div>
+
+      {/* Count of the CURRENT filtered result set, sitting beside Status in
+          the same label-over-value shape as the filters themselves. It is
+          read-only text, not a control, so nothing about the filter bar's
+          behaviour changes. `typeof` rather than a truthiness test, so a
+          genuine 0 still renders. */}
+      {typeof totalCount === "number" && (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Issues</span>
+          <span className="rounded-lg border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 px-3 py-2 text-sm font-semibold tabular-nums text-neutral-800 dark:text-neutral-200">
+            {totalCount}
+          </span>
+        </div>
+      )}
 
       {hasActiveFilters && (
         <Link

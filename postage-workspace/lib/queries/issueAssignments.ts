@@ -45,24 +45,39 @@ export async function getCurrentIssueAssignment(issueId: string): Promise<Curren
   };
 }
 
+/** Assignment may only be changed while an Issue has not been started.
+ *
+ *  Once work is under way (AMBER) or finished (GREEN), moving it to someone
+ *  else would hand over a part-done investigation — or rewrite the owner of a
+ *  completed one — so the whole assignment surface is closed at that point.
+ *  Enforced HERE, inside the transaction that has the row locked, because the
+ *  UI hiding a control is never the guard. */
+export const ASSIGNABLE_STATUS = "RED";
+
 export interface AssignIssuesResult {
-  /** Issue IDs that were newly assigned by this call. */
+  /** Issue IDs that had no current assignee and now have one. */
   assignedIds: string[];
-  /** Issue IDs that already had a current assignee and were left untouched
-   *  — an issue can only be assigned once, and the original assignee/date
-   *  is preserved rather than overwritten. */
-  alreadyAssignedIds: string[];
+  /** Issue IDs that were moved from a DIFFERENT assignee to this one. Their
+   *  previous row is kept as history (is_current = false), never deleted. */
+  reassignedIds: string[];
+  /** Issue IDs already current-assigned to this same person — a no-op, so no
+   *  new row is written and assigned_at is preserved. */
+  unchangedIds: string[];
+  /** Issue IDs left untouched because they are no longer RED. */
+  blockedIds: string[];
 }
 
 /**
- * Assigns one or more issues to a single assignee. An issue can only be
- * assigned once: any issue in `issueIds` that already has a current row in
- * issue_assignments is skipped (returned in `alreadyAssignedIds`) rather
- * than reassigned — this preserves the original assignee and assigned_at
- * for that issue. The partial unique index uidx_issue_assignments_one_current
- * still guarantees at most one current row per issue even under concurrent
- * calls; the pre-check here just avoids attempting (and failing) an insert
- * for issues we already know are taken.
+ * Sets the current assignee for one or more issues.
+ *
+ * Reassignment IS allowed: an issue that already has a current assignee has
+ * that row closed (is_current = false — kept as history, never deleted) and a
+ * new current row inserted, all in one transaction. Re-selecting the person
+ * who already holds it is a deliberate no-op.
+ *
+ * The partial unique index uidx_issue_assignments_one_current still guarantees
+ * at most one current row per issue; the close-then-insert order is what keeps
+ * this true at every point.
  */
 /** True for a Postgres unique_violation (SQLSTATE 23505) against the
  *  partial unique index that enforces "at most one current assignee per
@@ -93,25 +108,47 @@ async function attemptAssign(
 ): Promise<AssignIssuesResult | null> {
   await client.query("BEGIN");
 
-  const existing = await client.query<{ issue_id: string }>(
-    `SELECT issue_id FROM issue_tracking.issue_assignments
-     WHERE issue_id = ANY($1::text[]) AND is_current = true`,
+  // Status gate, read from the LOCKED issues rows: only a RED (not started)
+  // Issue may have its assignment changed. Anything else is reported back
+  // untouched rather than silently skipped.
+  const statuses = await client.query<{ issue_id: string; status: string }>(
+    `SELECT issue_id, status FROM issue_tracking.issues
+     WHERE issue_id = ANY($1::text[]) AND deleted_at IS NULL
+     FOR UPDATE`,
     [issueIds]
   );
-  const alreadyAssignedIds = existing.rows.map((row) => row.issue_id);
-  const alreadyAssignedSet = new Set(alreadyAssignedIds);
-  const toAssign = issueIds.filter((id) => !alreadyAssignedSet.has(id));
+  const statusByIssue = new Map(statuses.rows.map((row) => [row.issue_id, row.status]));
+  const blockedIds = issueIds.filter((id) => statusByIssue.get(id) !== ASSIGNABLE_STATUS);
+  const eligibleIds = issueIds.filter((id) => statusByIssue.get(id) === ASSIGNABLE_STATUS);
 
-  let assignedIds: string[] = [];
+  // Locked, so a concurrent assign/reassign/unassign for the same issue waits
+  // here instead of racing the close-then-insert below.
+  const existing = await client.query<{ issue_id: string; assignee_id: number }>(
+    `SELECT issue_id, assignee_id FROM issue_tracking.issue_assignments
+     WHERE issue_id = ANY($1::text[]) AND is_current = true
+     FOR UPDATE`,
+    [eligibleIds]
+  );
+  const currentByIssue = new Map(existing.rows.map((row) => [row.issue_id, Number(row.assignee_id)]));
+
+  const unchangedIds = eligibleIds.filter((id) => currentByIssue.get(id) === assigneeId);
+  const toAssign = eligibleIds.filter((id) => currentByIssue.get(id) !== assigneeId);
+  const reassignedIds = toAssign.filter((id) => currentByIssue.has(id));
+
   if (toAssign.length > 0) {
+    // Close the outgoing assignment FIRST — the row stays as history.
+    await client.query(
+      `UPDATE issue_tracking.issue_assignments
+          SET is_current = false
+        WHERE issue_id = ANY($1::text[]) AND is_current = true`,
+      [toAssign]
+    );
     try {
-      const result = await client.query<{ issue_id: string }>(
+      await client.query(
         `INSERT INTO issue_tracking.issue_assignments (issue_id, assignee_id, assigned_by, is_current)
-         SELECT unnest($1::text[]), $2, $3, true
-         RETURNING issue_id`,
+         SELECT unnest($1::text[]), $2, $3, true`,
         [toAssign, assigneeId, assignedByUserId]
       );
-      assignedIds = result.rows.map((row) => row.issue_id);
     } catch (error) {
       if (isUniqueAssignmentViolation(error)) {
         await client.query("ROLLBACK");
@@ -122,7 +159,12 @@ async function attemptAssign(
   }
 
   await client.query("COMMIT");
-  return { assignedIds, alreadyAssignedIds };
+  return {
+    assignedIds: toAssign.filter((id) => !currentByIssue.has(id)),
+    reassignedIds,
+    unchangedIds,
+    blockedIds,
+  };
 }
 
 /**
@@ -144,7 +186,7 @@ export async function assignIssues(
   assignedByUserId: number | null
 ): Promise<AssignIssuesResult> {
   if (issueIds.length === 0) {
-    return { assignedIds: [], alreadyAssignedIds: [] };
+    return { assignedIds: [], reassignedIds: [], unchangedIds: [], blockedIds: [] };
   }
 
   const client = await getVerifiedClient();
@@ -157,9 +199,78 @@ export async function assignIssues(
       // result === null: lost the race on attempt 1, already rolled back — retry once.
     }
     // Extremely unlikely (would require losing the race twice in a row);
-    // treat every requested issue as already assigned rather than looping
-    // forever or throwing a confusing error.
-    return { assignedIds: [], alreadyAssignedIds: issueIds };
+    // report "nothing changed" rather than looping forever or throwing a
+    // confusing error.
+    return { assignedIds: [], reassignedIds: [], unchangedIds: issueIds, blockedIds: [] };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UNASSIGN
+//
+// The mirror of assignIssues(): it closes the current assignment and creates
+// NOTHING in its place, so the issue ends with zero current rows and drops out
+// of every assignee's portal (which reads is_current = true) while remaining
+// fully visible to the Super Admin.
+//
+// It never DELETEs: the closed row stays exactly where it is, with its
+// assignee_id and assigned_at intact, so the assignment history is unchanged.
+// It touches no other column and no other table — status, priority, progress,
+// resolution and Issue content are all outside this statement.
+// ---------------------------------------------------------------------------
+
+export interface UnassignIssueResult {
+  /** False when the issue already had no current assignee — a no-op, not an error. */
+  cleared: boolean;
+  /** Who held it, for the confirmation message. Null when nothing was cleared. */
+  previousAssigneeId: number | null;
+  /** True when the Issue is no longer RED, so its assignment is locked. */
+  blockedByStatus: boolean;
+}
+
+export async function unassignIssue(issueId: string): Promise<UnassignIssueResult> {
+  const client = await getVerifiedClient();
+  try {
+    await client.query("BEGIN");
+
+    // Same gate as assignIssues(), read from the locked row.
+    const issue = await client.query<{ status: string }>(
+      `SELECT status FROM issue_tracking.issues
+        WHERE issue_id = $1 AND deleted_at IS NULL
+        FOR UPDATE`,
+      [issueId]
+    );
+    if (issue.rows[0]?.status !== ASSIGNABLE_STATUS) {
+      await client.query("COMMIT");
+      return { cleared: false, previousAssigneeId: null, blockedByStatus: true };
+    }
+
+    const current = await client.query<{ assignee_id: number }>(
+      `SELECT assignee_id FROM issue_tracking.issue_assignments
+       WHERE issue_id = $1 AND is_current = true
+       FOR UPDATE`,
+      [issueId]
+    );
+    const previous = current.rows[0];
+    if (!previous) {
+      await client.query("COMMIT");
+      return { cleared: false, previousAssigneeId: null, blockedByStatus: false };
+    }
+
+    await client.query(
+      `UPDATE issue_tracking.issue_assignments
+          SET is_current = false
+        WHERE issue_id = $1 AND is_current = true`,
+      [issueId]
+    );
+
+    await client.query("COMMIT");
+    return { cleared: true, previousAssigneeId: Number(previous.assignee_id), blockedByStatus: false };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

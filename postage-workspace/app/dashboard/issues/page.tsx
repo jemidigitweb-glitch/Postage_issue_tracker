@@ -350,6 +350,10 @@ async function AssignedIssuesTabContent({
           status={status}
           hasActiveFilters={hasActiveFilters}
           showAssigneeFilter={canViewAll}
+          // The full filtered total the query already returned — no second
+          // count query is issued for this. Null on a load error, so the
+          // count is simply absent rather than showing a false 0.
+          totalCount={result?.totalCount ?? null}
         />
 
         {errorMessage ? (

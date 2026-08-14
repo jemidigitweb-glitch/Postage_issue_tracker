@@ -132,6 +132,72 @@ const ANALYSIS_TIMEOUT_MS = 45_000;
  */
 const ANALYSIS_MAX_OUTPUT_TOKENS = 900;
 
+// ---------------------------------------------------------------------------
+// Token-usage diagnostic (development measurement)
+// ---------------------------------------------------------------------------
+
+/**
+ * The token-usage block the Interactions API returns on a COMPLETED
+ * interaction — `interaction.usage`.
+ *
+ * Declared locally because the SDK does not export its `Usage` type. The field
+ * names are taken from the installed declaration
+ * (node_modules/@google/genai/dist/genai.d.ts, v2.17.0), not guessed, and every
+ * one of them is optional there — so an absent field is reported as
+ * "unavailable" rather than defaulted to zero or derived from anything else.
+ *
+ * This is READ OFF THE REPLY WE ALREADY HAVE. No second request is made, and
+ * countTokens() is not called: measuring must not itself cost a request.
+ */
+interface InteractionUsage {
+  total_input_tokens?: number | undefined;
+  total_output_tokens?: number | undefined;
+  total_thought_tokens?: number | undefined;
+  total_cached_tokens?: number | undefined;
+  total_tool_use_tokens?: number | undefined;
+  total_tokens?: number | undefined;
+}
+
+/** A count the provider actually returned, or the literal word "unavailable".
+ *  Never a calculation, an estimate, or a character-based approximation. */
+function formatTokenCount(value: number | undefined): string {
+  return typeof value === "number" ? String(value) : "unavailable";
+}
+
+/**
+ * Prints ONE diagnostic block per completed analysis request.
+ *
+ * ── WHAT MAY APPEAR HERE ────────────────────────────────────────────────────
+ * The model name, six provider-returned token counts, and an elapsed
+ * millisecond figure. Nothing else is in scope: no Issue title, description,
+ * domain or root cause, no prompt, no system instructions, no response body,
+ * no API key, no environment value.
+ *
+ * Server-side only — this module is `server-only`, so this can never run in a
+ * browser, and nothing here is returned to a caller or rendered to a user. It
+ * writes to the server console and to no other destination: no database row,
+ * no file, no request.
+ */
+function logAnalysisUsage(
+  model: string,
+  usage: InteractionUsage | undefined,
+  durationMs: number
+): void {
+  console.log(
+    [
+      "[Gemini Issue Analysis Usage]",
+      `Model: ${model}`,
+      `Input tokens: ${formatTokenCount(usage?.total_input_tokens)}`,
+      `Output tokens: ${formatTokenCount(usage?.total_output_tokens)}`,
+      `Thinking tokens: ${formatTokenCount(usage?.total_thought_tokens)}`,
+      `Cached tokens: ${formatTokenCount(usage?.total_cached_tokens)}`,
+      `Tool tokens: ${formatTokenCount(usage?.total_tool_use_tokens)}`,
+      `Total tokens: ${formatTokenCount(usage?.total_tokens)}`,
+      `Duration: ${durationMs}ms`,
+    ].join("\n")
+  );
+}
+
 /**
  * The structured-analysis transport for app/dashboard/issues/ai-actions.ts.
  *
@@ -162,6 +228,9 @@ export async function sendAnalysisRequest(request: {
 
   try {
     const ai = new GoogleGenAI({ apiKey });
+    // Timed around the provider call only — the gate check above and the
+    // parsing below are not Gemini's latency and are not counted as it.
+    const startedAt = Date.now();
     const interaction = await withTimeout(
       ai.interactions.create({
         model: status.model,
@@ -189,6 +258,10 @@ export async function sendAnalysisRequest(request: {
       }),
       ANALYSIS_TIMEOUT_MS
     );
+    // Measurement only. Read off the reply already in hand, printed, and then
+    // discarded — it is not returned, not rendered, and not persisted, so the
+    // analysis path behaves exactly as it did before.
+    logAnalysisUsage(interaction.model ?? status.model, interaction.usage, Date.now() - startedAt);
     return { text: interaction.output_text ?? "" };
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);

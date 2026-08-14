@@ -246,6 +246,10 @@ export default async function IssueDetailPage({
         {canAssign && (
           <AssignmentPanel
             issueId={issueId}
+            // Assignment closes once work starts — the panel withholds its
+            // controls for anything that is not RED, and both Server Actions
+            // re-check the same rule against the locked row.
+            issueStatus={issue.status}
             assignmentUsers={assignmentUsers}
             currentAssigneeId={assignment?.assigneeId ?? null}
             currentAssigneeName={assignment?.assigneeName ?? null}
