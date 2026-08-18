@@ -27,9 +27,15 @@ export const metadata: Metadata = {
     title: "Warehouse",
     statusBarStyle: "black-translucent",
   },
+  // PNG, not SVG. Real iPhone testing showed the previous SVG apple-touch-icon
+  // was ignored by Safari, which fell back to a screenshot of the page — 180x180
+  // PNG is the size iOS actually asks for.
   icons: {
-    icon: "/icons/warehouse-mobile.svg",
-    apple: "/icons/warehouse-mobile.svg",
+    icon: [
+      { url: "/icons/warehouse-mobile-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/warehouse-mobile-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/warehouse-mobile-180.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

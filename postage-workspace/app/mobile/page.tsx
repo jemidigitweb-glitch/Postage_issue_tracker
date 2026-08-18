@@ -36,9 +36,12 @@ import MobileCapture from "./MobileCapture";
 export default function MobileLitePage() {
   return (
     <main className="flex flex-col gap-4">
-      <header>
-        <h1 className="text-lg font-bold tracking-tight">Warehouse Mobile</h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+      <header className="pb-1">
+        <h1 className="text-2xl font-bold tracking-tight">Warehouse Mobile</h1>
+        <p className="mt-1 text-sm font-medium text-neutral-500 dark:text-neutral-400">
+          Report an Issue
+        </p>
+        <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
           Record what happened, add two photos, then register.
         </p>
       </header>

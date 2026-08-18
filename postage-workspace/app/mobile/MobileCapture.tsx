@@ -25,6 +25,15 @@ import type { MobileUploadSlot } from "@/lib/mobile/mobileAccess";
 import { requestMobileUploadTicket } from "./upload-actions";
 import { registerMobileIssue } from "./register-actions";
 import { supersededAssets } from "@/lib/mobile/mobileSlots";
+import {
+  AlertIcon,
+  CameraIcon,
+  CheckIcon,
+  MicrophoneIcon,
+  RetryIcon,
+  SpinnerIcon,
+  StopIcon,
+} from "./icons";
 
 // WAREHOUSE MOBILE LITE — the worker's four controls.
 //
@@ -46,19 +55,65 @@ import { supersededAssets } from "@/lib/mobile/mobileSlots";
 // previous upload is never overwritten (uploads are signed overwrite=false)
 // and is recorded as superseded instead.
 //
-// ── STAGE 4 BOUNDARY ────────────────────────────────────────────────────────
-// REGISTER becomes enabled once all three uploads have succeeded and DOES
-// NOTHING ELSE. It creates no Issue, writes no database row, and shows no
-// Issue ID — that is Stage 5. The button says so rather than implying success.
+// ── UI CORRECTION (after real iPhone testing) ───────────────────────────────
+// The capture, upload, retry/replace and registration behaviour below is
+// UNCHANGED. What changed is presentation only:
+//   - card-based mobile layout with real microphone/camera icons
+//   - the recording is played back in an <audio> element once it lands
+//   - each photo is shown as an actual image once it lands
+//   - "Record Again" / "Retake Photo" drive the EXISTING replacement flow
+// The previews are local object URLs taken from the very blob that was
+// uploaded, so they render instantly, cost no bandwidth, and prove to the
+// worker that the right media was captured. They are revoked on replacement
+// and on unmount.
 
 type BusyMap = Record<MobileUploadSlot, boolean>;
+type PreviewMap = Record<MobileUploadSlot, string | null>;
 
 const cardClassName =
-  "rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4";
+  "rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-4 shadow-sm";
 const actionButtonClassName =
-  "w-full rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 px-4 py-4 text-left text-base font-medium text-neutral-800 dark:text-neutral-100 active:scale-[0.99] transition-transform disabled:opacity-60 disabled:cursor-not-allowed";
+  "flex w-full items-center justify-center gap-3 rounded-2xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-800 px-4 py-5 text-base font-semibold text-neutral-900 dark:text-neutral-50 active:scale-[0.99] transition-transform disabled:opacity-50 disabled:cursor-not-allowed";
 const smallButtonClassName =
-  "rounded-lg border border-neutral-200 dark:border-neutral-800 px-3 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 disabled:opacity-60";
+  "flex items-center justify-center gap-2 rounded-xl border border-neutral-200 dark:border-neutral-700 px-4 py-3 text-sm font-semibold text-neutral-700 dark:text-neutral-200 active:scale-[0.99] transition-transform disabled:opacity-50";
+const doneHeadingClassName =
+  "flex items-center gap-2 text-[15px] font-semibold text-emerald-700 dark:text-emerald-400";
+const hintClassName = "text-xs text-neutral-500 dark:text-neutral-400";
+
+/** Step chip + icon tile, so each card is identifiable at a glance. */
+function CardHead({
+  step,
+  title,
+  done,
+  icon,
+}: {
+  step: number;
+  title: string;
+  done: boolean;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-3">
+      <span
+        className={`flex h-11 w-11 items-center justify-center rounded-xl ${
+          done
+            ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400"
+            : "bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400"
+        }`}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
+          Step {step}
+        </p>
+        <p className="truncate text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
+          {title}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 /** Reads the first bytes so validation decides on content, not on a filename
  *  a phone chose. */
@@ -97,6 +152,15 @@ export default function MobileCapture() {
   const [registeredId, setRegisteredId] = useState<string | null>(null);
   const [registerError, setRegisterError] = useState<string | null>(null);
 
+  // Local playback/preview URLs. PRESENTATION ONLY — never sent anywhere, and
+  // never used as the registered asset (that is always Cloudinary's response).
+  const [previews, setPreviews] = useState<PreviewMap>({
+    voice: null,
+    photo1: null,
+    photo2: null,
+  });
+  const previewsRef = useRef<PreviewMap>({ voice: null, photo1: null, photo2: null });
+
   // Recording state.
   const [recording, setRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -117,13 +181,26 @@ export default function MobileCapture() {
     );
   }, []);
 
-  // Leaving the page mid-recording must not leave the microphone open.
+  // Leaving the page mid-recording must not leave the microphone open, and must
+  // not leak the local preview URLs either.
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      for (const url of Object.values(previewsRef.current)) {
+        if (url) URL.revokeObjectURL(url);
+      }
     };
   }, []);
+
+  /** Swaps in a fresh local preview, releasing the one it replaces. */
+  function setPreview(slot: MobileUploadSlot, blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    const previous = previewsRef.current[slot];
+    previewsRef.current = { ...previewsRef.current, [slot]: url };
+    setPreviews((current) => ({ ...current, [slot]: url }));
+    if (previous) URL.revokeObjectURL(previous);
+  }
 
   function updateSlot(slot: MobileUploadSlot, next: (state: SlotState) => SlotState) {
     setSlots((current) => ({ ...current, [slot]: next(current[slot]) }));
@@ -176,6 +253,7 @@ export default function MobileCapture() {
 
     const attemptId = crypto.randomUUID();
     filesRef.current[slot] = { blob, name };
+    setPreview(slot, blob);
     updateSlot(slot, (state) => selectMedia(state, attemptId));
     await upload(slot, attemptId);
   }
@@ -287,23 +365,73 @@ export default function MobileCapture() {
   if (registeredId) {
     return (
       <div className={`${cardClassName} text-center`}>
-        <p className="text-base font-semibold">Issue Registered</p>
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
+          <CheckIcon className="h-7 w-7" />
+        </span>
+        <p className="mt-3 text-base font-semibold">Issue Registered</p>
         <p className="mt-2 text-lg font-bold tracking-tight">Issue ID: {registeredId}</p>
-        <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
+        <p className={`mt-3 ${hintClassName}`}>
           Your voice recording and both photos have been attached.
         </p>
       </div>
     );
   }
 
+  const voiceDone = slots.voice.status === "uploaded";
+
   return (
     <div className="flex flex-col gap-4">
       {/* ── 1. RECORD VOICE ───────────────────────────────────────────── */}
       <section className={cardClassName}>
+        <CardHead
+          step={1}
+          title="Voice Recording"
+          done={voiceDone}
+          icon={<MicrophoneIcon className="h-6 w-6" />}
+        />
+
         {recording ? (
-          <button type="button" onClick={stopRecording} className={actionButtonClassName}>
-            ⏹ Stop Recording — {formatDuration(seconds)} / {formatDuration(MOBILE_MAX_RECORDING_SECONDS)}
-          </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-center gap-2 rounded-2xl bg-red-50 px-4 py-4 dark:bg-red-950/40">
+              <span className="h-3 w-3 animate-pulse rounded-full bg-red-500" />
+              <span className="text-base font-semibold tabular-nums text-red-700 dark:text-red-300">
+                Recording {formatDuration(seconds)} / {formatDuration(MOBILE_MAX_RECORDING_SECONDS)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={stopRecording}
+              className={`${actionButtonClassName} border-red-200 bg-red-600 text-white dark:border-red-900 dark:bg-red-600 dark:text-white`}
+            >
+              <StopIcon className="h-5 w-5" />
+              Stop Recording
+            </button>
+          </div>
+        ) : voiceDone ? (
+          <div className="flex flex-col gap-3">
+            <p className={doneHeadingClassName}>
+              Voice Recorded
+              <CheckIcon className="h-5 w-5" />
+            </p>
+            {previews.voice && (
+              <audio
+                controls
+                preload="metadata"
+                src={previews.voice}
+                className="w-full"
+                aria-label="Play back your voice recording"
+              />
+            )}
+            <button
+              type="button"
+              onClick={startRecording}
+              disabled={busy.voice || !recordingSupported}
+              className={smallButtonClassName}
+            >
+              <RetryIcon className="h-4 w-4" />
+              Record Again
+            </button>
+          </div>
         ) : (
           <button
             type="button"
@@ -311,18 +439,17 @@ export default function MobileCapture() {
             disabled={busy.voice || !recordingSupported}
             className={actionButtonClassName}
           >
-            🎙️ {slots.voice.status === "uploaded" ? "Record Voice again" : "Record Voice"}
+            {busy.voice ? <SpinnerIcon className="h-5 w-5" /> : <MicrophoneIcon className="h-5 w-5" />}
+            Record Voice
           </button>
         )}
 
-        <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
+        <p className={`mt-3 ${hintClassName}`}>
           {recorderError ?? (recording ? "Recording…" : statusLine(slots.voice))}
         </p>
 
         {!recordingSupported && (
-          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-            Recording is not supported on this browser.
-          </p>
+          <p className={`mt-1 ${hintClassName}`}>Recording is not supported on this browser.</p>
         )}
 
         {slots.voice.status === "failed" && (
@@ -330,61 +457,106 @@ export default function MobileCapture() {
             type="button"
             onClick={() => retry("voice")}
             disabled={busy.voice}
-            className={`${smallButtonClassName} mt-2`}
+            className={`${smallButtonClassName} mt-3 w-full`}
           >
+            <RetryIcon className="h-4 w-4" />
             Retry upload
           </button>
         )}
       </section>
 
       {/* ── 2 & 3. EVIDENCE PHOTOS ────────────────────────────────────── */}
-      {(["photo1", "photo2"] as const).map((slot, index) => (
-        <section key={slot} className={cardClassName}>
-          <label className={`${actionButtonClassName} block cursor-pointer`}>
-            📷 {slots[slot].status === "uploaded" ? `Replace Evidence Photo ${index + 1}` : `Take Evidence Photo ${index + 1}`}
-            <input
-              type="file"
-              accept="image/jpeg"
-              capture="environment"
-              className="hidden"
-              disabled={busy[slot]}
-              onChange={async (event) => {
-                const file = event.target.files?.[0];
-                // Cleared so picking the SAME file again still fires a change.
-                event.target.value = "";
-                if (file) await acceptMedia(slot, file, file.name || `photo-${index + 1}.jpg`);
-              }}
+      {(["photo1", "photo2"] as const).map((slot, index) => {
+        const done = slots[slot].status === "uploaded";
+        const preview = previews[slot];
+        const picker = (
+          <input
+            type="file"
+            accept="image/jpeg"
+            capture="environment"
+            className="hidden"
+            disabled={busy[slot]}
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              // Cleared so picking the SAME file again still fires a change.
+              event.target.value = "";
+              if (file) await acceptMedia(slot, file, file.name || `photo-${index + 1}.jpg`);
+            }}
+          />
+        );
+
+        return (
+          <section key={slot} className={cardClassName}>
+            <CardHead
+              step={index + 2}
+              title={`Evidence Photo ${index + 1}`}
+              done={done}
+              icon={<CameraIcon className="h-6 w-6" />}
             />
-          </label>
 
-          <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-            {statusLine(slots[slot])}
-          </p>
+            {done ? (
+              <div className="flex flex-col gap-3">
+                <p className={doneHeadingClassName}>
+                  Photo captured
+                  <CheckIcon className="h-5 w-5" />
+                </p>
+                {preview && (
+                  // A local object URL for the exact captured file — next/image
+                  // cannot optimise a blob: URL, and no remote fetch is wanted.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={preview}
+                    alt={`Evidence photo ${index + 1} preview`}
+                    className="max-h-72 w-full rounded-xl border border-neutral-200 object-contain dark:border-neutral-800"
+                  />
+                )}
+                <label className={`${smallButtonClassName} cursor-pointer`}>
+                  <RetryIcon className="h-4 w-4" />
+                  Retake Photo
+                  {picker}
+                </label>
+              </div>
+            ) : (
+              <label className={`${actionButtonClassName} cursor-pointer`}>
+                {busy[slot] ? <SpinnerIcon className="h-5 w-5" /> : <CameraIcon className="h-5 w-5" />}
+                {`Take Evidence Photo ${index + 1}`}
+                {picker}
+              </label>
+            )}
 
-          {slots[slot].status === "failed" && (
-            <button
-              type="button"
-              onClick={() => retry(slot)}
-              disabled={busy[slot]}
-              className={`${smallButtonClassName} mt-2`}
-            >
-              Retry upload
-            </button>
-          )}
-        </section>
-      ))}
+            <p className={`mt-3 ${hintClassName}`}>{statusLine(slots[slot])}</p>
+
+            {slots[slot].status === "failed" && (
+              <button
+                type="button"
+                onClick={() => retry(slot)}
+                disabled={busy[slot]}
+                className={`${smallButtonClassName} mt-3 w-full`}
+              >
+                <RetryIcon className="h-4 w-4" />
+                Retry upload
+              </button>
+            )}
+          </section>
+        );
+      })}
 
       {/* ── 4. REGISTER ───────────────────────────────────────────────── */}
-      <div>
+      <div className="pb-2">
         <button
           type="button"
           onClick={register}
           disabled={!registerReady || registering}
-          className="w-full rounded-xl bg-neutral-900 px-4 py-4 text-base font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed dark:bg-neutral-100 dark:text-neutral-900"
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-5 text-base font-bold tracking-wide text-white shadow-sm active:scale-[0.99] transition-transform disabled:opacity-40 disabled:cursor-not-allowed dark:bg-neutral-100 dark:text-neutral-900"
         >
+          {registering ? (
+            <SpinnerIcon className="h-5 w-5" />
+          ) : (
+            <CheckIcon className="h-5 w-5" />
+          )}
           {registering ? "Registering…" : "REGISTER"}
         </button>
-        <p role="status" className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+        <p role="status" className={`mt-2 text-center ${hintClassName}`}>
           {registering
             ? "Registering your report…"
             : registerReady
@@ -392,12 +564,17 @@ export default function MobileCapture() {
               : "Add a voice recording and both photos to continue."}
         </p>
         {registerError && (
-          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {registerError} Your recording and photos are still here — press REGISTER again.
+          <p
+            role="alert"
+            className="mt-3 flex items-start gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300"
+          >
+            <AlertIcon className="mt-0.5 h-4 w-4" />
+            <span>
+              {registerError} Your recording and photos are still here — press REGISTER again.
+            </span>
           </p>
         )}
       </div>
-
     </div>
   );
 }

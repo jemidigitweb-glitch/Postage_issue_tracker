@@ -29,17 +29,26 @@ export default function manifest(): MetadataRoute.Manifest {
     orientation: "portrait",
     background_color: "#f5f5f5",
     theme_color: "#171717",
+    // PNG, not SVG. Real device testing showed the SVG set produced a generic
+    // home-screen icon; 192 and 512 PNGs are what both platforms actually ask
+    // for, and the maskable entry keeps the glyph inside Android's safe zone.
     icons: [
       {
-        src: "/icons/warehouse-mobile.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/icons/warehouse-mobile-192.png",
+        sizes: "192x192",
+        type: "image/png",
         purpose: "any",
       },
       {
-        src: "/icons/warehouse-mobile-maskable.svg",
-        sizes: "any",
-        type: "image/svg+xml",
+        src: "/icons/warehouse-mobile-512.png",
+        sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/icons/warehouse-mobile-maskable-512.png",
+        sizes: "512x512",
+        type: "image/png",
         purpose: "maskable",
       },
     ],

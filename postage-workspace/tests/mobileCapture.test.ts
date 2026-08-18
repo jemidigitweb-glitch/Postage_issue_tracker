@@ -346,11 +346,12 @@ describe("Stage 4 — the UI offers exactly the four approved controls", () => {
     .join("\n");
 
   it("has exactly one voice control", () => {
-    // One microphone control. Its label changes to "Record Voice again" once a
-    // recording has been uploaded, which is a label, not a second control —
-    // so the button glyph is what is counted.
-    assert.equal((code.match(/🎙️/g) ?? []).length, 1);
-    assert.equal((code.match(/⏹ Stop Recording/g) ?? []).length, 1);
+    // One microphone control, and one stop control that exists only while a
+    // recording is running. The UI correction replaced the emoji glyphs with
+    // real SVG icons, so the controls are counted by their handlers.
+    assert.equal((code.match(/onClick=\{startRecording\}/g) ?? []).length, 2); // record + record again
+    assert.equal((code.match(/onClick=\{stopRecording\}/g) ?? []).length, 1);
+    assert.equal((code.match(/Stop Recording/g) ?? []).length, 1);
   });
 
   it("has exactly two photo controls, driven by one loop over two slots", () => {
@@ -418,14 +419,93 @@ describe("Stage 4 — the UI offers exactly the four approved controls", () => {
     ]) {
       assert.equal(code.includes(forbidden), false, `must not offer "${forbidden}"`);
     }
-    // Four <button>/label controls: record, stop, two photo labels, register.
-    assert.equal((code.match(/🎙️/g) ?? []).length, 1);
-    assert.equal((code.match(/📷/g) ?? []).length, 1); // one loop renders both photos
+    // Still exactly one capture surface per medium and one submit.
+    assert.equal((code.match(/type="file"/g) ?? []).length, 1); // one loop renders both photos
     assert.equal((code.match(/onClick=\{register\}/g) ?? []).length, 1);
   });
 
   it("retry reuses the stored attemptId rather than minting one", () => {
     assert.ok(code.includes("const attemptId = slots[slot].attemptId;"));
+  });
+});
+
+describe("UI correction — icons, playback and previews", () => {
+  const captureSource = readFileSync(join(process.cwd(), "app/mobile/MobileCapture.tsx"), "utf8");
+  const iconSource = readFileSync(join(process.cwd(), "app/mobile/icons.tsx"), "utf8");
+
+  it("draws its icons inline rather than adding a dependency", () => {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    for (const iconPackage of ["lucide-react", "react-icons", "@heroicons/react", "@fortawesome/react-fontawesome"]) {
+      assert.equal(iconPackage in deps, false, `must not add ${iconPackage} just for icons`);
+    }
+    assert.ok(iconSource.includes("<svg"));
+  });
+
+  it("the voice card uses a microphone icon", () => {
+    assert.ok(iconSource.includes("export function MicrophoneIcon"));
+    assert.ok(captureSource.includes("MicrophoneIcon"));
+  });
+
+  it("both photo cards use a camera icon", () => {
+    assert.ok(iconSource.includes("export function CameraIcon"));
+    assert.ok(captureSource.includes("CameraIcon"));
+  });
+
+  it("plays the recording back in an audio element once it lands", () => {
+    assert.ok(captureSource.includes("<audio"));
+    assert.ok(captureSource.includes("controls"));
+    assert.ok(captureSource.includes("src={previews.voice}"));
+    // The player is shown in the uploaded branch, not before.
+    assert.ok(captureSource.includes("Voice Recorded"));
+  });
+
+  it("offers Record Again after a successful recording, on the EXISTING flow", () => {
+    assert.ok(captureSource.includes("Record Again"));
+    // Record Again is the same deliberate re-record entry point as the first
+    // recording, so it mints a new attemptId exactly as before.
+    assert.equal((captureSource.match(/onClick=\{startRecording\}/g) ?? []).length, 2);
+  });
+
+  it("shows the actual photo, not just a message", () => {
+    assert.ok(captureSource.includes("<img"));
+    assert.ok(captureSource.includes("src={preview}"));
+    assert.ok(captureSource.includes("object-contain"), "must not distort the photo");
+    assert.ok(captureSource.includes("max-h-72"), "must not overflow the phone screen");
+    assert.ok(captureSource.includes("rounded-xl"));
+  });
+
+  it("offers Retake Photo on the existing replacement flow", () => {
+    assert.ok(captureSource.includes("Retake Photo"));
+    // Retake re-uses the same picker element, so it runs acceptMedia and
+    // therefore the same new-attempt/supersede rules.
+    assert.equal((captureSource.match(/const picker = \(/g) ?? []).length, 1);
+    assert.ok(captureSource.includes("await acceptMedia(slot, file"));
+  });
+
+  it("previews are local object URLs that are released again", () => {
+    assert.ok(captureSource.includes("URL.createObjectURL(blob)"));
+    assert.equal((captureSource.match(/URL\.revokeObjectURL/g) ?? []).length, 2); // replacement + unmount
+  });
+
+  it("the preview never becomes the registered asset", () => {
+    // What is registered is still Cloudinary's response for each slot.
+    assert.ok(captureSource.includes("voice: slots.voice.asset!"));
+    assert.ok(captureSource.includes("photo1: slots.photo1.asset!"));
+    assert.ok(captureSource.includes("photo2: slots.photo2.asset!"));
+    assert.equal(captureSource.includes("secureUrl: preview"), false);
+  });
+
+  it("REGISTER still requires all three media and the same guard", () => {
+    assert.ok(captureSource.includes("const registerReady = isRegisterReady(slots) && !anyBusy;"));
+    assert.ok(captureSource.includes("disabled={!registerReady || registering}"));
+    assert.ok(captureSource.includes("if (!registerReady || registering) return;"));
+  });
+
+  it("the upload path is untouched by the redesign", () => {
+    assert.ok(captureSource.includes("requestMobileUploadTicket({ submissionId, slot, attemptId })"));
+    assert.ok(captureSource.includes("uploadToCloudinary("));
+    assert.ok(captureSource.includes("registerMobileIssue({"));
   });
 });
 

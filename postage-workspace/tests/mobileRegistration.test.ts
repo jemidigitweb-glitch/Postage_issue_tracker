@@ -348,8 +348,49 @@ describe("Stage 5 — PWA manifest", () => {
   it("declares theme and background colours and an icon set", () => {
     assert.ok(manifestSource.includes("background_color"));
     assert.ok(manifestSource.includes("theme_color"));
-    assert.ok(manifestSource.includes("/icons/warehouse-mobile.svg"));
     assert.ok(manifestSource.includes('purpose: "maskable"'));
+  });
+
+  // UI CORRECTION: a real iPhone showed the SVG icon set produced a generic
+  // home-screen icon. Both platforms are given PNGs at the sizes they ask for.
+  it("ships PNG icons at 192 and 512, not SVG", () => {
+    assert.ok(manifestSource.includes("/icons/warehouse-mobile-192.png"));
+    assert.ok(manifestSource.includes('sizes: "192x192"'));
+    assert.ok(manifestSource.includes("/icons/warehouse-mobile-512.png"));
+    assert.ok(manifestSource.includes('sizes: "512x512"'));
+    assert.ok(manifestSource.includes('type: "image/png"'));
+    assert.equal(manifestSource.includes("image/svg+xml"), false, "no SVG icon may remain");
+  });
+
+  it("ships a maskable PNG so Android does not letterbox the glyph", () => {
+    assert.ok(manifestSource.includes("/icons/warehouse-mobile-maskable-512.png"));
+  });
+
+  it("every icon the manifest and layout reference exists on disk", () => {
+    for (const file of [
+      "warehouse-mobile-180.png",
+      "warehouse-mobile-192.png",
+      "warehouse-mobile-512.png",
+      "warehouse-mobile-maskable-512.png",
+    ]) {
+      const bytes = readFileSync(join(process.cwd(), "public/icons", file));
+      // PNG magic number — proves these are real rasters, not renamed SVGs.
+      assert.deepEqual(
+        [...bytes.subarray(0, 8)],
+        [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+        `${file} must be a real PNG`
+      );
+      // IHDR carries the true pixel dimensions.
+      const expected = Number(file.match(/(\d+)\.png$/)![1]);
+      assert.equal(bytes.readUInt32BE(16), expected, `${file} width`);
+      assert.equal(bytes.readUInt32BE(20), expected, `${file} height`);
+    }
+  });
+
+  it("the Apple touch icon is the 180x180 PNG", () => {
+    assert.ok(layoutSource.includes("/icons/warehouse-mobile-180.png"));
+    assert.ok(layoutSource.includes('sizes: "180x180"'));
+    assert.equal(layoutSource.includes(".svg"), false, "iOS ignores an SVG apple-touch-icon");
   });
 
   it("adds no service worker and no PWA package", () => {
