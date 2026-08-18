@@ -30,6 +30,7 @@ import {
   CameraIcon,
   CheckIcon,
   MicrophoneIcon,
+  PlusIcon,
   RetryIcon,
   SpinnerIcon,
   StopIcon,
@@ -358,10 +359,32 @@ export default function MobileCapture() {
     }
   }
 
+  /**
+   * Starts the NEXT report — a full navigation back to /mobile.
+   *
+   * Deliberately a navigation rather than a pile of setState calls. Remounting
+   * runs the SAME initialisation every fresh visit runs, so the next report
+   * gets a brand-new submission id from the existing randomUUID initialiser
+   * and empty slots from initialSlots(). Nothing here reuses the completed
+   * submission id, and no
+   * server-side reset exists or is needed: the registered Issue is already
+   * committed and its Cloudinary assets stay exactly where they are.
+   *
+   * The local object URLs are released first, because a hard navigation tears
+   * the document down without running the unmount cleanup below.
+   */
+  function startAnotherReport() {
+    for (const url of Object.values(previewsRef.current)) {
+      if (url) URL.revokeObjectURL(url);
+    }
+    previewsRef.current = { voice: null, photo1: null, photo2: null };
+    window.location.assign("/mobile");
+  }
+
   // ── SUCCESS ───────────────────────────────────────────────────────────────
-  // The confirmation replaces the form entirely: there is nothing further to
-  // do, and no fifth action is offered. The ID shown is the REAL generated
-  // Issue ID returned by the database.
+  // The confirmation replaces the form entirely. The ID shown is the REAL
+  // generated Issue ID returned by the database. The only action offered here
+  // is starting the next report — the four capture controls are done.
   if (registeredId) {
     return (
       <div className={`${cardClassName} text-center`}>
@@ -373,6 +396,14 @@ export default function MobileCapture() {
         <p className={`mt-3 ${hintClassName}`}>
           Your voice recording and both photos have been attached.
         </p>
+        <button
+          type="button"
+          onClick={startAnotherReport}
+          className={`${actionButtonClassName} mt-5`}
+        >
+          <PlusIcon className="h-5 w-5" />
+          Add Another Issue
+        </button>
       </div>
     );
   }

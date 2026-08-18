@@ -485,7 +485,8 @@ describe("UI correction — icons, playback and previews", () => {
 
   it("previews are local object URLs that are released again", () => {
     assert.ok(captureSource.includes("URL.createObjectURL(blob)"));
-    assert.equal((captureSource.match(/URL\.revokeObjectURL/g) ?? []).length, 2); // replacement + unmount
+    // replacement + unmount + starting another report
+    assert.equal((captureSource.match(/URL\.revokeObjectURL/g) ?? []).length, 3);
   });
 
   it("the preview never becomes the registered asset", () => {
@@ -506,6 +507,102 @@ describe("UI correction — icons, playback and previews", () => {
     assert.ok(captureSource.includes("requestMobileUploadTicket({ submissionId, slot, attemptId })"));
     assert.ok(captureSource.includes("uploadToCloudinary("));
     assert.ok(captureSource.includes("registerMobileIssue({"));
+  });
+});
+
+describe("UI correction — starting another report after a successful REGISTER", () => {
+  const captureSource = readFileSync(join(process.cwd(), "app/mobile/MobileCapture.tsx"), "utf8");
+  const iconSource = readFileSync(join(process.cwd(), "app/mobile/icons.tsx"), "utf8");
+  // Everything the success screen renders, isolated from the capture form.
+  const successBlock = captureSource.slice(
+    captureSource.indexOf("if (registeredId) {"),
+    captureSource.indexOf("const voiceDone =")
+  );
+
+  it("still shows the real generated Issue ID", () => {
+    assert.ok(successBlock.includes("Issue Registered"));
+    assert.ok(successBlock.includes("Issue ID: {registeredId}"));
+    // The ID is whatever the database returned — never composed here.
+    assert.equal(/WH-\d/.test(successBlock), false, "no issue id may be invented in the client");
+  });
+
+  it("offers one clear action to start the next report", () => {
+    assert.ok(successBlock.includes("Add Another Issue"));
+    assert.equal((successBlock.match(/onClick=\{startAnotherReport\}/g) ?? []).length, 1);
+    // Large touch target: the shared full-width action button style.
+    assert.ok(successBlock.includes("actionButtonClassName"));
+  });
+
+  it("uses a plus icon from the Mobile Lite icon set", () => {
+    assert.ok(iconSource.includes("export function PlusIcon"));
+    assert.ok(successBlock.includes("<PlusIcon"));
+  });
+
+  it("returns to /mobile rather than hand-resetting state", () => {
+    assert.ok(captureSource.includes('window.location.assign("/mobile")'));
+    // A hard navigation is what guarantees a completely fresh report. Clearing
+    // the success flag alone would silently REUSE the completed submission id.
+    assert.equal(
+      captureSource.includes("setRegisteredId(null)"),
+      false,
+      "the success state must not be cleared in place"
+    );
+    assert.equal(captureSource.includes("setSubmissionId"), false);
+  });
+
+  it("the next report gets a fresh submission id through the EXISTING path", () => {
+    // Remounting re-runs exactly this initialiser — there is no second one.
+    assert.equal(
+      (captureSource.match(/useState<string>\(\(\) => crypto\.randomUUID\(\)\)/g) ?? []).length,
+      1
+    );
+    assert.equal(
+      (captureSource.match(/useState<MobileSlots>\(\(\) => initialSlots\(\)\)/g) ?? []).length,
+      1
+    );
+    // Two different mounts genuinely produce two different ids.
+    assert.notEqual(crypto.randomUUID(), crypto.randomUUID());
+  });
+
+  it("releases the local previews but never the registered Cloudinary assets", () => {
+    assert.ok(captureSource.includes("URL.revokeObjectURL"));
+    // revoke sites: replacement, unmount, and starting another report.
+    assert.equal((captureSource.match(/URL\.revokeObjectURL/g) ?? []).length, 3);
+    for (const forbidden of ["deleteAttachments", "destroy", "cloudinary"]) {
+      assert.equal(
+        captureSource.includes(forbidden),
+        false,
+        `starting a new report must not touch stored media (${forbidden})`
+      );
+    }
+  });
+
+  it("a fresh mount is genuinely empty — no media, no previews, REGISTER not ready", () => {
+    // What the remounted component starts from, proven on the real state
+    // machine rather than on the markup.
+    const fresh = initialSlots();
+    for (const slot of ["voice", "photo1", "photo2"] as const) {
+      assert.equal(fresh[slot].status, "empty");
+      assert.equal(fresh[slot].asset, null);
+      assert.equal(fresh[slot].attemptId, null);
+      assert.deepEqual(fresh[slot].superseded, []);
+      assert.equal(fresh[slot].error, null);
+    }
+    assert.equal(isRegisterReady(fresh), false, "REGISTER must return to its disabled state");
+  });
+
+  it("the previous report's state cannot survive the navigation", () => {
+    // Nothing is persisted anywhere a reload could read it back.
+    for (const store of ["localStorage", "sessionStorage", "indexedDB"]) {
+      assert.equal(captureSource.includes(store), false, `must not persist a report in ${store}`);
+    }
+  });
+
+  it("capture and registration behaviour is untouched by this addition", () => {
+    assert.ok(captureSource.includes("if (!registerReady || registering) return;"));
+    assert.ok(captureSource.includes("registerMobileIssue({"));
+    assert.ok(captureSource.includes("requestMobileUploadTicket({ submissionId, slot, attemptId })"));
+    assert.equal((captureSource.match(/onClick=\{register\}/g) ?? []).length, 1);
   });
 });
 
