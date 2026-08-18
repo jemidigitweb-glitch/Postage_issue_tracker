@@ -49,10 +49,13 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
+// FULL-SCREEN CHAT SHELL. 100dvh (not vh) so the mobile browser's collapsing
+// address bar cannot leave dead space under the composer, and overflow-hidden
+// so the page itself never scrolls — only the timeline inside does.
 export default function MobileLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-50">
-      <div className="mx-auto w-full max-w-md px-4 py-6">{children}</div>
+    <div className="h-[100dvh] overflow-hidden bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-50">
+      <div className="mx-auto flex h-full w-full max-w-md flex-col overflow-hidden">{children}</div>
     </div>
   );
 }

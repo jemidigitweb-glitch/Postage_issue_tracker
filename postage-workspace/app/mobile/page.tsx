@@ -1,4 +1,4 @@
-// WAREHOUSE MOBILE LITE — Stage 3 shell (corrected).
+// WAREHOUSE MOBILE LITE — the worker's entry point.
 //
 // ── NO ISSUE TRACKER LOGIN ──────────────────────────────────────────────────
 // SUPERSEDED DESIGN: an earlier revision required a Tracker session, the
@@ -20,33 +20,24 @@
 //   - /dashboard/** is untouched and still requires a real Tracker session.
 //
 // ── WHAT THIS PAGE IS ───────────────────────────────────────────────────────
-// A thin server shell around the client capture component. It offers exactly
-// four worker actions — Record Voice, Take Evidence Photo 1, Take Evidence
-// Photo 2, REGISTER — plus the status text a worker needs. No title,
-// description, domain, priority, status, assignment, investigation, resolution
-// or navigation control exists here, by construction.
-//
-// STAGE 4 BOUNDARY: capture and direct upload are live; REGISTER is enabled
-// only once all three uploads succeed and then DOES NOTHING. It creates no
-// Issue, writes no database row, and shows no Issue ID — that is Stage 5. The
-// page says so rather than implying a success that did not happen.
+// A thin server shell around the Stage 2 composer. The worker builds ONE report
+// out of notes, photos with captions and a voice recording, then registers it
+// with a single, separately-labelled action. There is no title, domain,
+// priority, status, assignment, investigation, resolution or navigation control
+// here, by construction — every one of those is derived on the server.
 
-import MobileCapture from "./MobileCapture";
+import MobileComposer from "./MobileComposer";
 
 export default function MobileLitePage() {
   return (
-    <main className="flex flex-col gap-4">
-      <header className="pb-1">
-        <h1 className="text-2xl font-bold tracking-tight">Warehouse Mobile</h1>
-        <p className="mt-1 text-sm font-medium text-neutral-500 dark:text-neutral-400">
-          Report an Issue
-        </p>
-        <p className="mt-2 text-xs text-neutral-400 dark:text-neutral-500">
-          Record what happened, add two photos, then register.
-        </p>
+    // header (fixed height) → scrollable timeline → composer pinned at the
+    // bottom. Only the middle section scrolls.
+    <main className="flex min-h-0 flex-1 flex-col">
+      <header className="shrink-0 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+        <h1 className="text-xl font-bold tracking-tight">Add Issue</h1>
       </header>
 
-      <MobileCapture />
+      <MobileComposer />
     </main>
   );
 }

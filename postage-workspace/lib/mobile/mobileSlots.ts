@@ -1,4 +1,4 @@
-import type { MobileUploadSlot } from "./mobileAccess";
+import type { LegacyMobileUploadSlot } from "./mobileAccess";
 
 // Warehouse Mobile Lite — the PURE state machine for the three media slots.
 //
@@ -39,7 +39,7 @@ export interface SlotState {
   error: string | null;
 }
 
-export type MobileSlots = Record<MobileUploadSlot, SlotState>;
+export type MobileSlots = Record<LegacyMobileUploadSlot, SlotState>;
 
 export function emptySlot(): SlotState {
   return { status: "empty", attemptId: null, asset: null, superseded: [], error: null };

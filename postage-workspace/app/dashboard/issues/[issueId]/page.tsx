@@ -197,6 +197,10 @@ export default async function IssueDetailPage({
           // and voice recordings from Add New Issue), so this stage adds no
           // new Assignee-portal display. Filtered server-side.
           includeHistoricalAudio={view.kind === "admin"}
+          // Warehouse Mobile Stage 2 evidence, rendered readably instead of as
+          // a raw JSON dump. SUPER ADMIN ONLY, exactly like the historical
+          // audio above — the Assignee portal's markup is unchanged.
+          showMobileEvidence={view.kind === "admin"}
         />
         {/* ASSIGNEE ONLY. The Super Admin has never had a status control on
             this page and still does not — their status workflow is unchanged. */}

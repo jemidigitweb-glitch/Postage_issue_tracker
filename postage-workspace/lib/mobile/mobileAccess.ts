@@ -21,13 +21,57 @@
 // Upload slots
 // ---------------------------------------------------------------------------
 
-/** The ONLY three assets a Mobile Lite submission may carry. Anything else is
- *  refused before a signature is minted. */
+/**
+ * STAGE 1 slots. Kept exactly as they were.
+ *
+ * Stage 2 no longer mints these, but they remain valid forever: assets and
+ * Issues created under the two-photo contract must keep verifying, and their
+ * tests must keep passing, without any migration.
+ */
 export const MOBILE_UPLOAD_SLOTS = ["voice", "photo1", "photo2"] as const;
-export type MobileUploadSlot = (typeof MOBILE_UPLOAD_SLOTS)[number];
+export type LegacyMobileUploadSlot = (typeof MOBILE_UPLOAD_SLOTS)[number];
 
+/** Stage 2 photo slots: photo-1 … photo-10, and nothing else. */
+export type MobilePhotoSlot = `photo-${number}`;
+export type MobileUploadSlot = LegacyMobileUploadSlot | MobilePhotoSlot;
+
+/** The single voice slot. One recording per report, in every stage. */
+export const MOBILE_VOICE_SLOT = "voice" as const;
+
+/** Stage 2 photo cap. Matches the existing desktop MAX_IMAGE_FILES rather than
+ *  inventing a second number. */
+export const MOBILE_MAX_PHOTOS = 10;
+
+/**
+ * The ONLY photo slot shape Stage 2 accepts — an explicit range, never a
+ * free-form string. `photo-01`, `photo-0`, `photo-11` and `photo3` are all
+ * refused, so a caller cannot widen the namespace by inventing a name.
+ */
+const PHOTO_SLOT_PATTERN = /^photo-([1-9]|10)$/;
+
+export function isMobilePhotoSlot(value: unknown): value is MobilePhotoSlot {
+  return typeof value === "string" && PHOTO_SLOT_PATTERN.test(value);
+}
+
+/** Composes the slot name for a 1-based photo index. Throws out of range, so a
+ *  bug cannot quietly produce an unusable slot. */
+export function mobilePhotoSlot(index: number): MobilePhotoSlot {
+  if (!Number.isInteger(index) || index < 1 || index > MOBILE_MAX_PHOTOS) {
+    throw new Error("Invalid photo index.");
+  }
+  return `photo-${index}`;
+}
+
+/** True for any slot this system will sign an upload for: the Stage 2 range,
+ *  plus the Stage 1 names for backward compatibility. */
 export function isMobileUploadSlot(value: unknown): value is MobileUploadSlot {
-  return typeof value === "string" && (MOBILE_UPLOAD_SLOTS as readonly string[]).includes(value);
+  if (typeof value !== "string") return false;
+  return (MOBILE_UPLOAD_SLOTS as readonly string[]).includes(value) || isMobilePhotoSlot(value);
+}
+
+/** True when a slot holds a photo, in either stage's naming. */
+export function isAnyPhotoSlot(value: unknown): value is MobileUploadSlot {
+  return isMobilePhotoSlot(value) || value === "photo1" || value === "photo2";
 }
 
 /**

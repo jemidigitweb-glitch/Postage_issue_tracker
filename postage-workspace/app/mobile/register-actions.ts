@@ -1,15 +1,16 @@
 "use server";
 
 import { readMobileSession } from "@/lib/mobile/mobileSession";
-import { isValidSubmissionId, type MobileUploadSlot } from "@/lib/mobile/mobileAccess";
+import { isValidSubmissionId } from "@/lib/mobile/mobileAccess";
 import {
-  buildMobileExtraData,
+  buildMobileDescription,
   buildMobileIssueTitle,
+  buildMobileTimelineExtraData,
   isAssetInSubmission,
   MOBILE_CATEGORY,
-  MOBILE_DESCRIPTION,
   MOBILE_STAFF_CODE,
-  verifySubmittedAssets,
+  verifyMobileTimeline,
+  type MobileTimelineInput,
   type SubmittedAsset,
 } from "@/lib/mobile/mobileRegistration";
 import { createMobileIssue } from "@/lib/queries/issues";
@@ -25,10 +26,12 @@ import type { StoredAttachment } from "@/lib/access/attachments";
 // 4.5 MB function limit.
 //
 // ── WHAT THE CLIENT MAY DECIDE ──────────────────────────────────────────────
-// Only which three assets it uploaded, and under which submission id. It
+// STAGE 2: the ordered list of items it built — its own text, its own photo
+// captions, and which assets it uploaded under which submission id. It still
 // cannot choose the Raised By code, the Domain, the status, the Issue ID, the
-// timestamps, the title or the description — every one of those is derived
-// here or by the database, and no form key for them is ever read.
+// timestamps or the title: every one of those is derived here or by the
+// database, and no form key for them is ever read. The description is now
+// COMPOSED from the worker's own text and captions, after normalisation.
 //
 // ── WHY IT CAN FAIL CLEANLY WITH NO REPORTER ────────────────────────────────
 // The Warehouse Mobile reporter row (staff_code "WH") is created by a Super
@@ -49,7 +52,8 @@ const NOT_SET_UP = "Warehouse Mobile is not set up yet. Please contact an admini
 
 export async function registerMobileIssue(input: {
   submissionId: string;
-  assets: Record<MobileUploadSlot, SubmittedAsset>;
+  /** The worker's report, in the order they built it. */
+  items: MobileTimelineInput[];
   /** Assets replaced during this report. Cleaned up only after a successful
    *  registration, and only inside this submission's own namespace. */
   superseded?: SubmittedAsset[];
@@ -63,12 +67,15 @@ export async function registerMobileIssue(input: {
     return { error: "Invalid submission." };
   }
 
-  // Every asset must sit in THIS submission's namespace, under the right slot,
-  // with the right resource type, an accepted format and a plausible size.
-  // This is what stops an arbitrary Cloudinary asset being attached.
-  const assetCheck = verifySubmittedAssets(input.submissionId, input.assets);
-  if (!assetCheck.ok) {
-    return { error: assetCheck.error };
+  // STAGE 2 BOUNDARY. Item kinds, ids, slot range, the 10-photo and 1-voice
+  // caps, duplicate slots and duplicate assets, text and caption normalisation,
+  // and the "at least one meaningful item" rule are all decided HERE — never by
+  // the client. Every asset still passes the same namespace, slot, resource
+  // type, format and size check Stage 1 applied, so an arbitrary Cloudinary
+  // asset still cannot be attached.
+  const timeline = verifyMobileTimeline(input.submissionId, input.items);
+  if (!timeline.ok) {
+    return { error: timeline.error };
   }
 
   let issueId: string;
@@ -78,9 +85,10 @@ export async function registerMobileIssue(input: {
       // Server-derived, every one of them.
       staffCode: MOBILE_STAFF_CODE,
       title: buildMobileIssueTitle(new Date()),
-      description: MOBILE_DESCRIPTION,
+      // The one field the worker now authors — normalised and capped above.
+      description: buildMobileDescription(timeline.items),
       category: MOBILE_CATEGORY,
-      extraData: buildMobileExtraData(input.submissionId, input.assets),
+      extraData: buildMobileTimelineExtraData(input.submissionId, timeline.items),
     });
     issueId = result.issueId;
   } catch (error) {
@@ -100,9 +108,8 @@ export async function registerMobileIssue(input: {
   // Superseded assets are the ones a deliberate re-record or retake replaced.
   // Each candidate is re-checked against THIS submission's namespace before it
   // is deleted, so this can never reach another submission, a desktop upload,
-  // or a historical Issue's evidence. The three ACTIVE assets are never
-  // included. Failure here is logged and ignored — it costs storage, never
-  // correctness.
+  // or a historical Issue's evidence. The ACTIVE assets are never included.
+  // Failure here is logged and ignored — it costs storage, never correctness.
   const removable = (input.superseded ?? []).filter((asset) =>
     isAssetInSubmission(asset.publicId, input.submissionId)
   );

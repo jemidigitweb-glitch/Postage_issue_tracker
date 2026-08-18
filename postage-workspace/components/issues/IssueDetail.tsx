@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 
 import { formatZonedTimestamp } from "@/lib/datetime";
 import type { IssueDetail as IssueDetailData } from "@/lib/queries/issues";
+import {
+  MOBILE_TIMELINE_KEY,
+  hasRenderableEvidence,
+  readMobileEvidence,
+} from "@/lib/access/mobileEvidence";
 import IssueAudioAttachments from "./IssueAudioAttachments";
+import MobileEvidence from "./MobileEvidence";
 import IssuePriorityBadge from "./IssuePriorityBadge";
 import IssueStatusBadge from "./IssueStatusBadge";
 
@@ -209,13 +215,25 @@ export default function IssueDetail({
    *  evidence. Defaults to false so the Assignee portal's audio section keeps
    *  showing exactly what it showed before this stage. */
   includeHistoricalAudio = false,
+  /** SUPER ADMIN ONLY. Renders the Warehouse Mobile Stage 2 evidence as a
+   *  readable section instead of leaving extra_data.mobileTimeline to the
+   *  generic JSON dump. Defaults to false, so the Assignee portal keeps
+   *  byte-for-byte the markup it has today. */
+  showMobileEvidence = false,
 }: {
   issue: IssueDetailData;
   assignedToName?: string | null;
   fixAndActionRequired?: string | null;
   includeHistoricalAudio?: boolean;
+  showMobileEvidence?: boolean;
 }) {
   const entries = Object.entries(issue.extraData).filter(([, value]) => value !== null && value !== "");
+
+  // ── WAREHOUSE MOBILE EVIDENCE ─────────────────────────────────────────────
+  // Null for every Issue that has no mobileTimeline — Stage 1 Mobile Lite,
+  // desktop, historical — so those pages are untouched.
+  const mobileEvidence = showMobileEvidence ? readMobileEvidence(issue.extraData) : null;
+  const showsMobileEvidence = hasRenderableEvidence(mobileEvidence);
 
   const imagesEntry = entries.find(([key]) => key.toLowerCase() === "images");
   const images = imagesEntry ? toIssueImages(imagesEntry[1]) : [];
@@ -230,7 +248,15 @@ export default function IssueDetail({
       : null;
 
   const extraEntries = entries.filter(
-    ([key]) => !PULLED_OUT_KEYS.has(key.toLowerCase()) && !HIDDEN_META_KEYS.has(normalizeKey(key))
+    ([key]) =>
+      !PULLED_OUT_KEYS.has(key.toLowerCase()) &&
+      !HIDDEN_META_KEYS.has(normalizeKey(key)) &&
+      // The timeline has its own readable section below; without this it would
+      // ALSO be stringified into "Additional details" as raw JSON — which is
+      // exactly the clutter this change removes. The stored value is unchanged,
+      // and when the section does not render (Assignee portal, or an Issue with
+      // no timeline) this filter does not apply, so nothing is silently hidden.
+      !(showsMobileEvidence && key.toLowerCase() === MOBILE_TIMELINE_KEY.toLowerCase())
   );
 
   return (
@@ -286,9 +312,18 @@ export default function IssueDetail({
         )}
       </div>
 
+      {/* WAREHOUSE MOBILE STAGE 2. Rendered only for the Super Admin, and only
+          when the Issue actually carries a readable timeline. It replaces both
+          the generic gallery and the audio block for these Issues (see below),
+          because it shows the SAME media in the order the worker added it, with
+          each caption beside its own photo — showing both would print every
+          photo twice. */}
+      {showsMobileEvidence && mobileEvidence && <MobileEvidence items={mobileEvidence} />}
+
       {/* Hidden entirely when the issue has no usable images — no empty card,
-          no heading. Scales to any number of images without further changes. */}
-      {images.length > 0 && (
+          no heading. Scales to any number of images without further changes.
+          Suppressed for a Mobile Evidence Issue, which already shows them. */}
+      {!showsMobileEvidence && images.length > 0 && (
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 mb-5">
             Images / Attachments
@@ -336,10 +371,14 @@ export default function IssueDetail({
           Issue does — so this is inert for every pre-existing Issue and for
           any Issue created without audio. Display only: no control, so it
           changes nothing about either portal's workflow. */}
-      <IssueAudioAttachments
-        extraData={issue.extraData}
-        includeHistorical={includeHistoricalAudio}
-      />
+      {/* Suppressed for a Mobile Evidence Issue for the same reason as the
+          gallery: the recording is already there, in its place in the order. */}
+      {!showsMobileEvidence && (
+        <IssueAudioAttachments
+          extraData={issue.extraData}
+          includeHistorical={includeHistoricalAudio}
+        />
+      )}
 
       {extraEntries.length > 0 && (
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-6">

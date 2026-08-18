@@ -18,7 +18,7 @@ import { join } from "node:path";
 const proxySource = readFileSync(join(process.cwd(), "proxy.ts"), "utf8");
 const pageSource = readFileSync(join(process.cwd(), "app/mobile/page.tsx"), "utf8");
 const uploadActionSource = readFileSync(join(process.cwd(), "app/mobile/upload-actions.ts"), "utf8");
-const captureSource = readFileSync(join(process.cwd(), "app/mobile/MobileCapture.tsx"), "utf8");
+const captureSource = readFileSync(join(process.cwd(), "app/mobile/MobileComposer.tsx"), "utf8");
 
 /**
  * Source with comment lines removed.
@@ -138,10 +138,29 @@ describe("app/mobile — the shell requires no account and creates nothing", () 
     assert.equal(pageCode.includes("not available for this account"), false);
   });
 
-  it("renders the capture component, which carries the four approved controls", () => {
-    assert.ok(pageSource.includes("<MobileCapture />"));
-    for (const label of ["Record Voice", "Evidence Photo", "REGISTER"]) {
-      assert.ok(captureSource.includes(label), `the capture UI must offer "${label}"`);
+  it("renders the Stage 2 composer, which carries the approved controls", () => {
+    assert.ok(pageSource.includes("<MobileComposer />"));
+    for (const label of [
+      "Write issue details...",
+      "Send Issue",
+      "Yes, Send Issue",
+      "Ready to send?",
+      "Add a caption...",
+    ]) {
+      assert.ok(captureSource.includes(label), `the composer must offer "${label}"`);
+    }
+    // This version stages media immediately: there is no separate add step and
+    // no per-item action. Checked against the code, not the prose that explains
+    // why those controls were removed.
+    const composerCode = captureSource
+      .split("\n")
+      .filter((line) => {
+        const trimmed = line.trim();
+        return !trimmed.startsWith("//") && !trimmed.startsWith("*") && !trimmed.startsWith("/*");
+      })
+      .join("\n");
+    for (const removed of ["Add Photo", "Record Again", "Retake", "Reselect", "Register Issue"]) {
+      assert.equal(composerCode.includes(removed), false, `"${removed}" must not be a control`);
     }
   });
 

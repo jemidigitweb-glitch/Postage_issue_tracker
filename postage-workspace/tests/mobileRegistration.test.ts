@@ -244,22 +244,25 @@ describe("Stage 5 — extra_data matches what the Web Issue Tracker already read
 describe("Stage 5 — the registration action and query path (source evidence)", () => {
   const actionSource = readFileSync(join(process.cwd(), "app/mobile/register-actions.ts"), "utf8");
   const issuesSource = readFileSync(join(process.cwd(), "lib/queries/issues.ts"), "utf8");
-  const captureSource = readFileSync(join(process.cwd(), "app/mobile/MobileCapture.tsx"), "utf8");
+  const captureSource = readFileSync(join(process.cwd(), "app/mobile/MobileComposer.tsx"), "utf8");
 
   it("requires the anonymous Mobile session before anything else", () => {
     assert.ok(actionSource.includes("readMobileSession()"));
     // Compare CALL SITES, not the import list at the top of the file.
     assert.ok(
       actionSource.indexOf("await readMobileSession()") <
-        actionSource.indexOf("verifySubmittedAssets(input.submissionId")
+        actionSource.indexOf("verifyMobileTimeline(input.submissionId")
     );
   });
 
-  it("derives staff code, category, title and description server-side", () => {
+  it("derives staff code, category and title server-side", () => {
+    // STAGE 2: the description is now composed from the worker's own text and
+    // captions (see tests/mobileTimeline.test.ts) instead of being a constant.
+    // Everything else is still derived here or by the database.
     assert.ok(actionSource.includes("staffCode: MOBILE_STAFF_CODE"));
     assert.ok(actionSource.includes("category: MOBILE_CATEGORY"));
     assert.ok(actionSource.includes("title: buildMobileIssueTitle(new Date())"));
-    assert.ok(actionSource.includes("description: MOBILE_DESCRIPTION"));
+    assert.ok(actionSource.includes("description: buildMobileDescription(timeline.items)"));
   });
 
   it("reads NO client value for any Issue field", () => {
@@ -318,13 +321,30 @@ describe("Stage 5 — the registration action and query path (source evidence)",
   });
 
   it("the client guards against a double tap and shows the REAL id", () => {
-    assert.ok(captureSource.includes("if (!registerReady || registering) return;"));
-    assert.ok(captureSource.includes("Issue ID: {registeredId}"));
+    // STAGE 2: send opens a confirmation and only "Yes, Send Issue" writes, so
+    // the guard lives in confirmSend() and the result is a chat reply carrying
+    // whatever id the database returned.
+    assert.ok(captureSource.includes("if (registering || !isDraftSendable(draft)) return;"));
+    assert.ok(captureSource.includes("Issue ID: {issue.issueId}"));
     assert.ok(captureSource.includes("Issue Registered"));
   });
 
   it("the client keeps the same submission id for a retry", () => {
-    assert.equal(captureSource.includes("setSubmissionId"), false);
+    // A new id is minted in exactly ONE place — starting the next Issue after a
+    // success. A failed attempt never reaches it, so a retry re-sends under the
+    // same id and the server's idempotency returns the same Issue.
+    assert.equal((captureSource.match(/setSubmissionId\(/g) ?? []).length, 1);
+    const next = captureSource.slice(
+      captureSource.indexOf("function startNextIssue()"),
+      captureSource.indexOf("// ── render")
+    );
+    assert.ok(next.includes("setSubmissionId(crypto.randomUUID());"));
+    const body = captureSource.slice(
+      captureSource.indexOf("async function confirmSend()"),
+      captureSource.indexOf("function startNextIssue")
+    );
+    const failureBranch = body.slice(body.indexOf("} else {"), body.indexOf("} catch {"));
+    assert.equal(failureBranch.includes("setSubmissionId"), false, "a failure keeps the id");
   });
 
   it("still offers no fifth worker action", () => {
