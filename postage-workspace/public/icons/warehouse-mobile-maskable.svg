@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Warehouse Mobile Lite">
+  <rect width="512" height="512" fill="#171717"/>
+  <path d="M256 170a36 36 0 0 1 36 36v64a36 36 0 0 1-72 0v-64a36 36 0 0 1 36-36z" fill="#fafafa"/>
+  <path d="M186 262a70 70 0 0 0 140 0" fill="none" stroke="#fafafa" stroke-width="20" stroke-linecap="round"/>
+  <path d="M256 332v32" fill="none" stroke="#fafafa" stroke-width="20" stroke-linecap="round"/>
+</svg>

@@ -223,6 +223,76 @@ export async function uploadAttachment(input: UploadInput): Promise<StoredAttach
   };
 }
 
+// ---------------------------------------------------------------------------
+// Signed DIRECT-upload parameters (Warehouse Mobile Lite)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mints the parameters a BROWSER needs to upload one file straight to
+ * Cloudinary, without the bytes ever passing through this server.
+ *
+ * ── WHY THIS EXISTS ─────────────────────────────────────────────────────────
+ * Vercel Functions reject any request body over 4.5 MB
+ * (https://vercel.com/docs/functions/limitations — "Request body size"), and a
+ * Mobile Lite submission is one voice recording plus two phone photos. Sending
+ * that through a Server Action is therefore impossible in production at any
+ * Next.js `bodySizeLimit`. Cloudinary's signed direct upload is the documented
+ * remedy, and it needs no new dependency: the signature is the same SHA-1 the
+ * server-side path above already computes.
+ *
+ * ── WHAT THIS DOES NOT CHANGE ───────────────────────────────────────────────
+ * uploadAttachment() and deleteAttachments() are untouched, as is every limit
+ * and validator in lib/access/attachments.ts. The desktop Add-New-Issue flow
+ * keeps uploading through its Server Action exactly as before. This function is
+ * purely additive.
+ *
+ * ── THE SECRET ──────────────────────────────────────────────────────────────
+ * `api_secret` is used inside sign() and NEVER returned. The caller receives
+ * the cloud name, the PUBLIC `api_key`, a timestamp, and a signature valid for
+ * exactly one public_id — Cloudinary's documented contract. This module's
+ * `server-only` import makes it a build error to reach any of this from a
+ * Client Component.
+ *
+ * `publicId` MUST be composed by the server (see lib/mobile/mobileAccess.ts
+ * buildMobilePublicId) — a client-chosen value would let a caller write
+ * anywhere in the account.
+ */
+export function createSignedUploadParams(input: {
+  publicId: string;
+  resourceType: "image" | "video";
+}): {
+  cloudName: string;
+  apiKey: string;
+  timestamp: number;
+  signature: string;
+  publicId: string;
+  resourceType: "image" | "video";
+} {
+  const config = readConfig();
+  const timestamp = Math.floor(Date.now() / 1000);
+
+  // Exactly the parameters the upload will send and Cloudinary will verify.
+  // `api_key`, `file`, `resource_type` and `signature` are excluded from the
+  // signed string by Cloudinary's contract — the same rule sign() documents
+  // above. overwrite stays "false" so a signature can never replace an
+  // existing asset, which is also what makes a retry of the same submission
+  // idempotent at the storage layer.
+  const signedParams: Record<string, string> = {
+    public_id: input.publicId,
+    overwrite: "false",
+    timestamp: String(timestamp),
+  };
+
+  return {
+    cloudName: config.cloudName,
+    apiKey: config.apiKey,
+    timestamp,
+    signature: sign(signedParams, config.apiSecret),
+    publicId: input.publicId,
+    resourceType: input.resourceType,
+  };
+}
+
 /**
  * Best-effort cleanup of already-uploaded assets when the Issue insert fails
  * afterwards.

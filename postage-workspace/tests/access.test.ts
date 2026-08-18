@@ -100,6 +100,18 @@ describe("permission matrix — Assignee (role 'staff')", () => {
     assert.equal(roleHasPermission(ASSIGNEE_ROLE, "issue:analyse_own_assigned"), true);
   });
 
+  it("gains NOTHING from Warehouse Mobile Lite", () => {
+    // Stage 3 Correction: /mobile requires no Issue Tracker account at all, so
+    // no mobile permission exists in this matrix. Pinned here so a future
+    // revision cannot quietly reintroduce one and widen the Assignee role.
+    const staffPermissions = [...permissionsForRole(ASSIGNEE_ROLE)];
+    assert.equal(
+      staffPermissions.some((permission) => permission.includes("mobile")),
+      false
+    );
+    assert.equal(roleHasPermission(ASSIGNEE_ROLE, "issue:create"), false);
+  });
+
   // Each of these maps to a real guard. The Server Action that enforces it is
   // named so the mapping stays reviewable.
   const denied: Array<[Permission, string]> = [

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { verifySession } from "@/lib/session";
+import {
+  issueMobileSession,
+  MOBILE_SESSION_COOKIE,
+  mobileSessionCookieOptions,
+  verifyMobileSessionValue,
+} from "@/lib/mobile/mobileSession";
 
 // Next.js 16 request protection. Confirmed against the installed docs (not
 // assumed): node_modules/next/dist/docs/01-app/01-getting-started/16-proxy.md
@@ -45,6 +51,17 @@ import { verifySession } from "@/lib/session";
 // on /login; the page itself resolves the user and redirects anyone who is
 // not an Assignee, and its Server Actions re-check independently.
 
+// WAREHOUSE MOBILE LITE — /mobile is deliberately NOT in this list.
+//
+// SUPERSEDED: an earlier revision protected /mobile with the Tracker session
+// check below. The owner clarified that a warehouse worker must be able to use
+// /mobile while the main Issue Tracker is LOGGED OUT, so requiring a Tracker
+// session there was wrong and has been removed. Instead, MOBILE_PATH_PREFIX is
+// handled separately below: the request is allowed through, and an ANONYMOUS
+// Mobile Lite cookie is minted if the browser does not already hold a valid
+// one.
+//
+// Every /dashboard entry here is unchanged, and so is its matcher entry.
 const PROTECTED_PATH_PREFIXES = [
   "/dashboard/issues",
   "/dashboard/discussions",
@@ -52,8 +69,31 @@ const PROTECTED_PATH_PREFIXES = [
   "/dashboard/account-settings",
 ];
 
+/** Public to a worker, but every Mobile Lite Server Action still requires the
+ *  anonymous session this prefix hands out. */
+const MOBILE_PATH_PREFIX = "/mobile";
+
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+
+  // ── WAREHOUSE MOBILE LITE ────────────────────────────────────────────────
+  // Never redirected to /login: a warehouse worker has no Tracker account.
+  // The request is allowed through, and if this browser has no valid anonymous
+  // Mobile Lite cookie it is given one. The cookie identifies nobody, grants
+  // nothing, is httpOnly + SameSite=lax, is scoped to Path=/mobile (so it is
+  // not even sent to /dashboard), and is Secure in production. Its only job is
+  // to stop the signed-upload action being an open endpoint.
+  if (path.startsWith(MOBILE_PATH_PREFIX)) {
+    const existing = request.cookies.get(MOBILE_SESSION_COOKIE)?.value;
+    if (await verifyMobileSessionValue(existing)) {
+      return NextResponse.next();
+    }
+    const response = NextResponse.next();
+    const { token, expiresAt } = await issueMobileSession();
+    response.cookies.set(MOBILE_SESSION_COOKIE, token, mobileSessionCookieOptions(expiresAt));
+    return response;
+  }
+
   const isProtectedRoute = PROTECTED_PATH_PREFIXES.some((prefix) =>
     path.startsWith(prefix)
   );
@@ -77,5 +117,6 @@ export const config = {
     "/dashboard/discussions/:path*",
     "/dashboard/tracker/:path*",
     "/dashboard/account-settings/:path*",
+    "/mobile/:path*",
   ],
 };

@@ -550,6 +550,67 @@ export class InvalidStaffError extends Error {}
  *
  * New issues always start at status 'RED' — not a caller-supplied value.
  */
+/**
+ * The STATEMENTS of createIssue(), with no transaction control of its own.
+ *
+ * Extracted verbatim so a second caller (Warehouse Mobile Lite, which must
+ * take an advisory lock and check for an existing Issue in the SAME
+ * transaction) can reuse the exact creation rules instead of duplicating them:
+ * the staff validation, issue_tracking.next_issue_id(), the hard-coded 'RED',
+ * CURRENT_DATE, and the extra_data write all live here and nowhere else.
+ *
+ * BEHAVIOUR IS UNCHANGED for the desktop path — createIssue() below simply
+ * wraps this in the BEGIN/COMMIT/ROLLBACK it always had. This function must
+ * never issue BEGIN, COMMIT or ROLLBACK itself; its caller owns them.
+ */
+export async function createIssueTx(
+  client: Awaited<ReturnType<typeof getVerifiedClient>>,
+  input: CreateIssueInput
+): Promise<string> {
+  // Validate staffCode exists and is active *before* allocating an issue
+  // ID for it — catches both an unknown code and a deactivated one with a
+  // clear message, rather than letting an unknown code fail later as an
+  // opaque FK violation on the issues insert.
+  const staffCheck = await client.query<{ active: boolean }>(
+    `SELECT active FROM issue_tracking.issue_staff WHERE staff_code = $1`,
+    [input.staffCode]
+  );
+  const staffRow = staffCheck.rows[0];
+  if (!staffRow) {
+    throw new InvalidStaffError(`Unknown staff code "${input.staffCode}".`);
+  }
+  if (!staffRow.active) {
+    throw new InvalidStaffError(`Staff code "${input.staffCode}" is not active.`);
+  }
+
+  const idResult = await client.query<{ next_issue_id: string }>(
+    "SELECT issue_tracking.next_issue_id($1) AS next_issue_id",
+    [input.staffCode]
+  );
+  const issueId = idResult.rows[0]?.next_issue_id;
+  if (!issueId) {
+    throw new Error(`Could not allocate an issue ID for staff_code "${input.staffCode}".`);
+  }
+
+  await client.query(
+    `INSERT INTO issue_tracking.issues
+       (issue_id, staff_code, issue_title, issue_description, category, status, priority, resolution, created_date, extra_data)
+     VALUES ($1, $2, $3, $4, $5, 'RED', $6, $7, CURRENT_DATE, $8::jsonb)`,
+    [
+      issueId,
+      input.staffCode,
+      input.title,
+      input.description,
+      input.category,
+      input.priority,
+      input.resolution ?? null,
+      JSON.stringify(input.extraData ?? {}),
+    ]
+  );
+
+  return issueId;
+}
+
 export async function createIssue(input: CreateIssueInput): Promise<string> {
   const client = await getVerifiedClient();
   try {
@@ -599,6 +660,86 @@ export async function createIssue(input: CreateIssueInput): Promise<string> {
 
     await client.query("COMMIT");
     return issueId;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** What createMobileIssue() did: a fresh Issue, or the one this submission
+ *  already created. */
+export interface MobileIssueResult {
+  issueId: string;
+  /** True when an earlier attempt with the same submission id had already
+   *  committed — nothing was inserted this time. */
+  alreadyRegistered: boolean;
+}
+
+/**
+ * Creates the ONE Issue for a Warehouse Mobile Lite submission — idempotently.
+ *
+ * ── ONE REGISTER PRESS = ONE ISSUE ──────────────────────────────────────────
+ * Inside a single transaction:
+ *   1. pg_advisory_xact_lock(hashtext(submissionId)) — a BUILT-IN lock needing
+ *      no table and no migration. Two simultaneous submissions of the same
+ *      report serialise here; the lock is released automatically at COMMIT or
+ *      ROLLBACK.
+ *   2. look for an Issue already carrying this submission id in extra_data. If
+ *      one exists, RETURN ITS ID and insert nothing — which is exactly what a
+ *      retry after a lost response needs.
+ *   3. otherwise delegate to createIssueTx(), so the Issue ID, the 'RED'
+ *      status, the timestamps and the insert rules are the SAME code the
+ *      desktop uses.
+ *
+ * No schema change, no unique constraint and no migration is required: the
+ * advisory lock provides the mutual exclusion, and the lookup is a trivial
+ * scan at this data volume.
+ *
+ * An unknown or inactive staff code raises InvalidStaffError from
+ * createIssueTx() — Mobile Lite relies on that to fail cleanly when the
+ * Warehouse Mobile reporter row has not been created yet, rather than
+ * substituting some other staff code.
+ */
+export async function createMobileIssue(input: {
+  submissionId: string;
+  staffCode: string;
+  title: string;
+  description: string;
+  category: string;
+  extraData: Record<string, unknown>;
+}): Promise<MobileIssueResult> {
+  const client = await getVerifiedClient();
+  try {
+    await client.query("BEGIN");
+
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [input.submissionId]);
+
+    const existing = await client.query<{ issue_id: string }>(
+      `SELECT issue_id FROM issue_tracking.issues
+        WHERE extra_data->>'mobileSubmissionId' = $1
+        LIMIT 1`,
+      [input.submissionId]
+    );
+    const already = existing.rows[0]?.issue_id;
+    if (already) {
+      await client.query("COMMIT");
+      return { issueId: already, alreadyRegistered: true };
+    }
+
+    const issueId = await createIssueTx(client, {
+      staffCode: input.staffCode,
+      title: input.title,
+      description: input.description,
+      category: input.category,
+      priority: null,
+      resolution: null,
+      extraData: input.extraData,
+    });
+
+    await client.query("COMMIT");
+    return { issueId, alreadyRegistered: false };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

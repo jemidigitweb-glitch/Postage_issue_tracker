@@ -44,3 +44,5 @@ next-env.d.ts
 dev-out.log
 dev-err.log
 dev-launcher.pid
+
+certificates

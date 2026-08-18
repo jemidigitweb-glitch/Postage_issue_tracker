@@ -79,6 +79,10 @@ describe("access — Tracker is Super Admin only", () => {
       "issue:change_status_own_assigned",
       "issue:view_own_assigned",
     ]);
+    // Still no Tracker, and still no desktop creation. Warehouse Mobile Lite
+    // adds nothing here: it requires no Issue Tracker account at all.
+    assert.equal(staffPermissions.includes("tracker:view"), false);
+    assert.equal(staffPermissions.includes("issue:create"), false);
   });
 });
 
