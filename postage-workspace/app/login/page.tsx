@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentUser } from "@/lib/auth";
+import { loginDestination, safeReturnTarget } from "@/lib/access/raisedByAccess";
 
 import LoginForm from "./LoginForm";
 
@@ -12,10 +13,20 @@ import LoginForm from "./LoginForm";
 // showing the form again, and redirects here from /dashboard is
 // intentionally NOT yet enforced by proxy.ts (see proxy.ts's own comments)
 // — this page works correctly on its own regardless of that.
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+  // Validated here as well as in the Server Action: an already-signed-in
+  // visitor is redirected immediately, so the value must be safe before it is
+  // used. Anything not on the internal allow-list becomes the Issue list.
+  const destination = loginDestination(next);
+
   const user = await getCurrentUser();
   if (user) {
-    redirect("/dashboard/issues");
+    redirect(destination);
   }
 
   return (
@@ -29,7 +40,7 @@ export default async function LoginPage() {
             Sign in with your issue tracker account.
           </p>
 
-          <LoginForm />
+          <LoginForm next={safeReturnTarget(next)} />
         </div>
       </div>
     </main>

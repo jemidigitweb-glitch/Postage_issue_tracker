@@ -169,12 +169,24 @@ function CollapsibleSection({
 export default function NewIssueForm({
   staff,
   categories,
+  selfRaiserName = null,
 }: {
   /** issue_tracking.issue_staff — the REPORTER. Deliberately not
    *  assignment_users: "Raised By" and "Assignee" are different people and
    *  different tables, and conflating them is the mistake this prop name
    *  exists to prevent. Assignment happens separately, after creation. */
   staff: StaffRecord[];
+  /** Set for a SELF-RAISER (role raised_by): the display name of the raiser
+   *  the server will use, shown read-only instead of the picker.
+   *
+   *  When this is set the form renders NO input named "staffCode" at all — not
+   *  a disabled select, not a hidden field. There is deliberately nothing to
+   *  submit, because the server resolves the raiser from the session and would
+   *  ignore a submitted value anyway. Rendering a hidden field would only
+   *  suggest the value matters.
+   *
+   *  Null for the Super Admin and management, whose form is unchanged. */
+  selfRaiserName?: string | null;
   /** Existing issues.category values, offered as suggestions on a free-text
    *  input so a new Issue lands in an established Domain without the field
    *  becoming a closed list (the column is free text and has 10 values in
@@ -191,26 +203,38 @@ export default function NewIssueForm({
           would be a caption for the obvious. Required validation and every
           field name are exactly as they were. */}
       <section className={sectionClassName}>
-        <div>
-          <label htmlFor="staffCode" className={labelClassName}>
-            Raised By
-            <Required />
-          </label>
-          <select id="staffCode" name="staffCode" required defaultValue="" className={inputClassName}>
-            <option value="" disabled>
-              Select who raised this…
-            </option>
-            {staff.map((s) => (
-              <option key={s.staffCode} value={s.staffCode}>
-                {s.staffName}
+        {selfRaiserName ? (
+          <div>
+            <span className={labelClassName}>Raised By</span>
+            <p className="text-sm font-medium text-neutral-900 dark:text-neutral-50">
+              {selfRaiserName}
+            </p>
+            <p className={hintClassName}>
+              Issues you create are raised in your own name.
+            </p>
+          </div>
+        ) : (
+          <div>
+            <label htmlFor="staffCode" className={labelClassName}>
+              Raised By
+              <Required />
+            </label>
+            <select id="staffCode" name="staffCode" required defaultValue="" className={inputClassName}>
+              <option value="" disabled>
+                Select who raised this…
               </option>
-            ))}
-          </select>
-          <p className={hintClassName}>
-            The person reporting the Issue. Who will solve it is set separately by assigning the
-            Issue.
-          </p>
-        </div>
+              {staff.map((s) => (
+                <option key={s.staffCode} value={s.staffCode}>
+                  {s.staffName}
+                </option>
+              ))}
+            </select>
+            <p className={hintClassName}>
+              The person reporting the Issue. Who will solve it is set separately by assigning the
+              Issue.
+            </p>
+          </div>
+        )}
 
         <div>
           <label htmlFor="title" className={labelClassName}>
@@ -324,20 +348,30 @@ export default function NewIssueForm({
           <textarea id="whatIsHappening" name="whatIsHappening" rows={4} className={inputClassName} />
         </div>
 
-        <div>
-          <label htmlFor="rootCause" className={labelClassName}>
-            Root Cause
-          </label>
-          <textarea id="rootCause" name="rootCause" rows={4} className={inputClassName} />
-          <p className={hintClassName}>Why it is happening, if known.</p>
-        </div>
+        {/* Root Cause is investigation and Fix & Action Required is
+            resolution — both management work, and a self-raiser holds neither
+            permission. Omitted for them entirely rather than shown disabled,
+            so the form asks only for what they are actually reporting. The
+            server skips both keys for this role regardless of what is
+            submitted; hiding them here is presentation, not the guard. */}
+        {!selfRaiserName && (
+          <>
+            <div>
+              <label htmlFor="rootCause" className={labelClassName}>
+                Root Cause
+              </label>
+              <textarea id="rootCause" name="rootCause" rows={4} className={inputClassName} />
+              <p className={hintClassName}>Why it is happening, if known.</p>
+            </div>
 
-        <div>
-          <label htmlFor="resolution" className={labelClassName}>
-            Fix &amp; Action Required
-          </label>
-          <textarea id="resolution" name="resolution" rows={4} className={inputClassName} />
-        </div>
+            <div>
+              <label htmlFor="resolution" className={labelClassName}>
+                Fix &amp; Action Required
+              </label>
+              <textarea id="resolution" name="resolution" rows={4} className={inputClassName} />
+            </div>
+          </>
+        )}
       </CollapsibleSection>
 
       {/* ── EVIDENCE / ATTACHMENTS — COLLAPSED BY DEFAULT ──────────────────

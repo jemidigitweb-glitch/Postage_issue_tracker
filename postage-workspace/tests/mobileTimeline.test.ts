@@ -547,8 +547,9 @@ describe("Stage 2 — the registration action wires the new contract", () => {
 
   it("verifies the timeline on the server before anything else", () => {
     assert.ok(actionSource.includes("verifyMobileTimeline(input.submissionId, input.items)"));
+    // The authentication gate comes first, then the timeline verification.
     assert.ok(
-      actionSource.indexOf("await readMobileSession()") <
+      actionSource.indexOf("await getCurrentUser()") <
         actionSource.indexOf("verifyMobileTimeline(input.submissionId")
     );
   });
@@ -559,7 +560,8 @@ describe("Stage 2 — the registration action wires the new contract", () => {
   });
 
   it("still derives staff code, category and title server-side", () => {
-    assert.ok(actionSource.includes("staffCode: MOBILE_STAFF_CODE"));
+    // The raiser is now server-resolved from the session, not a fixed constant.
+    assert.ok(actionSource.includes("staffCode: raiser.staffCode"));
     assert.ok(actionSource.includes("category: MOBILE_CATEGORY"));
     assert.ok(actionSource.includes("title: buildMobileIssueTitle(new Date())"));
   });

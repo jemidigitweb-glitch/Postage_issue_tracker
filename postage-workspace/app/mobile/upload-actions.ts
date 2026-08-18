@@ -1,6 +1,6 @@
 "use server";
 
-import { readMobileSession } from "@/lib/mobile/mobileSession";
+import { getCurrentUser, hasPermission } from "@/lib/auth";
 import {
   buildMobilePublicId,
   buildMobileUploadTicket,
@@ -20,19 +20,21 @@ import { createSignedUploadParams, isAttachmentStorageConfigured } from "@/lib/c
 // and registration (Stage 5) come later.
 //
 // ── WHAT GUARDS THIS ────────────────────────────────────────────────────────
-// SUPERSEDED: an earlier revision required an Issue Tracker session, the
-// "issue:create_mobile" permission and a username allowlist. The owner
-// clarified that /mobile must work while the Tracker is logged out, so this
-// action now requires the ANONYMOUS Mobile Lite session instead — the signed,
-// httpOnly cookie proxy.ts issues when a browser opens /mobile.
+// CURRENT RULE: a real Issue Tracker session, resolved to a real user, holding
+// the `mobile:submit` permission — which only `raised_by` and `admin` hold.
 //
-// That cookie identifies nobody and grants nothing. What it buys is that this
-// endpoint is not open to the world: a caller must be a browser that actually
-// visited /mobile and holds a currently-valid, signature-verified token. A
-// Tracker session cookie cannot satisfy it (different cookie name, and the
-// verifier rejects any token carrying a userId), and this cookie cannot reach
-// /dashboard — its Path is /mobile.
+// SUPERSEDED TWICE, and both earlier designs are named here on purpose so the
+// history is reviewable rather than guessed at:
+//   1. An Issue Tracker session plus "issue:create_mobile" plus a username
+//      allowlist. Dropped when the owner clarified that a warehouse worker had
+//      no Tracker account at all.
+//   2. An ANONYMOUS `wh_mobile` cookie minted by proxy.ts for any browser that
+//      opened /mobile. It identified nobody. The owner has now provisioned a
+//      shared "Raised by Staff" login, so that cookie and its two modules are
+//      deleted and there is ONE authentication system again.
 //
+// The check is repeated here rather than inherited from the page: a direct
+// request that never rendered /mobile is refused in exactly the same way.
 // Hiding a control in the UI is never the guard; this is.
 //
 // ── WHY THE CLIENT CANNOT CHOOSE WHERE IT WRITES ────────────────────────────
@@ -48,20 +50,20 @@ export interface MobileUploadTicketState {
   error?: string;
 }
 
-/** Shown when the anonymous session is missing, expired or invalid — a worker
- *  fixes it by reloading /mobile, which mints a fresh one. It reveals nothing
- *  about why. */
-const SESSION_EXPIRED = "This session has expired. Reload the page and try again.";
+/** Shown when there is no signed-in user, or they may not submit. A worker
+ *  fixes it by signing in again. It reveals nothing about which check failed. */
+const SESSION_EXPIRED = "Your session has expired. Sign in again and try again.";
 
 export async function requestMobileUploadTicket(input: {
   submissionId: string;
   slot: string;
   attemptId: string;
 }): Promise<MobileUploadTicketState> {
-  // The ONLY gate: a valid anonymous Mobile Lite session. No Tracker login, no
-  // account, no permission, no allowlist.
-  const session = await readMobileSession();
-  if (!session) {
+  // THE GATE: a real signed-in user holding mobile:submit. Re-checked here
+  // and not inherited from the page — a direct request that never rendered
+  // /mobile is refused exactly the same way.
+  const user = await getCurrentUser();
+  if (!user || !(await hasPermission(user, "mobile:submit"))) {
     return { error: SESSION_EXPIRED };
   }
 

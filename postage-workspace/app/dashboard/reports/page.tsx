@@ -1,8 +1,11 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
+import { redirectAssigneeToOwnIssues, redirectRaisedByToIssues } from "@/lib/routeGuards";
 
 export default async function ReportsPage() {
   await redirectAssigneeToOwnIssues();
+  // Raised by Staff holds issue:view_all, so the guard above lets them
+  // through; this one confines them to the Issue list.
+  await redirectRaisedByToIssues("/dashboard/reports");
 
   return (
     <DashboardLayout>

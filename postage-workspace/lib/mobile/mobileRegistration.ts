@@ -24,9 +24,20 @@ import { MOBILE_MAX_PHOTO_BYTES, MOBILE_MAX_VOICE_BYTES } from "./mobileMedia";
 // all produced HERE or by the database. The registration action never reads a
 // client value for any of them, so there is no field to tamper with.
 
-/** The system reporter for every Mobile Lite Issue. The row is created by a
- *  Super Admin through the existing Add Staff page — never by this code, and
- *  never substituted for another staff code if it is missing. */
+/**
+ * HISTORICAL ONLY. The generic reporter that every Mobile Lite Issue was
+ * attributed to while /mobile had no signed-in user — WH / "Warehouse Mobile".
+ *
+ * NO LONGER USED FOR NEW ISSUES. A Mobile Lite submission is now raised by the
+ * signed-in account's own linked issue_staff row, resolved server-side by
+ * lib/queries/raiserLink.ts. app/mobile/register-actions.ts does not import
+ * this constant any more, and must not: reintroducing it would silently
+ * re-attribute somebody's Issue to a generic identity.
+ *
+ * It is kept, not deleted, for two reasons: the WH row still exists and still
+ * owns the Issues raised under the old model (WH-001 and any others), and the
+ * legacy two-photo Stage 1 fixtures still describe that path.
+ */
 export const MOBILE_STAFF_CODE = "WH";
 
 /** Approved canonical Domain. Lower case, matching every existing value. */

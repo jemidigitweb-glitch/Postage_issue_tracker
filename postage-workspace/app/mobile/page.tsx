@@ -1,23 +1,24 @@
 // WAREHOUSE MOBILE LITE — the worker's entry point.
 //
-// ── NO ISSUE TRACKER LOGIN ──────────────────────────────────────────────────
-// SUPERSEDED DESIGN: an earlier revision required a Tracker session, the
-// "issue:create_mobile" permission and membership of a username allowlist. The
-// owner clarified that a warehouse worker must be able to open /mobile while
-// the main Issue Tracker is LOGGED OUT — no Assignee account, no Super Admin
-// account, no allowlist. That gate is gone.
+// ── SIGN IN REQUIRED ────────────────────────────────────────────────────────
+// CURRENT RULE. Warehouse Mobile Lite is behind the ordinary Issue Tracker
+// login, used by the shared "Raised by Staff" account.
 //
-// This page therefore reads NO session and performs NO authorization. It is a
-// public worker-facing entry point to the same backend, not a second Issue
-// Tracking System.
+// SUPERSEDED: an intermediate design left /mobile open to anonymous browsers,
+// protected only by a minted `wh_mobile` cookie that identified nobody. The
+// owner has replaced that decision: an unauthenticated visitor may not use
+// /mobile at all. The anonymous cookie is gone, and the application's own
+// session is the single authorization source again.
 //
-// What protects the system instead:
-//   - proxy.ts issues an anonymous, signed, httpOnly Mobile Lite cookie when a
-//     browser first opens /mobile (lib/mobile/mobileSession.ts). It identifies
-//     nobody and grants nothing.
-//   - Every Mobile Lite Server Action requires that cookie, so the signed-
-//     upload endpoint is not open to the world.
-//   - /dashboard/** is untouched and still requires a real Tracker session.
+// What protects this page:
+//   - proxy.ts redirects a request with no session to /login?next=/mobile.
+//   - This page then resolves the real user and requires `mobile:submit`,
+//     which only `raised_by` and `admin` hold — an Assignee signing in cannot
+//     reach it.
+//   - Every Mobile Lite Server Action re-checks the same permission
+//     independently, so a direct request without a session is rejected even
+//     though this page never rendered for it. Hiding a screen is never the
+//     guard.
 //
 // ── WHAT THIS PAGE IS ───────────────────────────────────────────────────────
 // A thin server shell around the Stage 2 composer. The worker builds ONE report
@@ -26,15 +27,58 @@
 // priority, status, assignment, investigation, resolution or navigation control
 // here, by construction — every one of those is derived on the server.
 
+import { redirect } from "next/navigation";
+
+import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { MOBILE_HOME, RAISED_BY_HOME } from "@/lib/access/raisedByAccess";
+import { logout } from "@/app/logout/actions";
 import MobileComposer from "./MobileComposer";
 
-export default function MobileLitePage() {
+export default async function MobileLitePage() {
+  // proxy.ts has already established that SOME session exists; this resolves
+  // whose it is and whether they may submit from a phone.
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect(`/login?next=${encodeURIComponent(MOBILE_HOME)}`);
+  }
+  if (!(await hasPermission(user, "mobile:submit"))) {
+    // An Assignee who signs in lands back on their own Issue list rather than
+    // a dead end, and no error page tells them what they were refused.
+    redirect(RAISED_BY_HOME);
+  }
+
   return (
     // header (fixed height) → scrollable timeline → composer pinned at the
     // bottom. Only the middle section scrolls.
     <main className="flex min-h-0 flex-1 flex-col">
-      <header className="shrink-0 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
+      {/* One row: the screen's name on the left, the way out on the right.
+          Logout is deliberately understated — a small text button, not a
+          filled one — so a thumb reaching for Camera or Send never lands on it
+          by accident, while still being a full 44px-tall tap target. */}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <h1 className="text-xl font-bold tracking-tight">Add Issue</h1>
+
+        {/* Posts to the SHARED logout action — the same one the desktop
+            sidebar uses. Mobile Lite has no logout of its own. A plain form,
+            so it works without JavaScript.
+
+            `next=/mobile` sends the worker back here after signing in again
+            instead of to the desktop Issue list. It is validated server-side
+            against the return-target allow-list; the field is a convenience,
+            never a trusted instruction.
+
+            An unsent draft lives only in client state and is simply lost —
+            logging out never registers it and never writes anything but the
+            cleared session cookie. */}
+        <form action={logout}>
+          <input type="hidden" name="next" value={MOBILE_HOME} />
+          <button
+            type="submit"
+            className="-mr-2 min-h-[44px] rounded-lg px-3 text-sm font-medium text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-800 active:bg-neutral-200 dark:text-neutral-400 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            Logout
+          </button>
+        </form>
       </header>
 
       <MobileComposer />

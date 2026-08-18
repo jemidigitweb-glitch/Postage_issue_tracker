@@ -246,20 +246,37 @@ describe("Stage 5 — the registration action and query path (source evidence)",
   const issuesSource = readFileSync(join(process.cwd(), "lib/queries/issues.ts"), "utf8");
   const captureSource = readFileSync(join(process.cwd(), "app/mobile/MobileComposer.tsx"), "utf8");
 
-  it("requires the anonymous Mobile session before anything else", () => {
-    assert.ok(actionSource.includes("readMobileSession()"));
+  it("requires a signed-in user holding mobile:submit before anything else", () => {
+    // SUPERSEDED: this used to accept the anonymous `wh_mobile` session. The
+    // owner has replaced that with the ordinary Tracker login, so the gate is
+    // now a real user and a real permission.
+    assert.ok(actionSource.includes("await getCurrentUser()"));
+    assert.ok(actionSource.includes('hasPermission(user, "mobile:submit")'));
     // Compare CALL SITES, not the import list at the top of the file.
     assert.ok(
-      actionSource.indexOf("await readMobileSession()") <
+      actionSource.indexOf("await getCurrentUser()") <
         actionSource.indexOf("verifyMobileTimeline(input.submissionId")
     );
+  });
+
+  it("no longer trusts the deleted anonymous Mobile session", () => {
+    for (const forbidden of ["readMobileSession", "mobileSession", "wh_mobile"]) {
+      assert.equal(
+        actionSource.includes(forbidden),
+        false,
+        `the registration action must not reference ${forbidden}`
+      );
+    }
   });
 
   it("derives staff code, category and title server-side", () => {
     // STAGE 2: the description is now composed from the worker's own text and
     // captions (see tests/mobileTimeline.test.ts) instead of being a constant.
     // Everything else is still derived here or by the database.
-    assert.ok(actionSource.includes("staffCode: MOBILE_STAFF_CODE"));
+    // SUPERSEDED: this used to be the generic WH constant. The raiser is now
+    // the signed-in account's own linked issue_staff row, resolved server-side.
+    assert.ok(actionSource.includes("staffCode: raiser.staffCode"));
+    assert.ok(actionSource.includes("findRaiserForUser(user.userId)"));
     assert.ok(actionSource.includes("category: MOBILE_CATEGORY"));
     assert.ok(actionSource.includes("title: buildMobileIssueTitle(new Date())"));
     assert.ok(actionSource.includes("description: buildMobileDescription(timeline.items)"));

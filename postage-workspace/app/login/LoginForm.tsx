@@ -6,11 +6,15 @@ import { login, type LoginState } from "./actions";
 
 const initialState: LoginState = {};
 
-export default function LoginForm() {
+export default function LoginForm({ next }: { next?: string | null }) {
   const [state, formAction, pending] = useActionState(login, initialState);
 
   return (
     <form action={formAction} className="space-y-4">
+      {/* Already validated server-side (lib/access/raisedByAccess.ts). Rendered
+          only when it survived that check, and re-validated in the action —
+          the browser never decides where a login lands. */}
+      {next && <input type="hidden" name="next" value={next} />}
       <div>
         <label
           htmlFor="username"

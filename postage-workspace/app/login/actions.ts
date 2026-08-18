@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 
 import { findUserForLogin } from "@/lib/queries/users";
 import { createSession } from "@/lib/session";
+import { loginDestination } from "@/lib/access/raisedByAccess";
 
 // Login Server Action. Approved design:
 // documentation/issue_tracker_auth_implementation_plan.md §2 (Login flow):
@@ -65,5 +66,13 @@ export async function login(
   }
 
   await createSession(user.userId);
-  redirect("/dashboard/issues");
+
+  // ── RETURN TARGET ────────────────────────────────────────────────────────
+  // Where the request came from — /mobile sends the worker here when they have
+  // no session. It is attacker-supplied input, so it is validated against an
+  // allow-list server-side (lib/access/raisedByAccess.ts): anything that is not
+  // one of the two approved internal paths, and anything absolute,
+  // protocol-relative or scheme-bearing, is discarded in favour of the Issue
+  // list. The raw value is never redirected to.
+  redirect(loginDestination(formData.get("next")));
 }

@@ -17,8 +17,22 @@
 //  - No role hierarchy or inheritance (DECISION-001): each role's set is an
 //    explicit literal list.
 
-/** The three roles permitted by issue_tracking.management_users.role's CHECK constraint. */
-export type Role = "staff" | "management" | "admin";
+/**
+ * The roles permitted by issue_tracking.management_users.role's CHECK
+ * constraint.
+ *
+ * `raised_by` is NEW and requires migration/013_raised_by_staff_auth.sql to be
+ * applied before any account can hold it — the database constraint currently
+ * accepts only the first three. The application understands the role first so
+ * the migration can be reviewed against working, tested code.
+ *
+ * It is ONE SHARED account, not one login per Raised-By person: it is not
+ * linked to issue_tracking.issue_staff, and there is deliberately no
+ * management_users.staff_code. Authentication identity and the technical
+ * "Raised By" identity on an Issue stay separate — a Warehouse Mobile Issue is
+ * still raised by WH / Warehouse Mobile whoever is signed in.
+ */
+export type Role = "staff" | "management" | "admin" | "raised_by";
 
 /** Every permission this application recognizes. */
 export type Permission =
@@ -47,6 +61,10 @@ export type Permission =
   | "issue:approve_reopen"
   | "user:manage"
   | "tracker:view"
+  // Warehouse Mobile Lite. Its own key namespace, so it can never be widened
+  // by an "issue:*" change: holding it means "may open /mobile and register a
+  // Warehouse Mobile Issue", and nothing else. The Assignee does NOT hold it.
+  | "mobile:submit"
   // Discussions module — distinct key namespace so nothing here can be
   // confused with or accidentally widen an "issue:*" check.
   | "discussion:view"
@@ -84,6 +102,22 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:analyse_own_assigned",
   ]),
 
+  // RAISED BY STAFF. A shared warehouse login: reads every Issue, and raises
+  // Issues as itself from both the web and Warehouse Mobile Lite.
+  //
+  // Exactly three permissions, and deliberately no fourth. `issue:create` is
+  // the ONLY mutation, and it is narrower than it looks: the raiser recorded on
+  // the Issue is not the client's to choose. For this role the server resolves
+  // it from management_users.staff_code -> issue_staff and never reads a form
+  // key for it, so "create" means "create AS MYSELF" and cannot be used to file
+  // an Issue in somebody else's name.
+  //
+  // Everything else remains absent — comment, assign, status, investigate,
+  // resolve, reopen, delete, and every administrative surface (users, staff,
+  // discussions, tracker) — so each existing server-side guard already refuses
+  // this role without a single new check being written for it.
+  raised_by: new Set<Permission>(["issue:view_all", "issue:create", "mobile:submit"]),
+
   // Unchanged from the pre-Stage-3 matrix. No account holds this role.
   management: new Set<Permission>([
     "issue:view_all",
@@ -115,6 +149,9 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:analyse_any",
     "user:manage",
     "tracker:view",
+    // The Super Admin can already do everything an Issue permits; withholding
+    // this one would only stop them testing the mobile screen they own.
+    "mobile:submit",
     "discussion:view",
     "discussion:create",
     "discussion:edit",

@@ -1062,6 +1062,121 @@ describe("UAT bug — after a successful send, the draft is cleared and shown as
   });
 });
 
+describe("Composer controls — typing never hides Camera or Mic", () => {
+  const composerSource = readFileSync(join(process.cwd(), "app/mobile/MobileComposer.tsx"), "utf8");
+  const code = composerSource
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return !trimmed.startsWith("//") && !trimmed.startsWith("*") && !trimmed.startsWith("/*");
+    })
+    .join("\n");
+  /** The composer's control row — from the + button to the end of the row. */
+  const row = code.slice(code.indexOf('aria-label="Add media"'), code.indexOf("</div>\n            </>"));
+
+  it("1 & 2: +, Camera and Mic are rendered unconditionally; Send joins them", () => {
+    // The bug was a ternary that swapped Camera and Mic OUT for Send. There is
+    // no such branch any more: all three are always in the row.
+    assert.equal(code.includes("showSend ? ("), false, "no swap remains");
+    assert.ok(code.includes("{showSend && sendButton(\"main\")}"), "send is additive");
+
+    for (const control of ['aria-label="Add media"', 'aria-label="Take photo"', 'aria-label="Record voice"']) {
+      assert.ok(row.includes(control), `${control} is in the row`);
+      assert.equal((code.match(new RegExp(control.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g")) ?? []).length, 1);
+    }
+    // Each is gated ONLY by its own real limit — never by the text.
+    assert.ok(row.includes("disabled={!canAddPhoto(draft)}"), "camera: the photo cap");
+    assert.ok(row.includes("disabled={!recordingSupported}"), "mic: device support");
+    // Those two, plus send's own transient guard, are the ONLY disable rules in
+    // the row — none of them looks at the typed text.
+    const disables = row.match(/disabled=\{[^}]*\}/g) ?? [];
+    assert.deepEqual(
+      [...new Set(disables)].sort(),
+      ["disabled={!canAddPhoto(draft)}", "disabled={!recordingSupported}"].sort()
+    );
+    for (const gate of ["draft.text", "hasMeaningfulText", "typing"]) {
+      assert.equal(
+        disables.some((rule) => rule.includes(gate)),
+        false,
+        `no control may be disabled by ${gate}`
+      );
+    }
+  });
+
+  it("2: Send appears as soon as there is something to register", () => {
+    assert.ok(composerSource.includes("const showSend = isDraftValid(draft);"));
+    const c = new Composer();
+    assert.equal(isDraftValid(c.draft), false, "empty: no send");
+    c.type("Box damaged");
+    assert.equal(isDraftValid(c.draft), true, "text typed: send appears");
+  });
+
+  it("3: text survives the Camera action", () => {
+    const c = new Composer();
+    c.type("Box damaged");
+    const id = c.selectPhoto();
+    assert.equal(c.draft.text, "Box damaged", "still in the draft");
+    c.uploadDone(id, photoAsset("photo-1"));
+    c.backToIssue();
+    assert.equal(c.draft.text, "Box damaged");
+    assert.equal(c.registerCalls, 0, "and nothing was registered");
+    assert.equal(c.submittedIssues.length, 0, "nor turned into a sent bubble");
+  });
+
+  it("4: text survives the Mic action", () => {
+    const c = new Composer();
+    c.type("Box damaged");
+    const id = c.recordVoice();
+    assert.equal(c.draft.text, "Box damaged");
+    c.uploadDone(id, voiceAsset());
+    c.backToIssue();
+    assert.equal(c.draft.text, "Box damaged");
+    assert.equal(c.registerCalls, 0);
+  });
+
+  it("5: with text AND a photo, the camera stays available up to the cap", () => {
+    const c = new Composer();
+    c.type("Box damaged");
+    withPhoto(c);
+    assert.equal(canAddPhoto(c.draft), true, "one photo: still room for more");
+
+    // Fill to the cap.
+    c.selectPhotos(9).forEach((id, index) => c.uploadDone(id, photoAsset(`photo-${index + 2}`)));
+    assert.equal(photoCount(c.draft), 10);
+    assert.equal(canAddPhoto(c.draft), false, "only the CAP closes the camera");
+    assert.equal(c.draft.text, "Box damaged", "and the note is untouched throughout");
+  });
+
+  it("6: the one-voice rule is unchanged — a second recording replaces the first", () => {
+    const c = new Composer();
+    c.type("Box damaged");
+    const first = c.recordVoice();
+    c.uploadDone(first, voiceAsset());
+    const firstAsset = c.draft.voice!.asset;
+
+    const second = c.recordVoice();
+    c.uploadDone(second, voiceAsset());
+
+    assert.notEqual(c.draft.voice, null);
+    assert.equal(c.draft.voice!.id, second, "the newest recording is the draft's voice");
+    assert.deepEqual(c.draft.voice!.superseded, [firstAsset], "the first is superseded, not lost");
+    assert.equal(draftSummary(c.draft).hasVoice, true);
+    assert.equal(c.draft.text, "Box damaged");
+
+    // And exactly one voice item reaches registration.
+    c.send("main");
+    c.confirm();
+    assert.equal(c.kinds().filter((kind) => kind === "voice").length, 1);
+  });
+
+  it("all five controls plus the input fit one row", () => {
+    // Compact enough for 360px: 4 × 40px buttons, and the input shrinks.
+    assert.ok(composerSource.includes("flex h-10 w-10 shrink-0"));
+    assert.ok(composerSource.includes("min-w-0 flex-1"), "the input yields, never overflows");
+    assert.ok(row.includes('className="h-5 w-5"'), "compact icons");
+  });
+});
+
 describe("Continuous chat — one Issue after another, no reload", () => {
   const composerSource = readFileSync(join(process.cwd(), "app/mobile/MobileComposer.tsx"), "utf8");
   const pageSource = readFileSync(join(process.cwd(), "app/mobile/page.tsx"), "utf8");

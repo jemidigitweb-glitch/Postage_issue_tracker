@@ -46,6 +46,10 @@ describe("permission matrix — Super Admin (role 'admin')", () => {
     "issue:analyse_any",
     "user:manage",
     "tracker:view",
+    // Warehouse Mobile Lite. Added when /mobile moved behind the ordinary
+    // login: the Super Admin owns that screen and would otherwise be unable to
+    // open it. It grants nothing on the desktop portal.
+    "mobile:submit",
     "discussion:view",
     "discussion:create",
     "discussion:edit",

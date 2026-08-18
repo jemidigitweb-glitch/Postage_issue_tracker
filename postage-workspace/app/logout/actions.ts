@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { deleteSession } from "@/lib/session";
+import { safeReturnTarget } from "@/lib/access/raisedByAccess";
 
 // Logout Server Action. Mirrors app/login/actions.ts (the login half of the
 // same flow) and follows the installed Next.js 16 docs' own logout example
@@ -19,7 +20,25 @@ import { deleteSession } from "@/lib/session";
 // without one creates no route. /logout is not a navigable page; this is
 // only a colocated action module.
 
-export async function logout(): Promise<void> {
+/**
+ * Ends the session and returns to the login page.
+ *
+ * `formData` is optional and is used for ONE thing: an optional `next` field
+ * naming where the person should land after signing in again. Warehouse Mobile
+ * Lite sends "/mobile" so a worker who logs out is not dropped into the desktop
+ * Issue list on their next sign-in. The sidebar sends nothing and behaves
+ * exactly as before.
+ *
+ * The value is attacker-supplied, so it goes through the same allow-list every
+ * other return target uses (lib/access/raisedByAccess.ts). Anything external,
+ * protocol-relative or simply not on the list is discarded in favour of a plain
+ * /login — the raw value is never redirected to.
+ *
+ * This remains the ONLY logout in the application: one session mechanism, one
+ * cookie, one way out. Mobile Lite calls this action; it does not have a logout
+ * of its own.
+ */
+export async function logout(formData?: FormData): Promise<void> {
   await deleteSession();
 
   // Clears the client-side Router Cache so a Back-button press after logout
@@ -28,5 +47,6 @@ export async function logout(): Promise<void> {
   // without a valid session cookie; this closes the cached-render gap.
   revalidatePath("/", "layout");
 
-  redirect("/login");
+  const next = safeReturnTarget(formData?.get("next"));
+  redirect(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
 }

@@ -36,6 +36,11 @@ import {
   setVoice,
   type IssueDraft,
 } from "@/lib/mobile/mobileDraft";
+import {
+  MEDIA_DENIED_MESSAGE,
+  mediaConsentPrompt,
+  type MediaConsentKind,
+} from "@/lib/mobile/mediaConsent";
 import { MOBILE_MAX_CAPTION_LENGTH, MOBILE_MAX_TEXT_LENGTH } from "@/lib/mobile/mobileRegistration";
 import type { UploadedAsset } from "@/lib/mobile/mobileSlots";
 import { uploadToCloudinary } from "@/lib/mobile/mobileUpload";
@@ -114,8 +119,9 @@ const sentBubbleClassName =
 /** Incoming reply: left-aligned, compact, never a centred card. */
 const replyBubbleClassName =
   "max-w-[85%] rounded-2xl rounded-bl-md bg-white p-3 shadow-sm dark:bg-neutral-900";
+/** Sized so + / camera / mic / send and the input all fit one 360px row. */
 const roundButtonClassName =
-  "flex h-11 w-11 shrink-0 items-center justify-center rounded-full active:scale-95 transition-transform disabled:opacity-40";
+  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full active:scale-95 transition-transform disabled:opacity-40";
 const barClassName =
   "border-t border-neutral-200 bg-white px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 dark:border-neutral-800 dark:bg-neutral-950";
 const menuRowClassName =
@@ -252,14 +258,60 @@ export default function MobileComposer() {
   // NOTHING on these paths touches draft.text. The worker's note is a field of
   // the draft, not something that has to be committed before media can arrive.
 
-  function openCamera() {
+  // ── media consent ─────────────────────────────────────────────────────────
+  //
+  // Every Gallery, Camera and Microphone entry point goes through here. The
+  // buttons no longer open anything themselves — they ASK, and the media call
+  // happens only from the sheet's confirm button.
+  //
+  // Ask every time: `consent` is set on tap and cleared the moment the sheet
+  // closes, either way. Nothing records that consent was given before, so the
+  // next tap asks again. There is no "don't ask again", by design.
+
+  /** Which sheet is open, or null. The only consent state that exists. */
+  const [consent, setConsent] = useState<MediaConsentKind | null>(null);
+
+  function requestConsent(kind: MediaConsentKind) {
     setMenuOpen(false);
-    cameraInputRef.current?.click();
+    // Asking touches no device and no draft: it sets one piece of UI state.
+    setConsent(kind);
+  }
+
+  /** Cancel. Nothing is opened, nothing is uploaded, and the draft — text,
+   *  photos, captions, voice, submissionId — is not touched at all. */
+  function declineConsent() {
+    setConsent(null);
+    // Defensive: if a stream is somehow still open, it does not stay open.
+    stopMediaTracks();
+  }
+
+  function acceptConsent() {
+    const kind = consent;
+    // Closed FIRST, so the state is already discarded before the device is
+    // touched — there is no window in which "allowed" is remembered.
+    setConsent(null);
+    if (kind === "gallery") galleryInputRef.current?.click();
+    else if (kind === "camera") cameraInputRef.current?.click();
+    else if (kind === "voice") void startRecording();
+  }
+
+  /** Releases the microphone. Used on cancel, on unmount, and after a failed
+   *  or finished recording — a track left running is a live microphone. */
+  function stopMediaTracks() {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  }
+
+  function openCamera() {
+    requestConsent("camera");
   }
 
   function openGallery() {
-    setMenuOpen(false);
-    galleryInputRef.current?.click();
+    requestConsent("gallery");
+  }
+
+  function openVoice() {
+    requestConsent("voice");
   }
 
   /**
@@ -398,8 +450,9 @@ export default function MobileComposer() {
       recorder.onstop = async () => {
         const type = recorder.mimeType || mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type });
-        streamRef.current?.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
+        // The microphone is released the instant recording ends — it is never
+        // left open between recordings.
+        stopMediaTracks();
         const extension = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
         await acceptRecording(blob, `voice-recording.${extension}`);
       };
@@ -419,12 +472,12 @@ export default function MobileComposer() {
         });
       }, 1000);
     } catch {
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
+      // The DEVICE refused, after the worker had already agreed in our own
+      // sheet. Release anything half-open, keep the draft exactly as it is, and
+      // say so once — no retry loop, no second prompt.
+      stopMediaTracks();
       setRecording(false);
-      setRecorderError(
-        "Microphone permission denied, or no microphone is available. Allow microphone access and try again."
-      );
+      setRecorderError(MEDIA_DENIED_MESSAGE.voice);
     }
   }
 
@@ -544,6 +597,48 @@ export default function MobileComposer() {
   const photosLeft = MOBILE_MAX_PHOTOS - photoCount(draft);
 
   /** The confirmation, identical wherever Send was pressed. */
+  // ── MEDIA CONSENT SHEET ──────────────────────────────────────────────────
+  // One component, three kinds. It renders above the bottom bar and does not
+  // replace it, so the worker can still see the draft they are protecting.
+  //
+  // Nothing here touches a device. The confirm button is the ONLY place a
+  // camera, gallery or microphone is opened from, and it closes the sheet
+  // before it does so — consent is never held after the tap that used it.
+  const consentPrompt = consent ? mediaConsentPrompt(consent) : null;
+
+  const consentSheet = consentPrompt && (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="media-consent-title"
+      className="border-t border-neutral-200 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 dark:border-neutral-800 dark:bg-neutral-950"
+    >
+      <p
+        id="media-consent-title"
+        className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50"
+      >
+        {consentPrompt.title}
+      </p>
+      <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{consentPrompt.body}</p>
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={declineConsent}
+          className="flex flex-1 items-center justify-center rounded-xl border border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-700 active:scale-[0.99] transition-transform dark:border-neutral-700 dark:text-neutral-200"
+        >
+          {consentPrompt.cancelLabel}
+        </button>
+        <button
+          type="button"
+          onClick={acceptConsent}
+          className="flex flex-[1.4] items-center justify-center rounded-xl bg-neutral-900 px-4 py-3 text-sm font-bold text-white active:scale-[0.99] transition-transform dark:bg-neutral-100 dark:text-neutral-900"
+        >
+          {consentPrompt.confirmLabel}
+        </button>
+      </div>
+    </div>
+  );
+
   const confirmation = (
     <div className="border-t border-neutral-200 bg-white px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 dark:border-neutral-800 dark:bg-neutral-950">
       <p className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
@@ -758,7 +853,7 @@ export default function MobileComposer() {
       )}
 
       {/* ── ATTACHMENT MENU ────────────────────────────────────────────── */}
-      {menuOpen && !confirming && screen === "main" && (
+      {menuOpen && !confirming && !consent && screen === "main" && (
         <div className="border-t border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
           {/* Only what this application actually supports. Generic files are
               not accepted by lib/access/attachments.ts. */}
@@ -776,7 +871,7 @@ export default function MobileComposer() {
           </button>
           <button
             type="button"
-            onClick={() => void startRecording()}
+            onClick={openVoice}
             disabled={!recordingSupported}
             className={menuRowClassName}
           >
@@ -869,7 +964,7 @@ export default function MobileComposer() {
                   aria-label="Add photos"
                   className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-dashed border-neutral-300 text-neutral-500 active:scale-95 transition-transform dark:border-neutral-600 dark:text-neutral-400"
                 >
-                  <PlusIcon className="h-6 w-6" />
+                  <PlusIcon className="h-5 w-5" />
                 </button>
               )}
             </div>
@@ -912,7 +1007,13 @@ export default function MobileComposer() {
       )}
 
       {/* ── BOTTOM BAR ─────────────────────────────────────────────────── */}
-      {confirming ? (
+      {/* The consent sheet takes precedence over every bar variant: while it is
+          open the question is the only thing to answer. It never replaces the
+          send confirmation, because media buttons are not reachable from
+          there. */}
+      {consentSheet ? (
+        consentSheet
+      ) : confirming ? (
         confirmation
       ) : screen === "photo" && reviewPhoto ? (
         /* Caption + Send. No Add Photo: the photo is already in the Issue. */
@@ -1044,32 +1145,32 @@ export default function MobileComposer() {
                   className={textInputClassName}
                 />
 
-                {/* Camera and mic while the Issue is still empty; the send
-                    control as soon as there is anything to register. */}
-                {showSend ? (
-                  sendButton("main")
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={openCamera}
-                      disabled={!canAddPhoto(draft)}
-                      aria-label="Take photo"
-                      className={`${roundButtonClassName} text-neutral-600 dark:text-neutral-300`}
-                    >
-                      <CameraIcon className="h-6 w-6" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void startRecording()}
-                      disabled={!recordingSupported}
-                      aria-label="Record voice"
-                      className={`${roundButtonClassName} text-neutral-600 dark:text-neutral-300`}
-                    >
-                      <MicrophoneIcon className="h-6 w-6" />
-                    </button>
-                  </>
-                )}
+                {/* SUPERSEDED: these used to be swapped out for the send
+                    control the moment the worker typed anything, which meant a
+                    note blocked the camera and the microphone — exactly the
+                    combination the whole screen exists to support. They are
+                    permanent now, and send simply joins them when there is
+                    something to register. Each is gated only by its own real
+                    limit: ten photos, and a device that can record. */}
+                <button
+                  type="button"
+                  onClick={openCamera}
+                  disabled={!canAddPhoto(draft)}
+                  aria-label="Take photo"
+                  className={`${roundButtonClassName} text-neutral-600 dark:text-neutral-300`}
+                >
+                  <CameraIcon className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={openVoice}
+                  disabled={!recordingSupported}
+                  aria-label="Record voice"
+                  className={`${roundButtonClassName} text-neutral-600 dark:text-neutral-300`}
+                >
+                  <MicrophoneIcon className="h-5 w-5" />
+                </button>
+                {showSend && sendButton("main")}
               </div>
             </>
           )}

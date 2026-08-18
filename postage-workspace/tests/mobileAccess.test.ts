@@ -143,26 +143,48 @@ describe("Mobile Lite upload ticket — nothing secret may reach the browser", (
   });
 });
 
-describe("Mobile Lite requires NO Issue Tracker account (Stage 3 Correction)", () => {
-  // The superseded design added an "issue:create_mobile" permission and a
-  // username allowlist. The owner clarified that /mobile must work while the
-  // Tracker is logged out, so both were removed rather than left as dead code.
-  // These assertions keep them gone.
+describe("Mobile Lite requires a signed-in submitter (Raised-by-Staff)", () => {
+  // THREE designs have existed here, and this block has been rewritten each
+  // time rather than left asserting a superseded rule:
+  //   1. An "issue:create_mobile" permission plus a username allowlist.
+  //   2. No permission at all — /mobile open to any browser, bound only by an
+  //      anonymous `wh_mobile` cookie. This block previously asserted that NO
+  //      mobile permission existed anywhere in the matrix.
+  //   3. CURRENT: one narrow key, `mobile:submit`, held by the shared
+  //      `raised_by` login and by `admin`.
+  //
+  // The superseded names must stay gone; the current key must stay narrow.
 
   const everyPermission: Permission[] = [
     ...permissionsForRole("admin"),
     ...permissionsForRole("staff"),
     ...permissionsForRole("management"),
+    ...permissionsForRole("raised_by"),
   ];
 
-  it("no mobile permission exists anywhere in the matrix", () => {
+  it("exactly one mobile permission exists in the whole matrix", () => {
+    const mobileKeys = [...new Set(everyPermission.filter((p) => p.includes("mobile")))];
+    assert.deepEqual(mobileKeys, ["mobile:submit"]);
+  });
+
+  it("the superseded allowlist permission is still gone", () => {
     assert.equal(
-      everyPermission.some((permission) => permission.includes("mobile")),
+      // Compared as plain strings: the key no longer exists in the Permission
+      // union, which is the point of the assertion.
+      (everyPermission as string[]).some((permission) => permission === "issue:create_mobile"),
       false
     );
   });
 
-  it("the Assignee role is back to its pre-Mobile-Lite set", () => {
+  it("only raised_by and admin may submit from a phone", () => {
+    assert.equal(roleHasPermission("raised_by", "mobile:submit"), true);
+    assert.equal(roleHasPermission("admin", "mobile:submit"), true);
+    assert.equal(roleHasPermission("staff", "mobile:submit"), false);
+    assert.equal(roleHasPermission("management", "mobile:submit"), false);
+    assert.equal(roleHasPermission(null, "mobile:submit"), false);
+  });
+
+  it("the Assignee role is unchanged — Mobile Lite gave it nothing", () => {
     assert.deepEqual([...permissionsForRole("staff")].sort(), [
       "issue:analyse_own_assigned",
       "issue:change_status_own_assigned",
@@ -170,15 +192,21 @@ describe("Mobile Lite requires NO Issue Tracker account (Stage 3 Correction)", (
     ]);
   });
 
-  it("desktop issue:create is unchanged — admin and management only", () => {
+  it("desktop issue:create — admin, management, and now the raiser", () => {
     assert.equal(roleHasPermission("admin", "issue:create"), true);
     assert.equal(roleHasPermission("management", "issue:create"), true);
+    // Raised-by-Staff files Issues from the web as well as from a phone. The
+    // raiser recorded on the Issue is still not theirs to choose — the server
+    // derives it from their linked issue_staff row.
+    assert.equal(roleHasPermission("raised_by", "issue:create"), true);
+    // The Assignee still cannot create anything.
     assert.equal(roleHasPermission("staff", "issue:create"), false);
     assert.equal(roleHasPermission(null, "issue:create"), false);
   });
 
-  it("the Super Admin set is unchanged by Mobile Lite", () => {
-    // Nineteen permissions, exactly as before this feature existed.
-    assert.equal(permissionsForRole("admin").size, 19);
+  it("mobile:submit is the ONLY thing added to the Super Admin set", () => {
+    // Nineteen before this feature; twenty now, and the twentieth is named.
+    assert.equal(permissionsForRole("admin").size, 20);
+    assert.equal(permissionsForRole("admin").has("mobile:submit"), true);
   });
 });

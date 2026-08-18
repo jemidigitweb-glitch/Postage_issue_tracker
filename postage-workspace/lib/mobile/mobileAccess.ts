@@ -8,14 +8,17 @@
 // Cloudinary account, or a browser.
 //
 // ── NO USER AUTHORIZATION LIVES HERE ────────────────────────────────────────
-// SUPERSEDED (Stage 3 Correction): an earlier revision gated Mobile Lite on an
-// Issue Tracker login plus a username allowlist. The owner clarified that a
-// warehouse worker must be able to use /mobile WITHOUT a Tracker account, so
-// that design — the "issue:create_mobile" permission, the
-// MOBILE_LITE_ALLOWED_USERNAMES allowlist and canAccessMobileLite() — was
-// removed rather than left as dead code. Mobile Lite requests are now bound to
-// a browser by the anonymous session in ./mobileSessionToken.ts, which
-// identifies nobody and grants nothing.
+// This module answers "is this upload request well-formed and in-bounds", never
+// "who is allowed to make it". WHO is decided by the ordinary Tracker session:
+// proxy.ts requires one for /mobile, and every Mobile Lite Server Action
+// re-checks `mobile:submit` (lib/access/permissions.ts) against the resolved
+// user.
+//
+// Two earlier designs are named here so the history is reviewable: a username
+// allowlist plus an "issue:create_mobile" permission, and after that an
+// anonymous `wh_mobile` browser cookie for a worker who had no account. Both
+// are gone — deleted, not left as dead code — now that a shared "Raised by
+// Staff" login exists.
 
 // ---------------------------------------------------------------------------
 // Upload slots

@@ -1,6 +1,6 @@
 "use server";
 
-import { readMobileSession } from "@/lib/mobile/mobileSession";
+import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { isValidSubmissionId } from "@/lib/mobile/mobileAccess";
 import {
   buildMobileDescription,
@@ -8,11 +8,11 @@ import {
   buildMobileTimelineExtraData,
   isAssetInSubmission,
   MOBILE_CATEGORY,
-  MOBILE_STAFF_CODE,
   verifyMobileTimeline,
   type MobileTimelineInput,
   type SubmittedAsset,
 } from "@/lib/mobile/mobileRegistration";
+import { findRaiserForUser } from "@/lib/queries/raiserLink";
 import { createMobileIssue } from "@/lib/queries/issues";
 import { InvalidStaffError } from "@/lib/queries/issues";
 import { deleteAttachments } from "@/lib/cloudinary";
@@ -33,22 +33,48 @@ import type { StoredAttachment } from "@/lib/access/attachments";
 // database, and no form key for them is ever read. The description is now
 // COMPOSED from the worker's own text and captions, after normalisation.
 //
-// ── WHY IT CAN FAIL CLEANLY WITH NO REPORTER ────────────────────────────────
-// The Warehouse Mobile reporter row (staff_code "WH") is created by a Super
-// Admin through the existing Add Staff page, pending owner approval. Until it
-// exists, createIssueTx() raises InvalidStaffError and this action reports a
-// setup problem. It NEVER falls back to ND/SA/ST/NV or any other staff code —
-// a Mobile Lite Issue attributed to a real person would be a fabrication.
+// ── WHO RAISED IT: THE SIGNED-IN PERSON, RESOLVED SERVER-SIDE ───────────────
+// SUPERSEDED: every Mobile Lite Issue used to be attributed to the generic
+// WH / "Warehouse Mobile" row, because /mobile had no signed-in user to
+// attribute it to. It does now. The raiser is resolved from the SESSION —
+// management_users.user_id -> management_users.staff_code -> issue_staff — by
+// findRaiserForUser(), which returns a row only if the account is linked AND
+// that raiser is still active.
+//
+// The client sends no raiser and cannot. There is no form key, no input field
+// and no code path that reads a staff code from the request, so a crafted
+// request naming somebody else's code changes nothing: the value is looked up
+// from the verified session id, and a request-supplied copy is never consulted
+// because there is nowhere to put one.
+//
+// ── IT FAILS CLOSED, NEVER BACK TO WH ───────────────────────────────────────
+// An account holding mobile:submit but with no linked raiser — or one whose
+// raiser has been deactivated — is REFUSED. It does not fall back to WH, and
+// it does not fall back to ND/SA/ST/NV/AT: an Issue attributed to the wrong
+// person is worse than an Issue that was not created, because nobody can tell
+// afterwards that it is wrong.
+//
+// WH itself is untouched. It keeps its issue_staff row and its historical
+// Issues (WH-001 and any others) exactly as they are — this changes who NEW
+// Issues are attributed to, and nothing else.
+//
+// ── SOURCE IS NOT RAISER ────────────────────────────────────────────────────
+// extra_data.mobileSource still records "warehouse-mobile-lite", so an Issue
+// still says where it came from. That is a different fact from who raised it:
+// TestUser raising TU-001 from a phone is Raised By TestUser, source Warehouse
+// Mobile Lite.
 
 export interface MobileRegistrationState {
   issueId?: string;
   error?: string;
 }
 
-/** Shown when the anonymous session is missing or expired. */
-const SESSION_EXPIRED = "This session has expired. Reload the page and try again.";
-/** Shown when the WH reporter row does not exist yet. Names no table. */
-const NOT_SET_UP = "Warehouse Mobile is not set up yet. Please contact an administrator.";
+/** Shown when there is no signed-in user, or they may not submit. */
+const SESSION_EXPIRED = "Your session has expired. Sign in again and try again.";
+/** Shown when the account holds mobile:submit but is not linked to an active
+ *  Issue raiser. Names no table and no column — it tells the worker who to ask,
+ *  not how the system is wired. */
+const NOT_SET_UP = "Your account is not set up to raise Issues yet. Please contact an administrator.";
 
 export async function registerMobileIssue(input: {
   submissionId: string;
@@ -58,9 +84,23 @@ export async function registerMobileIssue(input: {
    *  registration, and only inside this submission's own namespace. */
   superseded?: SubmittedAsset[];
 }): Promise<MobileRegistrationState> {
-  const session = await readMobileSession();
-  if (!session) {
+  // THE GATE: a real signed-in user holding mobile:submit. The ONE write this
+  // feature performs is never reachable without it, whatever the browser sends.
+  const user = await getCurrentUser();
+  if (!user || !(await hasPermission(user, "mobile:submit"))) {
     return { error: SESSION_EXPIRED };
+  }
+
+  // WHO RAISED IT. Resolved from the verified session id, never from `input` —
+  // there is deliberately no raiser field on this action's parameter type, so
+  // there is nothing for a crafted request to set. A missing or deactivated
+  // link refuses the submission rather than borrowing somebody else's identity.
+  const raiser = await findRaiserForUser(user.userId);
+  if (!raiser) {
+    console.error(
+      `[mobile] registration blocked — user ${user.userId} holds mobile:submit but has no active linked raiser`
+    );
+    return { error: NOT_SET_UP };
   }
 
   if (!isValidSubmissionId(input.submissionId)) {
@@ -82,8 +122,10 @@ export async function registerMobileIssue(input: {
   try {
     const result = await createMobileIssue({
       submissionId: input.submissionId,
-      // Server-derived, every one of them.
-      staffCode: MOBILE_STAFF_CODE,
+      // Server-derived, every one of them. staffCode comes from the session's
+      // linked raiser resolved above — TU for TestUser — so the Issue ID it
+      // produces through the existing next_issue_id() is TU-001, TU-002, ...
+      staffCode: raiser.staffCode,
       title: buildMobileIssueTitle(new Date()),
       // The one field the worker now authors — normalised and capped above.
       description: buildMobileDescription(timeline.items),
@@ -93,8 +135,11 @@ export async function registerMobileIssue(input: {
     issueId = result.issueId;
   } catch (error) {
     if (error instanceof InvalidStaffError) {
-      // The reporter row has not been provisioned yet. No fallback.
-      console.error("[mobile] registration blocked — reporter not provisioned:", error.message);
+      // Belt and braces: findRaiserForUser() has already established that the
+      // raiser exists and is active, so reaching here means it changed between
+      // that lookup and the transaction. Still no fallback — the submission is
+      // refused rather than re-attributed.
+      console.error("[mobile] registration blocked — linked raiser rejected:", error.message);
       return { error: NOT_SET_UP };
     }
     // Never surface the raw error: it can carry connection details. The media
