@@ -5,6 +5,7 @@ import { useActionState, useState } from "react";
 import Link from "next/link";
 
 import type { IssueListItem } from "@/lib/queries/issues";
+import { displayIssueTitle } from "@/lib/access/mobileEvidence";
 import type { AssignmentUser } from "@/lib/queries/assignmentUsers";
 import { softDeleteIssuesAction, type DeleteState } from "@/app/dashboard/issues/delete-actions";
 import { assignIssuesAction, type AssignBulkState } from "@/app/dashboard/issues/assign-actions";
@@ -255,8 +256,13 @@ export default function IssueTable({
                       {issue.issueId}
                     </Link>
                   </td>
-                  <td className="px-5 py-3.5 text-neutral-800 dark:text-neutral-200">
-                    {issue.title}
+                  {/* One line, truncated visually rather than wrapping — and
+                      genuinely EMPTY when a Mobile report carried no typed
+                      text. No "Untitled" placeholder is ever substituted. */}
+                  <td className="px-5 py-3.5 text-neutral-800 dark:text-neutral-200 max-w-xs truncate">
+                    <span title={displayIssueTitle(issue.title, issue.description) || undefined}>
+                      {displayIssueTitle(issue.title, issue.description)}
+                    </span>
                   </td>
                   <td className="px-5 py-3.5 text-neutral-600 dark:text-neutral-400 whitespace-nowrap">
                     {issue.staffName}

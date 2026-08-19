@@ -60,17 +60,60 @@ export const MOBILE_SOURCE_KEY = "mobileSource";
 export const MOBILE_SOURCE_VALUE = "warehouse-mobile-lite";
 
 /**
- * Title, derived entirely on the server.
+ * SUPERSEDED AS THE PRIMARY TITLE — see buildMobileIssueTitleForItems().
  *
- * Deliberately carries NO username: the login-free design means there is no
- * authenticated worker identity, and inventing one would be a fabrication on
- * an operational record. The timestamp is what distinguishes one report from
- * the next, keeping the Super Admin's Issue list scannable and sortable.
+ * A machine-made "Warehouse report — 19/08/2026 04:17" told a manager nothing
+ * the Date Raised column did not already say, so a Mobile Issue is now titled
+ * with the worker's own first line.
+ *
+ * This is kept, and still used, for ONE case: a report with no typed text at
+ * all. issue_tracking.issues carries
+ * `CHECK (btrim(issue_title) <> '')`, so the database refuses an empty title
+ * and there is no migration in this change to relax it. The generated stamp is
+ * therefore what gets STORED for a media-only report — and
+ * lib/access/mobileEvidence.ts blanks it again at DISPLAY time, so no generated
+ * title ever reaches the Issue list or the detail page.
+ *
+ * Deliberately carries NO username: inventing an identity would be a
+ * fabrication on an operational record.
  */
 export function buildMobileIssueTitle(at: Date): string {
   const pad = (value: number) => String(value).padStart(2, "0");
   const stamp = `${pad(at.getDate())}/${pad(at.getMonth() + 1)}/${at.getFullYear()} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
   return `Warehouse report — ${stamp}`;
+}
+
+/** A title is a one-line label, not a paragraph. Long enough for a real first
+ *  line, short enough that the Issue list stays scannable. */
+export const MOBILE_MAX_TITLE_LENGTH = 200;
+
+/**
+ * The title of a Mobile Issue: THE WORKER'S OWN FIRST LINE.
+ *
+ *   text "Testing in keyboard...\nsecond line"  ->  "Testing in keyboard..."
+ *   no text at all                              ->  the generated stamp above,
+ *                                                   which the display layer
+ *                                                   then blanks (see there).
+ *
+ * Only a `text` item is ever consulted. A photo CAPTION is not a title — it
+ * describes one photo, and promoting it would put a caption on an Issue whose
+ * worker never wrote a headline. Voice carries no text at all. Both are still
+ * registered exactly as before; they are simply not title material.
+ *
+ * Order matters: the FIRST text item wins, which is the first thing the worker
+ * wrote. Pure, like everything else in this module.
+ */
+export function buildMobileIssueTitleForItems(items: VerifiedTimelineItem[], at: Date): string {
+  for (const item of items) {
+    if (item.kind !== "text") continue;
+    // Items are already normalised (CRLF collapsed, trimmed) by
+    // verifyMobileTimeline, so the first line is everything up to the first \n.
+    const firstLine = item.text.split("\n")[0].trim();
+    if (firstLine.length > 0) {
+      return firstLine.slice(0, MOBILE_MAX_TITLE_LENGTH).trim();
+    }
+  }
+  return buildMobileIssueTitle(at);
 }
 
 // ---------------------------------------------------------------------------

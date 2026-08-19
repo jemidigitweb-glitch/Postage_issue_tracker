@@ -662,7 +662,7 @@ describe("Stage 2 — the registration action wires the new contract", () => {
     // The raiser is now server-resolved from the session, not a fixed constant.
     assert.ok(actionSource.includes("staffCode: raiser.staffCode"));
     assert.ok(actionSource.includes("category: MOBILE_CATEGORY"));
-    assert.ok(actionSource.includes("title: buildMobileIssueTitle(new Date())"));
+    assert.ok(actionSource.includes("title: buildMobileIssueTitleForItems(timeline.items, new Date())"));
   });
 
   it("introduces no schema change or migration", () => {

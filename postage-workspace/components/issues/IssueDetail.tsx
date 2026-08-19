@@ -4,6 +4,7 @@ import { formatZonedTimestamp } from "@/lib/datetime";
 import type { IssueDetail as IssueDetailData } from "@/lib/queries/issues";
 import {
   MOBILE_TIMELINE_KEY,
+  displayIssueTitle,
   hasRenderableEvidence,
   readMobileEvidence,
 } from "@/lib/access/mobileEvidence";
@@ -278,9 +279,13 @@ export default function IssueDetail({
         <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
           <div>
             <p className="font-mono text-xs text-neutral-500 dark:text-neutral-400 mb-1">{issue.issueId}</p>
-            <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
-              {issue.title}
-            </h1>
+            {/* Blank rather than a generated fallback when a Mobile report
+                carried no typed text — the heading simply does not render. */}
+            {displayIssueTitle(issue.title, issue.description) && (
+              <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50">
+                {displayIssueTitle(issue.title, issue.description)}
+              </h1>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <IssueStatusBadge status={issue.status} />

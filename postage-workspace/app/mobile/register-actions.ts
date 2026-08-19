@@ -4,7 +4,7 @@ import { getCurrentUser, hasPermission } from "@/lib/auth";
 import { isValidSubmissionId } from "@/lib/mobile/mobileAccess";
 import {
   buildMobileDescription,
-  buildMobileIssueTitle,
+  buildMobileIssueTitleForItems,
   buildMobileTimelineExtraData,
   isAssetInSubmission,
   MOBILE_CATEGORY,
@@ -126,7 +126,11 @@ export async function registerMobileIssue(input: {
       // linked raiser resolved above — TU for TestUser — so the Issue ID it
       // produces through the existing next_issue_id() is TU-001, TU-002, ...
       staffCode: raiser.staffCode,
-      title: buildMobileIssueTitle(new Date()),
+      // The worker's own first line, not a machine-made stamp. Falls back to
+      // the stamp ONLY for a report with no typed text, because the database
+      // refuses an empty title — and that stamp is blanked again at display
+      // time, so it never reaches the Issue list or the detail page.
+      title: buildMobileIssueTitleForItems(timeline.items, new Date()),
       // The one field the worker now authors — normalised and capped above.
       description: buildMobileDescription(timeline.items),
       category: MOBILE_CATEGORY,

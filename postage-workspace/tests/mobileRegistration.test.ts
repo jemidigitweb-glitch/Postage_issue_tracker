@@ -278,7 +278,7 @@ describe("Stage 5 — the registration action and query path (source evidence)",
     assert.ok(actionSource.includes("staffCode: raiser.staffCode"));
     assert.ok(actionSource.includes("findRaiserForUser(user.userId)"));
     assert.ok(actionSource.includes("category: MOBILE_CATEGORY"));
-    assert.ok(actionSource.includes("title: buildMobileIssueTitle(new Date())"));
+    assert.ok(actionSource.includes("title: buildMobileIssueTitleForItems(timeline.items, new Date())"));
     assert.ok(actionSource.includes("description: buildMobileDescription(timeline.items)"));
   });
 

@@ -59,6 +59,11 @@ const VALID_PRIORITIES: readonly IssuePriority[] = ["critical", "high", "medium"
 export interface IssueListItem {
   issueId: string;
   title: string;
+  /** issue_tracking.issues.issue_description. The list does NOT render it as a
+   *  column — it is carried only so a Mobile Issue whose stored title is the
+   *  old generated stamp can show the worker's own first line instead of a
+   *  blank cell (lib/access/mobileEvidence.ts displayIssueTitle). */
+  description: string;
   staffCode: string;
   staffName: string;
   status: IssueStatus;
@@ -261,6 +266,7 @@ interface IssueDetailRow {
 interface IssueRow {
   issue_id: string;
   issue_title: string;
+  issue_description: string;
   staff_code: string;
   staff_name: string;
   status: IssueStatus;
@@ -318,6 +324,11 @@ export async function listIssues(
     `SELECT
        i.issue_id,
        i.issue_title,
+       -- DISPLAY ONLY, and only for a Mobile Issue whose stored title is the
+       -- old generated stamp: components/issues/IssueTable.tsx recovers the
+       -- worker's first line from it (lib/access/mobileEvidence.ts
+       -- displayIssueTitle). The list renders no description of its own.
+       i.issue_description,
        i.staff_code,
        s.staff_name,
        i.status,
@@ -360,6 +371,7 @@ export async function listIssues(
     issues: result.rows.map((row) => ({
       issueId: row.issue_id,
       title: row.issue_title,
+      description: row.issue_description,
       staffCode: row.staff_code,
       staffName: row.staff_name,
       status: row.status,
