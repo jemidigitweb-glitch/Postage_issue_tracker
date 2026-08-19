@@ -50,6 +50,21 @@ interface ManagementUserRowWithHash extends ManagementUserRow {
  * this function exists specifically to support the login Server Action.
  * Returns null if no row matches; does not distinguish "not found" from
  * any other failure to the caller.
+ *
+ * ── ACCOUNTS WITH NO EMAIL ──────────────────────────────────────────────────
+ * management_users.email is nullable (migration/016), because a Raised-by-Staff
+ * account may belong to somebody with no work address. Such an account signs in
+ * with its USERNAME, and this query needs no special case to allow that:
+ *
+ *   `email = $1` against a NULL email evaluates to NULL, not true, so the row
+ *   is matched by the username half of the OR and by nothing else.
+ *
+ * The guard below is therefore not about correctness of the match — it is about
+ * what a NULL identifier would mean. `email IS NOT NULL` also means an empty or
+ * absent address can never be "the identifier somebody typed", which is the one
+ * way an email-less account could otherwise be reached without knowing its
+ * username. An account WITH an address keeps signing in with either one,
+ * exactly as before.
  */
 export async function findUserForLogin(
   identifier: string
@@ -57,7 +72,8 @@ export async function findUserForLogin(
   const result = await getPool().query<ManagementUserRowWithHash>(
     `SELECT user_id, username, display_name, password_hash, role, active
      FROM issue_tracking.management_users
-     WHERE username = $1 OR email = $1
+     WHERE username = $1
+        OR (email IS NOT NULL AND email = $1)
      LIMIT 1`,
     [identifier]
   );

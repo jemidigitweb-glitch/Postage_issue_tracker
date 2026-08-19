@@ -11,12 +11,28 @@
 // Usage (manual only — never wired into build/dev/start/deploy):
 //   npm run provision-raised-by
 //
-// ── PREREQUISITE ────────────────────────────────────────────────────────────
-// migration/013_raised_by_staff_auth.sql MUST be applied first. Without it the
-// role CHECK constraint still rejects 'raised_by' and this script aborts with a
-// clear message instead of a raw constraint error. It does not apply the
-// migration itself: schema change and account creation are two separate
-// decisions and stay two separate steps.
+// ── PREREQUISITES ───────────────────────────────────────────────────────────
+// Three migrations MUST be applied first. This script applies none of them:
+// schema change and account creation are separate decisions and stay separate
+// steps. Each is pre-checked below so a missing one produces a clear message
+// instead of a raw constraint error.
+//   013_raised_by_staff_auth.sql            role CHECK accepts 'raised_by'
+//   014_raised_by_staff_link.sql            management_users.staff_code exists
+//   016_management_users_email_optional.sql email may be NULL
+//
+// ── EMAIL IS OPTIONAL ───────────────────────────────────────────────────────
+// SUPERSEDED: email was REQUIRED here, because management_users.email was NOT
+// NULL and an earlier draft that offered to skip it would have failed at the
+// INSERT. 016 removed the NOT NULL, so a warehouse person with no work address
+// can now be given an account: press Enter at the Email prompt and NULL is
+// stored. Nothing else became optional — username, display name, staff code and
+// password are all still required.
+//
+// An empty string is NOT stored in place of a missing address. email is UNIQUE,
+// and while any number of rows may be NULL (nulls are distinct), a SECOND ''
+// would be rejected — so writing '' would let the first email-less account
+// silently block every later one. lib/access/raisedByProvisioning.ts collapses
+// blank input to null.
 //
 // ── SAFETY MODEL ────────────────────────────────────────────────────────────
 //  - Never runs automatically. Not imported by any app code, not called from
@@ -37,10 +53,11 @@
 //    fully parameterised, fully qualified. No UPDATE and no DELETE — it will
 //    never overwrite an existing account's password; if the username is taken
 //    it aborts and says so.
-//  - It creates NO issue_tracking.issue_staff row. The Warehouse Mobile
-//    reporter (WH) is a separate, already-existing technical identity: whoever
-//    signs in here, a Mobile Lite Issue is still raised by WH. Login identity
-//    and Issue raiser are deliberately not the same thing.
+//  - It creates NO issue_tracking.issue_staff row. The staff code typed at the
+//    prompt must ALREADY name an active issue_staff row, and must not already
+//    be claimed by another login; both are checked read-only before the INSERT
+//    and the script aborts rather than inventing a raiser. issue_staff itself is
+//    never written to, in any circumstance.
 //
 // ── WHAT THIS ACCOUNT CAN DO ────────────────────────────────────────────────
 // Exactly two permissions, from lib/access/permissions.ts:
@@ -56,20 +73,26 @@ import { stdin, stdout } from "node:process";
 import bcrypt from "bcryptjs";
 
 import { getPool } from "./lib/db";
+// The answer rules — what is required, how long it may be, and what "no email"
+// means — live in ONE pure module so a test can EXECUTE them instead of
+// asserting against this file's source text. It is this role's own module and
+// is imported by nothing else: the Super Admin keeps its own
+// MIN_PASSWORD_LENGTH = 12 in scripts/create-first-admin.ts, and the Assignee
+// keeps PASSWORD_MIN_LENGTH in lib/access/assigneeValidation.ts, so changing a
+// value there cannot reach either of them.
+//
+// Nothing about how the password is collected, hashed or stored moved with
+// them: bcrypt cost is still 12, input is still masked, and the plaintext is
+// still never logged.
+import {
+  RAISED_BY_MIN_PASSWORD_LENGTH,
+  RAISED_BY_ROLE,
+  validateRaisedByProvisioning,
+} from "../lib/access/raisedByProvisioning";
 
 const REQUIRED_DATABASE = "varmen_db";
 const REQUIRED_USER = "varmen_user";
-const REQUIRED_ROLE = "raised_by";
-/**
- * Raised-by-Staff minimum, set by the owner. It is THIS SCRIPT'S OWN constant
- * and is read by nothing else, so lowering it cannot reach another account
- * type: the Super Admin keeps its own MIN_PASSWORD_LENGTH = 12 in
- * scripts/create-first-admin.ts, and the Assignee keeps PASSWORD_MIN_LENGTH in
- * lib/access/assigneeValidation.ts. Nothing about how the password is
- * collected, hashed or stored changes with this number — bcrypt cost is still
- * 12, input is still masked, and the plaintext is still never logged.
- */
-const MIN_PASSWORD_LENGTH = 8;
+const REQUIRED_ROLE = RAISED_BY_ROLE;
 
 // Control characters as explicit \u escapes — never literal control bytes in
 // source, which are invisible and fragile to edit correctly.
@@ -169,41 +192,53 @@ async function collectPassword(): Promise<string | null> {
 async function main() {
   console.log("=== Raised-by-Staff Account Provisioning ===");
   console.log(
-    "Manual, one-time script for the SHARED read-only warehouse login.\n" +
-      "Requires migration/013_raised_by_staff_auth.sql to be applied first.\n" +
+    "Manual, one-time script for a read-only warehouse login.\n" +
+      "Requires migrations 013, 014 and 016 to be applied first.\n" +
+      `Password minimum: ${RAISED_BY_MIN_PASSWORD_LENGTH} characters. Email is optional.\n` +
       "Nothing typed here is ever printed back.\n"
   );
 
-  const username = await prompt("Username: ");
-  const displayName = await prompt("Display name: ");
-  // REQUIRED, not optional. management_users.email is NOT NULL and UNIQUE
-  // (verified read-only against varmen_db) — an earlier draft offered to skip
-  // it, which would have failed at the INSERT with a not-null violation.
-  const email = await prompt("Email: ");
-
-  if (!username || !displayName || !email) {
-    console.error(
-      "Username, display name and email are all required. Aborting. No writes made."
-    );
-    process.exitCode = 1;
-    return;
-  }
+  const typedUsername = await prompt("Username: ");
+  const typedDisplayName = await prompt("Display name: ");
+  // OPTIONAL — the only optional answer. Enter on its own stores NULL.
+  const typedEmail = await prompt("Email (optional — press Enter for none): ");
+  // REQUIRED. The Issue raiser this login IS: without it the account can sign
+  // in but cannot register an Issue, because registration resolves the raiser
+  // through management_users.staff_code and fails closed.
+  const typedStaffCode = await prompt("Staff code (must already exist in issue_staff): ");
 
   const password = await collectPassword();
   if (password === null) {
     process.exitCode = 1;
     return;
   }
-  if (password.length < MIN_PASSWORD_LENGTH) {
-    console.error(
-      `Password must be at least ${MIN_PASSWORD_LENGTH} characters. Aborting. No writes made.`
-    );
+
+  // ── ONE PLACE DECIDES WHAT IS REQUIRED ─────────────────────────────────────
+  // Shape only — length, blankness, and "no email means null". Whether the
+  // username is free and whether the staff code names a real active raiser are
+  // database facts, checked below against the real rows.
+  const check = validateRaisedByProvisioning({
+    username: typedUsername,
+    displayName: typedDisplayName,
+    email: typedEmail,
+    password,
+    staffCode: typedStaffCode,
+  });
+  if (!check.ok) {
+    console.error(`${check.error} Aborting. No writes made.`);
     process.exitCode = 1;
     return;
   }
+  const { username, displayName, email, staffCode } = check.value;
 
   // Hash immediately — the plaintext is not referenced again after this point.
   const passwordHash = await bcrypt.hash(password, 12);
+
+  console.log(
+    email === null
+      ? "No email given — this account will be created without one, and signs in with its username."
+      : "An email was given — this account can sign in with either its username or that address."
+  );
 
   const pool = getPool();
 
@@ -250,11 +285,52 @@ async function main() {
       return;
     }
 
+    // ── Migration pre-check: the column shape this script now relies on ─────
+    // 016 made email nullable and 014 added staff_code. Reading both from
+    // information_schema turns a missing migration into one clear sentence
+    // rather than a not-null violation or an undefined-column error.
+    const columns = await pool.query<{ column_name: string; is_nullable: string }>(
+      `SELECT column_name, is_nullable
+         FROM information_schema.columns
+        WHERE table_schema = 'issue_tracking'
+          AND table_name   = 'management_users'
+          AND column_name IN ('email', 'staff_code');`
+    );
+    const emailColumn = columns.rows.find((row) => row.column_name === "email");
+    const staffCodeColumn = columns.rows.find((row) => row.column_name === "staff_code");
+
+    if (!staffCodeColumn) {
+      console.error(
+        "SAFETY ABORT: issue_tracking.management_users has no staff_code column. " +
+          "Apply migration/014_raised_by_staff_link.sql first. No account was created."
+      );
+      process.exitCode = 1;
+      return;
+    }
+    // Only blocks when there is actually no email to store — an account WITH an
+    // address is unaffected by whether the column happens to be nullable yet.
+    if (email === null && emailColumn?.is_nullable !== "YES") {
+      console.error(
+        "SAFETY ABORT: issue_tracking.management_users.email is still NOT NULL, so an " +
+          "account cannot be created without one. Apply " +
+          "migration/016_management_users_email_optional.sql first, or supply an email. " +
+          "No account was created."
+      );
+      process.exitCode = 1;
+      return;
+    }
+
     // ── Never overwrite an existing account ────────────────────────────────
+    // The email half of this check is skipped entirely when there is no email:
+    // `email = NULL` is never true in SQL, so passing null would silently match
+    // nothing — correct by accident, but only by accident. The explicit
+    // IS NOT NULL guard makes "no email means username is the only clash to
+    // look for" a stated rule rather than a side effect of three-valued logic.
     const existing = await pool.query<{ user_id: number; username: string; role: string }>(
       `SELECT user_id, username, role
          FROM issue_tracking.management_users
-        WHERE username = $1 OR ($2::text IS NOT NULL AND email = $2)
+        WHERE username = $1
+           OR ($2::text IS NOT NULL AND email = $2::text)
         LIMIT 1;`,
       [username, email]
     );
@@ -268,6 +344,54 @@ async function main() {
       process.exitCode = 1;
       return;
     }
+
+    // ── The staff code must name a real, active, unclaimed raiser ──────────
+    // READ-ONLY. This script never inserts into issue_staff: if the code does
+    // not exist, that is a decision for whoever owns the staff list, not
+    // something to invent here. And staff_code is UNIQUE on management_users,
+    // so a code already claimed by another login is refused with a message
+    // rather than a constraint error.
+    const raiser = await pool.query<{ staff_code: string; staff_name: string; active: boolean }>(
+      `SELECT staff_code, staff_name, active
+         FROM issue_tracking.issue_staff
+        WHERE staff_code = $1
+        LIMIT 1;`,
+      [staffCode]
+    );
+    if (raiser.rows.length === 0) {
+      console.error(
+        `SAFETY ABORT: no issue_staff row has staff_code "${staffCode}". ` +
+          "This script never creates one. Aborting. No writes made."
+      );
+      process.exitCode = 1;
+      return;
+    }
+    if (!raiser.rows[0].active) {
+      console.error(
+        `SAFETY ABORT: issue_staff "${staffCode}" is not active. ` +
+          "Aborting. No writes made."
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    const claimed = await pool.query<{ user_id: number; username: string }>(
+      `SELECT user_id, username
+         FROM issue_tracking.management_users
+        WHERE staff_code = $1
+        LIMIT 1;`,
+      [staffCode]
+    );
+    if (claimed.rows.length > 0) {
+      console.error(
+        `SAFETY ABORT: staff code "${staffCode}" is already linked to account ` +
+          `"${claimed.rows[0].username}" (user_id ${claimed.rows[0].user_id}). ` +
+          "One raiser, one login. Aborting. No writes made."
+      );
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`Raiser confirmed: ${staffCode} — ${raiser.rows[0].staff_name}`);
 
     // ── Report, don't block, on an existing shared account ─────────────────
     // More than one raised_by account is a decision, not an error — but it
@@ -287,6 +411,8 @@ async function main() {
     }
 
     // ── The only write in this script ──────────────────────────────────────
+    // $3 is null when there is no email. It is bound as a parameter like every
+    // other value — never interpolated, and never turned into '' on the way.
     const inserted = await pool.query<{
       user_id: number;
       username: string;
@@ -294,12 +420,15 @@ async function main() {
       role: string;
       active: boolean;
       created_at: string;
+      has_email: boolean;
+      staff_code: string | null;
     }>(
       `INSERT INTO issue_tracking.management_users
-         (username, display_name, email, password_hash, role, active)
-       VALUES ($1, $2, $3, $4, $5, true)
-       RETURNING user_id, username, display_name, role, active, created_at;`,
-      [username, displayName, email, passwordHash, REQUIRED_ROLE]
+         (username, display_name, email, password_hash, role, active, staff_code)
+       VALUES ($1, $2, $3, $4, $5, true, $6)
+       RETURNING user_id, username, display_name, role, active, created_at,
+                 (email IS NOT NULL) AS has_email, staff_code;`,
+      [username, displayName, email, passwordHash, REQUIRED_ROLE, staffCode]
     );
 
     const row = inserted.rows[0];
@@ -307,10 +436,17 @@ async function main() {
     console.log(`  user_id:      ${row.user_id}`);
     console.log(`  username:     ${row.username}`);
     console.log(`  display_name: ${row.display_name}`);
+    console.log(`  email:        ${row.has_email ? "(set)" : "(none)"}`);
+    console.log(`  staff_code:   ${row.staff_code}`);
     console.log(`  role:         ${row.role}`);
     console.log(`  active:       ${row.active}`);
     console.log(`  created_at:   ${row.created_at}`);
     console.log("\n(Password and password hash are never printed.)");
+    console.log(
+      row.has_email
+        ? "Sign in with the username or the email address."
+        : "Sign in with the USERNAME — this account has no email to sign in with."
+    );
     console.log(
       "This account can read the Issue list and use /mobile. It cannot create, " +
         "edit, assign, comment on, resolve or delete anything through the web portal."

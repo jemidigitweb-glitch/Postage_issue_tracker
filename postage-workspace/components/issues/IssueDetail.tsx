@@ -215,10 +215,13 @@ export default function IssueDetail({
    *  evidence. Defaults to false so the Assignee portal's audio section keeps
    *  showing exactly what it showed before this stage. */
   includeHistoricalAudio = false,
-  /** SUPER ADMIN ONLY. Renders the Warehouse Mobile Stage 2 evidence as a
-   *  readable section instead of leaving extra_data.mobileTimeline to the
-   *  generic JSON dump. Defaults to false, so the Assignee portal keeps
-   *  byte-for-byte the markup it has today. */
+  /** Renders the Warehouse Mobile evidence as a readable section instead of
+   *  leaving extra_data.mobileTimeline to the generic JSON dump.
+   *
+   *  Decided by resolveIssueDetailView().showMobileEvidence — true for the
+   *  Super Admin AND for Raised-by-Staff, false for the Assignee portal.
+   *  Defaults to false, so a caller that passes nothing keeps byte-for-byte the
+   *  markup it has today. */
   showMobileEvidence = false,
 }: {
   issue: IssueDetailData;
@@ -230,8 +233,10 @@ export default function IssueDetail({
   const entries = Object.entries(issue.extraData).filter(([, value]) => value !== null && value !== "");
 
   // ── WAREHOUSE MOBILE EVIDENCE ─────────────────────────────────────────────
-  // Null for every Issue that has no mobileTimeline — Stage 1 Mobile Lite,
-  // desktop, historical — so those pages are untouched.
+  // Null unless extra_data says the Issue came from Warehouse Mobile Lite AND
+  // it carries a timeline — so a desktop Issue, a historical row and a Stage 1
+  // Mobile Lite Issue all keep exactly the page they had. Detection is by
+  // metadata only; nothing here looks at the Raised By code or the Issue ID.
   const mobileEvidence = showMobileEvidence ? readMobileEvidence(issue.extraData) : null;
   const showsMobileEvidence = hasRenderableEvidence(mobileEvidence);
 
@@ -312,8 +317,9 @@ export default function IssueDetail({
         )}
       </div>
 
-      {/* WAREHOUSE MOBILE STAGE 2. Rendered only for the Super Admin, and only
-          when the Issue actually carries a readable timeline. It replaces both
+      {/* WAREHOUSE MOBILE EVIDENCE. Rendered for the Super Admin and for
+          Raised-by-Staff — not the Assignee portal — and only when the Issue
+          actually carries a readable timeline. It replaces both
           the generic gallery and the audio block for these Issues (see below),
           because it shows the SAME media in the order the worker added it, with
           each caption beside its own photo — showing both would print every

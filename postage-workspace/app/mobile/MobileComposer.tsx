@@ -9,16 +9,23 @@ import {
   validateMobilePhoto,
   validateMobileVoice,
 } from "@/lib/mobile/mobileMedia";
-import { MOBILE_MAX_PHOTOS, MOBILE_VOICE_SLOT, type MobileUploadSlot } from "@/lib/mobile/mobileAccess";
+import {
+  MOBILE_MAX_PHOTOS,
+  MOBILE_MAX_VOICES,
+  type MobileUploadSlot,
+} from "@/lib/mobile/mobileAccess";
 import {
   addPhoto,
+  addVoice,
   adjacentPhotoId,
   canAddPhoto,
+  canAddVoice,
   draftSummary,
   draftSupersededAssets,
   draftToRegistrationItems,
   emptyIssueDraft,
   findPhoto,
+  findVoice,
   isDraftBusy,
   isDraftSendable,
   hasMeaningfulText,
@@ -26,19 +33,27 @@ import {
   mediaFailed,
   mediaUploaded,
   nextPhotoSlot,
+  nextVoiceSlot,
   photoAssets,
   photoCount,
   photoIndex,
   removePhoto,
+  removeVoice,
   retryMedia,
   setDraftText,
   setPhotoCaption,
-  setVoice,
+  voiceAssets,
+  voiceCount,
+  voiceIndex,
   type IssueDraft,
 } from "@/lib/mobile/mobileDraft";
 import {
   MEDIA_DENIED_MESSAGE,
+  declineMediaConsent,
+  grantMediaConsent,
+  initialMediaConsent,
   mediaConsentPrompt,
+  needsMediaConsent,
   type MediaConsentKind,
 } from "@/lib/mobile/mediaConsent";
 import { MOBILE_MAX_CAPTION_LENGTH, MOBILE_MAX_TEXT_LENGTH } from "@/lib/mobile/mobileRegistration";
@@ -66,9 +81,16 @@ import {
 //
 // ── ONE SCREEN IS ONE ISSUE ─────────────────────────────────────────────────
 // This is not a conversation. The whole screen is ONE IssueDraft — text, photos
-// and one recording — and there is exactly ONE registration. Any single part is
-// a complete Issue on its own: text alone, a photo alone, a recording alone, or
-// any combination. Nothing is mandatory.
+// and up to five recordings — and there is exactly ONE registration. Any single
+// part is a complete Issue on its own: text alone, a photo alone, a recording
+// alone, or any combination. Nothing is mandatory.
+//
+// ── SEVERAL RECORDINGS, ONE ISSUE ───────────────────────────────────────────
+// SUPERSEDED: a report carried ONE recording, and making a second one silently
+// replaced the first. A worker can now record, return to the composer, record
+// again, and repeat up to five times; all of them leave together as one Issue,
+// in the order they were made. Each plays, uploads, retries and is removed
+// independently of the others, of the photos and of the typed note.
 //
 // ── MEDIA IS STAGED THE MOMENT IT IS TAKEN ──────────────────────────────────
 // SUPERSEDED: an earlier revision made the worker press "Add Photo" to move a
@@ -149,6 +171,8 @@ export default function MobileComposer() {
 
   const [screen, setScreen] = useState<Screen>("main");
   const [reviewPhotoId, setReviewPhotoId] = useState<string | null>(null);
+  /** Which recording the voice review screen is showing. Several can exist. */
+  const [reviewVoiceId, setReviewVoiceId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   /** The confirmation, and the screen it must return to. */
@@ -210,7 +234,7 @@ export default function MobileComposer() {
 
   useEffect(() => {
     if (screen === "main") endRef.current?.scrollIntoView({ block: "end" });
-  }, [draft.photos.length, draft.voice, submittedIssues.length, failure, screen]);
+  }, [draft.photos.length, draft.voices.length, submittedIssues.length, failure, screen]);
 
   function trackObjectUrl(blob: Blob): string {
     const url = URL.createObjectURL(blob);
@@ -260,39 +284,81 @@ export default function MobileComposer() {
 
   // ── media consent ─────────────────────────────────────────────────────────
   //
-  // Every Gallery, Camera and Microphone entry point goes through here. The
-  // buttons no longer open anything themselves — they ASK, and the media call
-  // happens only from the sheet's confirm button.
+  // Every Gallery, Camera and Microphone entry point goes through here. A media
+  // button never opens a device itself: it calls requestConsent(), and the
+  // actual media call happens in exactly one place — openMedia().
   //
-  // Ask every time: `consent` is set on tap and cleared the moment the sheet
-  // closes, either way. Nothing records that consent was given before, so the
-  // next tap asks again. There is no "don't ask again", by design.
+  // ── ASK ONCE PER KIND, PER SESSION ────────────────────────────────────────
+  // SUPERSEDED: the sheet appeared on EVERY tap, so recording three voice notes
+  // meant reading the same paragraph three times. `consentState` now remembers
+  // which explanations this session has already accepted. The three kinds are
+  // separate — the photo picker says nothing about the microphone.
+  //
+  // ── WHAT "REMEMBERED" DOES NOT MEAN ───────────────────────────────────────
+  // It never opens anything on its own. openMedia() is reachable ONLY from the
+  // worker's tap on a media button, or from the confirm button of the sheet
+  // that tap opened. Nothing calls it on mount, after login, after a successful
+  // registration, or when the next Issue starts.
+  //
+  // ── AND IT IS NOT PERSISTED ───────────────────────────────────────────────
+  // Plain component state: nothing is written to the device, to a cookie, or to
+  // the database, and there is no saved user preference. A logout, a refresh or
+  // a remount all start again at "unknown".
 
-  /** Which sheet is open, or null. The only consent state that exists. */
+  /** Which explanations this session has accepted. Reset only by remounting. */
+  const [consentState, setConsentState] = useState(initialMediaConsent);
+  /** Which sheet is open, or null. */
   const [consent, setConsent] = useState<MediaConsentKind | null>(null);
 
-  function requestConsent(kind: MediaConsentKind) {
-    setMenuOpen(false);
-    // Asking touches no device and no draft: it sets one piece of UI state.
-    setConsent(kind);
+  /**
+   * THE ONLY PLACE A DEVICE OR PICKER IS OPENED. One tap, one call.
+   *
+   * Keeping it single means "did consent cause an access?" is answerable by
+   * reading its two call sites, rather than by auditing every button.
+   */
+  function openMedia(kind: MediaConsentKind) {
+    if (kind === "gallery") galleryInputRef.current?.click();
+    else if (kind === "camera") cameraInputRef.current?.click();
+    else if (kind === "voice") void startRecording();
   }
 
-  /** Cancel. Nothing is opened, nothing is uploaded, and the draft — text,
-   *  photos, captions, voice, submissionId — is not touched at all. */
+  /**
+   * A media button was tapped.
+   *
+   * First use of this kind this session -> show our explanation, open nothing.
+   * Already accepted                    -> straight to the existing flow, with
+   *                                        no second explanation. The tap is
+   *                                        still the worker's own.
+   */
+  function requestConsent(kind: MediaConsentKind) {
+    setMenuOpen(false);
+    if (needsMediaConsent(consentState, kind)) {
+      // Asking touches no device and no draft: it sets one piece of UI state.
+      setConsent(kind);
+      return;
+    }
+    openMedia(kind);
+  }
+
+  /** Cancel. Nothing is opened, nothing is uploaded, NOTHING IS REMEMBERED —
+   *  so the next attempt asks again — and the draft (text, photos, captions,
+   *  voices, submissionId) is not touched at all. */
   function declineConsent() {
+    const kind = consent;
     setConsent(null);
+    if (kind) setConsentState((current) => declineMediaConsent(current, kind));
     // Defensive: if a stream is somehow still open, it does not stay open.
     stopMediaTracks();
   }
 
   function acceptConsent() {
     const kind = consent;
-    // Closed FIRST, so the state is already discarded before the device is
-    // touched — there is no window in which "allowed" is remembered.
     setConsent(null);
-    if (kind === "gallery") galleryInputRef.current?.click();
-    else if (kind === "camera") cameraInputRef.current?.click();
-    else if (kind === "voice") void startRecording();
+    if (!kind) return;
+    // Recorded BEFORE the device is touched, so the answer survives even if the
+    // browser then refuses: our explanation was read and accepted either way.
+    setConsentState((current) => grantMediaConsent(current, kind));
+    openMedia(kind);
   }
 
   /** Releases the microphone. Used on cancel, on unmount, and after a failed
@@ -401,6 +467,28 @@ export default function MobileComposer() {
 
   // ── voice ─────────────────────────────────────────────────────────────────
 
+  /**
+   * The × beside ONE unsent recording. Drops that recording and nothing else.
+   *
+   * The typed note, every photo and its caption, the OTHER recordings and the
+   * submission id are all untouched — exactly the same contract dropPhoto()
+   * has. The dropped asset is remembered so the existing post-success cleanup
+   * can remove it; nothing is deleted from Cloudinary here, and no registered
+   * media is ever touched.
+   */
+  function dropVoice(id: string) {
+    const voice = findVoice(draft, id);
+    if (!voice) return;
+    removedAssetsRef.current.push(...voiceAssets(voice));
+    releaseObjectUrl(voice.previewUrl);
+    filesRef.current.delete(id);
+    setDraft((current) => removeVoice(current, id));
+    if (reviewVoiceId === id) {
+      setReviewVoiceId(null);
+      setScreen("main");
+    }
+  }
+
   function stopRecording() {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
@@ -409,26 +497,43 @@ export default function MobileComposer() {
     setRecording(false);
   }
 
-  /** The recording lands and is STAGED immediately; the review screen opens so
-   *  the worker can listen before sending. Registers nothing. */
+  /**
+   * The recording lands and is STAGED immediately; its review screen opens so
+   * the worker can listen before sending. Registers nothing.
+   *
+   * SUPERSEDED: this replaced the draft's single recording and superseded the
+   * previous asset. It APPENDS now — Voice 2 joins Voice 1, up to
+   * MOBILE_MAX_VOICES — so the worker can record, go back, and record again,
+   * and everything still leaves as ONE Issue. Each takes its own slot, uploads
+   * on its own, and can be removed on its own.
+   */
   async function acceptRecording(blob: Blob, name: string) {
     const check = validateMobileVoice({ size: blob.size, head: await readHead(blob) });
     if (!check.ok) {
       setMediaError(check.error);
       return;
     }
+    if (!canAddVoice(draft)) {
+      setMediaError(`An Issue may carry at most ${MOBILE_MAX_VOICES} voice recordings.`);
+      return;
+    }
+    const slot = nextVoiceSlot(draft, [...usedSlotsRef.current]);
+    if (!slot) {
+      setMediaError("No more recordings can be added to this Issue.");
+      return;
+    }
     const attemptId = crypto.randomUUID();
     const itemId = crypto.randomUUID();
     const previewUrl = trackObjectUrl(blob);
 
-    usedSlotsRef.current.add(MOBILE_VOICE_SLOT);
+    usedSlotsRef.current.add(slot);
     filesRef.current.set(itemId, { blob, name });
-    setDraft((current) => {
-      releaseObjectUrl(current.voice?.previewUrl ?? null);
-      return setVoice(current, { id: itemId, attemptId, previewUrl });
-    });
+    // Nothing is released and nothing is superseded: the earlier recordings are
+    // still part of this Issue.
+    setDraft((current) => addVoice(current, { id: itemId, slot, attemptId, previewUrl }));
+    setReviewVoiceId(itemId);
     setScreen("voice");
-    await upload(itemId, MOBILE_VOICE_SLOT, attemptId);
+    await upload(itemId, slot, attemptId);
   }
 
   async function startRecording() {
@@ -576,11 +681,17 @@ export default function MobileComposer() {
    * genuinely separate registration rather than a repeat of the last one under
    * server-side idempotency. The per-submission scratch state resets with it.
    * Preview URLs are NOT revoked — the history above is still showing them.
+   *
+   * MEDIA CONSENT IS DELIBERATELY NOT RESET. It belongs to the session, not to
+   * one Issue, so the next report does not re-explain the camera to somebody
+   * who accepted the explanation two minutes ago. And nothing here opens a
+   * device: starting the next Issue touches no camera, microphone or picker.
    */
   function startNextIssue() {
     setSubmissionId(crypto.randomUUID());
     setDraft(emptyIssueDraft());
     setReviewPhotoId(null);
+    setReviewVoiceId(null);
     setFailure(null);
     setMediaError(null);
     setRecorderError(null);
@@ -593,8 +704,10 @@ export default function MobileComposer() {
   // ── render ────────────────────────────────────────────────────────────────
 
   const reviewPhoto = findPhoto(draft, reviewPhotoId);
+  const reviewVoice = findVoice(draft, reviewVoiceId);
   const showNotice = submittedIssues.length === 0 && !failure;
   const photosLeft = MOBILE_MAX_PHOTOS - photoCount(draft);
+  const voicesLeft = MOBILE_MAX_VOICES - voiceCount(draft);
 
   /** The confirmation, identical wherever Send was pressed. */
   // ── MEDIA CONSENT SHEET ──────────────────────────────────────────────────
@@ -653,7 +766,8 @@ export default function MobileComposer() {
       <ul className="mt-2 text-xs font-medium text-neutral-600 dark:text-neutral-300">
         {summary.hasText && <li>Text ✓</li>}
         {summary.photos > 0 && <li>Photos: {summary.photos}</li>}
-        {summary.hasVoice && <li>Voice ✓</li>}
+        {/* A count, not a tick: the worker is about to send several. */}
+        {summary.voices > 0 && <li>Voice notes: {summary.voices}</li>}
       </ul>
       <div className="mt-3 flex gap-2">
         <button
@@ -733,8 +847,12 @@ export default function MobileComposer() {
             if (neighbour) setReviewPhotoId(neighbour);
           }}
         />
-      ) : screen === "voice" && draft.voice ? (
-        <VoiceReviewBody voice={draft.voice} />
+      ) : screen === "voice" && reviewVoice ? (
+        <VoiceReviewBody
+          voice={reviewVoice}
+          index={voiceIndex(draft, reviewVoice.id)}
+          total={voiceCount(draft)}
+        />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" style={chatBackground}>
           <div className="flex flex-col gap-2.5">
@@ -789,18 +907,22 @@ export default function MobileComposer() {
                   </div>
                 ))}
 
-                {issue.draft.voice?.previewUrl && (
-                  <div className="flex justify-end">
-                    <div className={sentBubbleClassName}>
-                      <audio
-                        controls
-                        preload="metadata"
-                        src={issue.draft.voice.previewUrl}
-                        className="w-full"
-                        aria-label="Play back the voice recording you sent"
-                      />
+                {/* Every recording that went with this Issue, in order, each
+                    its own bubble and its own independent player. */}
+                {issue.draft.voices.map((voice, voiceNumber) =>
+                  voice.previewUrl ? (
+                    <div key={voice.id} className="flex justify-end">
+                      <div className={sentBubbleClassName}>
+                        <audio
+                          controls
+                          preload="metadata"
+                          src={voice.previewUrl}
+                          className="w-full"
+                          aria-label={`Play back voice note ${voiceNumber + 1} you sent`}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  ) : null
                 )}
 
                 {/* The reply. Compact, incoming, never a card in the middle. */}
@@ -869,19 +991,23 @@ export default function MobileComposer() {
             </span>
             Camera
           </button>
-          <button
-            type="button"
-            onClick={openVoice}
-            disabled={!recordingSupported}
-            className={menuRowClassName}
-          >
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300">
-              <MicrophoneIcon className="h-5 w-5" />
-            </span>
-            Voice
-          </button>
+          {/* Hidden entirely at the cap — there is nothing useful behind it. */}
+          {canAddVoice(draft) && (
+            <button
+              type="button"
+              onClick={openVoice}
+              disabled={!recordingSupported}
+              className={menuRowClassName}
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300">
+                <MicrophoneIcon className="h-5 w-5" />
+              </span>
+              Voice
+            </button>
+          )}
           <p className="px-3 pb-1 pt-1 text-xs text-neutral-400 dark:text-neutral-500">
-            {photosLeft} of {MOBILE_MAX_PHOTOS} photos left
+            {photosLeft} of {MOBILE_MAX_PHOTOS} photos left · {voicesLeft} of{" "}
+            {MOBILE_MAX_VOICES} voice notes left
           </p>
         </div>
       )}
@@ -890,7 +1016,7 @@ export default function MobileComposer() {
       {/* Photo thumbnails and the recording sit HERE, immediately above the
           input, so the whole Issue reads as one thing that has not been sent.
           Rendering them in the timeline made them look already delivered. */}
-      {screen === "main" && (photoCount(draft) > 0 || draft.voice) && (
+      {screen === "main" && (photoCount(draft) > 0 || voiceCount(draft) > 0) && (
         <div className="border-t border-neutral-200 bg-white px-2 pt-2 dark:border-neutral-800 dark:bg-neutral-950">
           <p className="px-1 pb-1.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-400 dark:text-neutral-500">
             Not sent yet
@@ -976,32 +1102,57 @@ export default function MobileComposer() {
             </p>
           )}
 
-          {draft.voice && (
-            <button
-              type="button"
-              onClick={() => setScreen("voice")}
-              aria-label="Open voice recording"
-              className="mb-2 flex w-full items-center gap-2 rounded-xl border border-neutral-200 px-3 py-2 text-left dark:border-neutral-700"
-            >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300">
-                <MicrophoneIcon className="h-4 w-4" />
-              </span>
-              <span className="min-w-0 flex-1 text-xs font-medium text-neutral-700 dark:text-neutral-200">
-                Voice recording
-                {draft.voice.status === "uploading" && " — uploading…"}
-                {draft.voice.status === "failed" && " — upload failed"}
-              </span>
-              {draft.voice.previewUrl && draft.voice.status !== "uploading" && (
-                <audio
-                  controls
-                  preload="metadata"
-                  src={draft.voice.previewUrl}
-                  className="h-8 max-w-[55%]"
-                  aria-label="Play back your voice recording"
-                  onClick={(event) => event.stopPropagation()}
-                />
-              )}
-            </button>
+          {/* ── UNSENT RECORDINGS ─────────────────────────────────────────
+              One compact row per recording — "▶ Voice 1 ×". Each plays on its
+              own, uploads on its own, and is removed on its own; removing one
+              touches neither the text, nor the photos, nor the others, nor the
+              submission id. */}
+          {draft.voices.map((voice, index) => (
+            <div key={voice.id} className="mb-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewVoiceId(voice.id);
+                  setScreen("voice");
+                }}
+                aria-label={`Open voice note ${index + 1}`}
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-neutral-200 px-3 py-2 text-left dark:border-neutral-700"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300">
+                  <MicrophoneIcon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1 text-xs font-medium text-neutral-700 dark:text-neutral-200">
+                  Voice {index + 1}
+                  {voice.status === "uploading" && " — uploading…"}
+                  {voice.status === "failed" && " — upload failed"}
+                </span>
+                {voice.previewUrl && voice.status !== "uploading" && (
+                  <audio
+                    controls
+                    preload="metadata"
+                    src={voice.previewUrl}
+                    className="h-8 max-w-[55%]"
+                    aria-label={`Play back voice note ${index + 1}`}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                )}
+              </button>
+              {/* Drops THIS recording from the unsent draft. Nothing else. */}
+              <button
+                type="button"
+                onClick={() => dropVoice(voice.id)}
+                aria-label={`Remove voice note ${index + 1}`}
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white bg-neutral-900 text-white shadow active:scale-90 transition-transform dark:border-neutral-900 dark:bg-neutral-100 dark:text-neutral-900"
+              >
+                <CloseIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+
+          {!canAddVoice(draft) && (
+            <p className="px-1 pb-2 text-[11px] text-neutral-400 dark:text-neutral-500">
+              Maximum {MOBILE_MAX_VOICES} voice notes.
+            </p>
           )}
         </div>
       )}
@@ -1059,7 +1210,7 @@ export default function MobileComposer() {
               : "Send registers this Issue with everything you have added."}
           </p>
         </div>
-      ) : screen === "voice" && draft.voice ? (
+      ) : screen === "voice" && reviewVoice ? (
         <div className={barClassName}>
           <div className="flex items-end gap-1">
             <button
@@ -1071,21 +1222,20 @@ export default function MobileComposer() {
               <BackIcon className="h-5 w-5" />
             </button>
             <p className="min-w-0 flex-1 px-2 text-sm text-neutral-600 dark:text-neutral-300">
-              {busy ? "Uploading…" : "Recording ready."}
+              {reviewVoice.status === "uploading" ? "Uploading…" : "Recording ready."}
             </p>
             {sendButton("voice")}
           </div>
-          {/* Same dead end as a failed photo, same way out. */}
-          {draft.voice.status === "failed" && (
+          {/* Same dead end as a failed photo, same way out. Retrying THIS
+              recording touches no other recording's upload. */}
+          {reviewVoice.status === "failed" && (
             <button
               type="button"
-              onClick={() =>
-                void retry(draft.voice!.id, draft.voice!.slot, draft.voice!.attemptId)
-              }
+              onClick={() => void retry(reviewVoice.id, reviewVoice.slot, reviewVoice.attemptId)}
               className="mt-2 flex items-center gap-1.5 px-3 text-xs font-semibold text-red-600 dark:text-red-400"
             >
               <RetryIcon className="h-3.5 w-3.5" />
-              {draft.voice.error ?? "Upload failed."} Retry upload
+              {reviewVoice.error ?? "Upload failed."} Retry upload
             </button>
           )}
           <p className="px-3 pt-1 text-xs text-neutral-500 dark:text-neutral-400">
@@ -1161,15 +1311,19 @@ export default function MobileComposer() {
                 >
                   <CameraIcon className="h-5 w-5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={openVoice}
-                  disabled={!recordingSupported}
-                  aria-label="Record voice"
-                  className={`${roundButtonClassName} text-neutral-600 dark:text-neutral-300`}
-                >
-                  <MicrophoneIcon className="h-5 w-5" />
-                </button>
+                {/* Gone at five recordings — the cap is a real limit, not a
+                    disabled button the worker keeps pressing. */}
+                {canAddVoice(draft) && (
+                  <button
+                    type="button"
+                    onClick={openVoice}
+                    disabled={!recordingSupported}
+                    aria-label="Record voice"
+                    className={`${roundButtonClassName} text-neutral-600 dark:text-neutral-300`}
+                  >
+                    <MicrophoneIcon className="h-5 w-5" />
+                  </button>
+                )}
                 {showSend && sendButton("main")}
               </div>
             </>

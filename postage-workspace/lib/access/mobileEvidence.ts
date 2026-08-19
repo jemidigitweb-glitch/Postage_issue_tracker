@@ -19,6 +19,20 @@
 // Mobile Lite Issue was shown a raw JSON dump complete with internal UUIDs.
 // Correct data, unreadable presentation.
 //
+// ── HOW A MOBILE LITE ISSUE IS RECOGNISED ───────────────────────────────────
+// By ONE fact, written by the registration itself:
+//
+//     extra_data.mobileSource === "warehouse-mobile-lite"
+//
+// Deliberately NOT by the Raised By code, the staff code, the Issue ID prefix,
+// or the reporter's display name. Those describe WHO raised the Issue, which is
+// a different question from WHERE it came from — and getting the two confused is
+// precisely the bug this fixes: TU-001 was raised from Warehouse Mobile Lite by
+// TestUser, so a "WH"-prefix test called it a desktop Issue and dumped its
+// timeline as raw JSON. `mobileSource` is stamped by the server on every Mobile
+// Lite registration and by nothing else, so it answers the actual question for
+// every raiser, present and future.
+//
 // ── DEFENSIVE BY CONSTRUCTION ───────────────────────────────────────────────
 // extra_data is free-form JSONB. Every field below is checked before it is
 // used, an entry of an unrecognised kind becomes a neutral "unsupported"
@@ -29,14 +43,20 @@
 export type MobileEvidenceItem =
   | { kind: "text"; text: string }
   | { kind: "image"; url: string; caption: string | null }
-  | { kind: "voice"; url: string }
+  /** `number` is this recording's 1-based position AMONG THE RECORDINGS, so a
+   *  report with three of them reads "Voice Note 1 / 2 / 3" however they are
+   *  interleaved with photos and text. It is a display ordinal, not an id. */
+  | { kind: "voice"; url: string; number: number }
   /** A future entry kind this build does not know. Rendered as a neutral line,
    *  never as raw JSON. */
   | { kind: "unsupported" };
 
-/** The key Mobile Lite writes. Mirrors MOBILE_TIMELINE_KEY, kept here so this
- *  module stays free of any mobile/server import. */
+/** The keys Mobile Lite writes. Mirror MOBILE_TIMELINE_KEY / MOBILE_SOURCE_KEY /
+ *  MOBILE_SOURCE_VALUE, kept here so this module stays free of any
+ *  mobile/server import. tests/mobileEvidence.test.ts pins them together. */
 export const MOBILE_TIMELINE_KEY = "mobileTimeline";
+export const MOBILE_SOURCE_KEY = "mobileSource";
+export const MOBILE_SOURCE_VALUE = "warehouse-mobile-lite";
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
@@ -49,16 +69,36 @@ function readHttpsUrl(value: unknown): string | null {
 }
 
 /**
+ * True when this Issue was registered by Warehouse Mobile Lite.
+ *
+ * The ONE detection rule — see the header. Anything that is not the exact
+ * stored marker is false, including a near-miss value, so nothing outside
+ * Mobile Lite can opt itself into this renderer.
+ */
+export function isWarehouseMobileLite(extraData: unknown): boolean {
+  if (!extraData || typeof extraData !== "object" || Array.isArray(extraData)) {
+    return false;
+  }
+  return (extraData as Record<string, unknown>)[MOBILE_SOURCE_KEY] === MOBILE_SOURCE_VALUE;
+}
+
+/**
  * Reads extra_data.mobileTimeline into a renderable list.
  *
- * Returns null when the Issue has no timeline at all — a Stage 1 Mobile Lite
- * Issue, a desktop Issue, or any historical row — so the caller renders no
- * section and every existing Issue keeps exactly the page it had.
+ * Returns null unless the Issue is BOTH a Mobile Lite Issue (by the metadata
+ * marker above) AND carries a timeline. So:
+ *
+ *   desktop / historical Issue      -> null, page unchanged
+ *   Stage 1 Mobile Lite (no timeline)-> null, and its photos and recording keep
+ *                                      rendering through the existing gallery
+ *                                      and audio sections exactly as they do
+ *                                      today — nothing about WH-001 changes
+ *   Stage 2+ Mobile Lite            -> the readable section
  *
  * The stored ORDER is preserved exactly: entries are never regrouped by kind.
  */
 export function readMobileEvidence(extraData: unknown): MobileEvidenceItem[] | null {
-  if (!extraData || typeof extraData !== "object" || Array.isArray(extraData)) {
+  if (!isWarehouseMobileLite(extraData)) {
     return null;
   }
   const raw = (extraData as Record<string, unknown>)[MOBILE_TIMELINE_KEY];
@@ -67,6 +107,9 @@ export function readMobileEvidence(extraData: unknown): MobileEvidenceItem[] | n
   }
 
   const items: MobileEvidenceItem[] = [];
+  // Counts only the recordings that actually render, so a malformed entry in
+  // the middle cannot make the visible numbering skip a value.
+  let voiceNumber = 0;
   for (const entry of raw) {
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       items.push({ kind: "unsupported" });
@@ -91,7 +134,12 @@ export function readMobileEvidence(extraData: unknown): MobileEvidenceItem[] | n
 
     if (record.kind === "voice") {
       const url = readHttpsUrl(record.url);
-      items.push(url ? { kind: "voice", url } : { kind: "unsupported" });
+      if (url) {
+        voiceNumber += 1;
+        items.push({ kind: "voice", url, number: voiceNumber });
+      } else {
+        items.push({ kind: "unsupported" });
+      }
       continue;
     }
 

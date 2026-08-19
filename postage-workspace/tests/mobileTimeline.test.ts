@@ -25,10 +25,12 @@ import {
 } from "../lib/mobile/mobileRegistration";
 import {
   MOBILE_MAX_PHOTOS,
+  MOBILE_MAX_VOICES,
   buildMobilePublicId,
   isMobilePhotoSlot,
   isMobileUploadSlot,
   mobilePhotoSlot,
+  mobileVoiceSlot,
   resourceTypeForSlot,
 } from "../lib/mobile/mobileAccess";
 import { readAudioAttachments, ASSIGNEE_VISIBLE_SOURCES } from "../lib/access/attachments";
@@ -53,15 +55,21 @@ function photoAsset(slot: string, over: Partial<SubmittedAsset> = {}): Submitted
   };
 }
 
-function voiceAsset(over: Partial<SubmittedAsset> = {}): SubmittedAsset {
+function voiceAsset(over: Partial<SubmittedAsset> = {}, slot = "voice"): SubmittedAsset {
   return {
-    publicId: buildMobilePublicId(SUBMISSION, "voice", ATTEMPT),
-    secureUrl: "https://res.cloudinary.com/demo/a.webm",
+    publicId: buildMobilePublicId(SUBMISSION, slot as "voice", ATTEMPT),
+    secureUrl: `https://res.cloudinary.com/demo/${slot}.webm`,
     bytes: 400_000,
     format: "webm",
     resourceType: "video",
     ...over,
   };
+}
+
+/** One recording in the numbered Stage 3 namespace: voice-1 … voice-5. */
+function numberedVoiceInput(index: number): MobileTimelineInput {
+  const slot = mobileVoiceSlot(index);
+  return { id: `v${index}`, kind: "voice", slot, asset: voiceAsset({}, slot) };
 }
 
 function textItem(id: string, text: string): MobileTimelineInput {
@@ -209,14 +217,105 @@ describe("Stage 2 — caps and duplicates", () => {
     assert.match(result.ok === false ? result.error : "", /at most 10 photos/);
   });
 
-  it("allows at most ONE voice recording", () => {
-    assert.equal(MOBILE_MAX_VOICE_ITEMS, 1);
-    const two: MobileTimelineInput[] = [
-      voiceInput("v1"),
-      { id: "v2", kind: "voice", slot: "voice", asset: voiceAsset() },
-    ];
-    const result = verifyMobileTimeline(SUBMISSION, two);
+  it("allows at most FIVE voice recordings", () => {
+    // SUPERSEDED: this cap was 1, and a second recording replaced the first.
+    assert.equal(MOBILE_MAX_VOICE_ITEMS, 5);
+    assert.equal(MOBILE_MAX_VOICE_ITEMS, MOBILE_MAX_VOICES, "one number, not two");
+
+    // Two coexist.
+    const two = verifyMobileTimeline(SUBMISSION, [
+      numberedVoiceInput(1),
+      numberedVoiceInput(2),
+    ]);
+    assert.equal(two.ok, true, two.ok ? "" : two.error);
+    assert.equal(two.ok && two.items.length, 2);
+
+    // Exactly five are accepted...
+    const five = [1, 2, 3, 4, 5].map(numberedVoiceInput);
+    const fiveResult = verifyMobileTimeline(SUBMISSION, five);
+    assert.equal(fiveResult.ok, true, fiveResult.ok ? "" : fiveResult.error);
+    assert.equal(fiveResult.ok && fiveResult.items.filter((i) => i.kind === "voice").length, 5);
+  });
+
+  it("THE SERVER refuses a sixth recording, whatever the client did", () => {
+    const six = [...[1, 2, 3, 4, 5].map(numberedVoiceInput), numberedVoiceInput(6)];
+    const result = verifyMobileTimeline(SUBMISSION, six);
     assert.equal(result.ok, false);
+    assert.match(result.ok === false ? result.error : "", /at most 5 voice recordings/);
+  });
+
+  it("enforces the voice cap even against the legacy slot name", () => {
+    // A client that mixed voice-1…voice-5 with the Stage 1 "voice" slot would
+    // be at six recordings, and is refused on the count, not on the naming.
+    const six: MobileTimelineInput[] = [
+      ...[1, 2, 3, 4, 5].map(numberedVoiceInput),
+      { id: "legacy", kind: "voice", slot: "voice", asset: voiceAsset() },
+    ];
+    const result = verifyMobileTimeline(SUBMISSION, six);
+    assert.equal(result.ok, false);
+    assert.match(result.ok === false ? result.error : "", /at most 5 voice recordings/);
+  });
+
+  it("keeps every recording in the order it was submitted", () => {
+    const result = verifyMobileTimeline(SUBMISSION, [
+      textItem("t", "Pallet crushed"),
+      numberedVoiceInput(1),
+      imageItem("p1", 1),
+      numberedVoiceInput(2),
+      numberedVoiceInput(3),
+    ]);
+    assert.equal(result.ok, true, result.ok ? "" : result.error);
+    assert.deepEqual(
+      result.ok ? result.items.map((item) => item.kind) : [],
+      ["text", "voice", "image", "voice", "voice"]
+    );
+    assert.deepEqual(
+      result.ok
+        ? result.items.flatMap((item) => (item.kind === "voice" ? [item.slot] : []))
+        : [],
+      ["voice-1", "voice-2", "voice-3"],
+      "order preserved"
+    );
+  });
+
+  it("a voice item may not sit in a photo slot, and vice versa", () => {
+    const voiceInPhotoSlot: MobileTimelineInput = {
+      id: "x",
+      kind: "voice",
+      slot: "photo-1",
+      asset: voiceAsset({}, "photo-1"),
+    };
+    assert.equal(verifyMobileTimeline(SUBMISSION, [voiceInPhotoSlot]).ok, false);
+
+    const photoInVoiceSlot: MobileTimelineInput = {
+      id: "y",
+      kind: "image",
+      slot: "voice-1",
+      asset: photoAsset("voice-1"),
+    };
+    assert.equal(verifyMobileTimeline(SUBMISSION, [photoInVoiceSlot]).ok, false);
+  });
+
+  it("stores several recordings as ordered, numbered audio attachments", () => {
+    const items = verified([numberedVoiceInput(1), numberedVoiceInput(2), numberedVoiceInput(3)]);
+    const extraData = buildMobileTimelineExtraData(SUBMISSION, items);
+
+    const timeline = extraData[MOBILE_TIMELINE_KEY] as Array<Record<string, unknown>>;
+    assert.deepEqual(timeline.map((entry) => entry.slot), ["voice-1", "voice-2", "voice-3"]);
+
+    // The existing audio reader sees all three, still playable in both portals
+    // (voice_recording is inside ASSIGNEE_VISIBLE_SOURCES).
+    const audio = readAudioAttachments(extraData.attachments, ASSIGNEE_VISIBLE_SOURCES);
+    assert.equal(audio.length, 3);
+    assert.deepEqual(
+      audio.map((entry) => entry.original_name),
+      ["voice-recording-1", "voice-recording-2", "voice-recording-3"],
+      "each recording is named for its position, not all called the same thing"
+    );
+    for (const entry of audio) {
+      assert.equal(entry.source, "voice_recording");
+      assert.ok(entry.url.startsWith("https://"));
+    }
   });
 
   it("rejects two items claiming the same slot", () => {

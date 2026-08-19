@@ -36,14 +36,48 @@ export type LegacyMobileUploadSlot = (typeof MOBILE_UPLOAD_SLOTS)[number];
 
 /** Stage 2 photo slots: photo-1 … photo-10, and nothing else. */
 export type MobilePhotoSlot = `photo-${number}`;
-export type MobileUploadSlot = LegacyMobileUploadSlot | MobilePhotoSlot;
+/** Stage 3 voice slots: voice-1 … voice-5, and nothing else. */
+export type MobileVoiceSlot = `voice-${number}`;
+export type MobileUploadSlot = LegacyMobileUploadSlot | MobilePhotoSlot | MobileVoiceSlot;
 
-/** The single voice slot. One recording per report, in every stage. */
+/**
+ * The STAGE 1 / STAGE 2 voice slot. One recording per report was the rule when
+ * this was minted, and it stays valid forever: assets and Issues created under
+ * it must keep verifying without a migration.
+ *
+ * NEW recordings no longer use it — see mobileVoiceSlot() below.
+ */
 export const MOBILE_VOICE_SLOT = "voice" as const;
 
 /** Stage 2 photo cap. Matches the existing desktop MAX_IMAGE_FILES rather than
  *  inventing a second number. */
 export const MOBILE_MAX_PHOTOS = 10;
+
+/**
+ * Voice cap per Issue.
+ *
+ * SUPERSEDED: a report could carry exactly one recording, and a second one
+ * replaced the first. A warehouse worker describing several things about one
+ * problem had to say all of it in a single take, or lose the earlier attempt.
+ * Five is the owner-approved number; it is enforced on the client AND, as the
+ * only enforcement that counts, on the server in verifyMobileTimeline().
+ */
+export const MOBILE_MAX_VOICES = 5;
+
+/**
+ * How many voice SLOTS one submission may spend — which is not the same number.
+ *
+ * A slot is never recycled inside a submission (see nextVoiceSlot), so dropping
+ * a staged recording and making another one costs a second slot even though the
+ * Issue still carries one recording. With only five names, a worker who
+ * re-recorded a few times would run out of slots while well under the five-
+ * recording cap. Ten names give that headroom.
+ *
+ * The cap that decides what an Issue may CARRY is MOBILE_MAX_VOICES, enforced
+ * server-side on the item count in verifyMobileTimeline(). This number only
+ * bounds the namespace.
+ */
+export const MOBILE_VOICE_SLOT_COUNT = 10;
 
 /**
  * The ONLY photo slot shape Stage 2 accepts — an explicit range, never a
@@ -52,8 +86,16 @@ export const MOBILE_MAX_PHOTOS = 10;
  */
 const PHOTO_SLOT_PATTERN = /^photo-([1-9]|10)$/;
 
+/** Same discipline for voice: `voice-01`, `voice-0`, `voice-11` and `voice3`
+ *  are all refused. */
+const VOICE_SLOT_PATTERN = /^voice-([1-9]|10)$/;
+
 export function isMobilePhotoSlot(value: unknown): value is MobilePhotoSlot {
   return typeof value === "string" && PHOTO_SLOT_PATTERN.test(value);
+}
+
+export function isMobileVoiceSlot(value: unknown): value is MobileVoiceSlot {
+  return typeof value === "string" && VOICE_SLOT_PATTERN.test(value);
 }
 
 /** Composes the slot name for a 1-based photo index. Throws out of range, so a
@@ -65,16 +107,35 @@ export function mobilePhotoSlot(index: number): MobilePhotoSlot {
   return `photo-${index}`;
 }
 
-/** True for any slot this system will sign an upload for: the Stage 2 range,
+/** Composes the slot name for a 1-based voice SLOT index (not a recording
+ *  number — see MOBILE_VOICE_SLOT_COUNT). Throws out of range, for the same
+ *  reason mobilePhotoSlot() does. */
+export function mobileVoiceSlot(index: number): MobileVoiceSlot {
+  if (!Number.isInteger(index) || index < 1 || index > MOBILE_VOICE_SLOT_COUNT) {
+    throw new Error("Invalid voice index.");
+  }
+  return `voice-${index}`;
+}
+
+/** True for any slot this system will sign an upload for: the Stage 2/3 ranges,
  *  plus the Stage 1 names for backward compatibility. */
 export function isMobileUploadSlot(value: unknown): value is MobileUploadSlot {
   if (typeof value !== "string") return false;
-  return (MOBILE_UPLOAD_SLOTS as readonly string[]).includes(value) || isMobilePhotoSlot(value);
+  return (
+    (MOBILE_UPLOAD_SLOTS as readonly string[]).includes(value) ||
+    isMobilePhotoSlot(value) ||
+    isMobileVoiceSlot(value)
+  );
 }
 
 /** True when a slot holds a photo, in either stage's naming. */
 export function isAnyPhotoSlot(value: unknown): value is MobileUploadSlot {
   return isMobilePhotoSlot(value) || value === "photo1" || value === "photo2";
+}
+
+/** True when a slot holds a recording, in either stage's naming. */
+export function isAnyVoiceSlot(value: unknown): value is MobileUploadSlot {
+  return isMobileVoiceSlot(value) || value === MOBILE_VOICE_SLOT;
 }
 
 /**
@@ -87,7 +148,7 @@ export function isAnyPhotoSlot(value: unknown): value is MobileUploadSlot {
  * together by tests/mobileAccess.test.ts.
  */
 export function resourceTypeForSlot(slot: MobileUploadSlot): "image" | "video" {
-  return slot === "voice" ? "video" : "image";
+  return isAnyVoiceSlot(slot) ? "video" : "image";
 }
 
 // ---------------------------------------------------------------------------

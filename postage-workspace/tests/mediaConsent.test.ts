@@ -6,8 +6,13 @@ import { join } from "node:path";
 import {
   MEDIA_CONSENT_KINDS,
   MEDIA_DENIED_MESSAGE,
+  declineMediaConsent,
+  grantMediaConsent,
+  initialMediaConsent,
+  isMediaConsentAllowed,
   isMediaConsentKind,
   mediaConsentPrompt,
+  needsMediaConsent,
   type MediaConsentKind,
 } from "../lib/mobile/mediaConsent";
 
@@ -111,10 +116,87 @@ describe("the consent prompts say exactly what was approved", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Ask every time
+// Ask ONCE per kind, per session
 // ---------------------------------------------------------------------------
 
-describe("consent is asked EVERY time — nothing remembers it", () => {
+describe("consent is asked once per kind, and remembered for the session only", () => {
+  it("a fresh session knows nothing", () => {
+    const state = initialMediaConsent();
+    for (const kind of MEDIA_CONSENT_KINDS) {
+      assert.equal(state[kind], "unknown");
+      assert.equal(isMediaConsentAllowed(state, kind), false);
+      assert.equal(needsMediaConsent(state, kind), true, `${kind} must ask on first use`);
+    }
+  });
+
+  it("Allow is remembered, so the SECOND use of that kind does not ask", () => {
+    for (const kind of MEDIA_CONSENT_KINDS) {
+      const after = grantMediaConsent(initialMediaConsent(), kind);
+      assert.equal(after[kind], "allowed");
+      assert.equal(needsMediaConsent(after, kind), false, `${kind} must not ask twice`);
+    }
+  });
+
+  it("Cancel remembers NOTHING, so the next attempt asks again", () => {
+    for (const kind of MEDIA_CONSENT_KINDS) {
+      const after = declineMediaConsent(initialMediaConsent(), kind);
+      assert.deepEqual(after, initialMediaConsent(), "Cancel changes no state at all");
+      assert.equal(needsMediaConsent(after, kind), true, `${kind} must ask again after Cancel`);
+    }
+  });
+
+  it("Cancel after an Allow does not revoke the Allow", () => {
+    const allowed = grantMediaConsent(initialMediaConsent(), "voice");
+    assert.deepEqual(declineMediaConsent(allowed, "voice"), allowed);
+  });
+
+  it("the three kinds are tracked SEPARATELY", () => {
+    // The photo picker says nothing about the microphone, and vice versa.
+    const gallery = grantMediaConsent(initialMediaConsent(), "gallery");
+    assert.equal(needsMediaConsent(gallery, "camera"), true);
+    assert.equal(needsMediaConsent(gallery, "voice"), true);
+
+    const both = grantMediaConsent(gallery, "voice");
+    assert.equal(needsMediaConsent(both, "gallery"), false);
+    assert.equal(needsMediaConsent(both, "voice"), false);
+    assert.equal(needsMediaConsent(both, "camera"), true, "the camera was never agreed to");
+  });
+
+  it("Voice 2, Voice 3, Voice 4 and Voice 5 never ask again", () => {
+    let state = initialMediaConsent();
+    // Recording 1 asks; the worker allows.
+    assert.equal(needsMediaConsent(state, "voice"), true);
+    state = grantMediaConsent(state, "voice");
+    for (let recording = 2; recording <= 5; recording++) {
+      assert.equal(
+        needsMediaConsent(state, "voice"),
+        false,
+        `recording ${recording} must not re-ask`
+      );
+    }
+  });
+
+  it("granting is immutable — the previous state is never mutated", () => {
+    const before = initialMediaConsent();
+    const after = grantMediaConsent(before, "camera");
+    assert.equal(before.camera, "unknown", "the original value is untouched");
+    assert.notEqual(before, after);
+  });
+
+  it("there is no 'denied' state — a browser refusal is not our answer", () => {
+    const values = new Set(MEDIA_CONSENT_KINDS.map((kind) => initialMediaConsent()[kind]));
+    values.add(grantMediaConsent(initialMediaConsent(), "voice").voice);
+    assert.deepEqual([...values].sort(), ["allowed", "unknown"]);
+  });
+
+  it("a NEW session starts again at unknown — nothing survives it", () => {
+    grantMediaConsent(initialMediaConsent(), "camera");
+    // A remount calls initialMediaConsent() again. It cannot see the grant.
+    for (const kind of MEDIA_CONSENT_KINDS) {
+      assert.equal(needsMediaConsent(initialMediaConsent(), kind), true);
+    }
+  });
+
   it("the module persists nothing", () => {
     const module = readFileSync(join(process.cwd(), "lib/mobile/mediaConsent.ts"), "utf8");
     for (const forbidden of ["localStorage", "sessionStorage", "document.cookie", "indexedDB"]) {
@@ -124,27 +206,59 @@ describe("consent is asked EVERY time — nothing remembers it", () => {
 
   it("the composer stores consent in transient state only", () => {
     assert.ok(composerCode.includes("const [consent, setConsent] = useState<MediaConsentKind | null>(null)"));
-    for (const forbidden of ["localStorage", "sessionStorage", "document.cookie", "consentGranted", "alreadyAllowed"]) {
+    assert.ok(composerCode.includes("const [consentState, setConsentState] = useState(initialMediaConsent)"));
+    for (const forbidden of ["localStorage", "sessionStorage", "document.cookie", "indexedDB"]) {
       assert.equal(composerCode.includes(forbidden), false, `must not persist consent via ${forbidden}`);
     }
   });
 
-  it("offers no way to stop being asked", () => {
-    for (const forbidden of ["Don't ask again", "Do not ask again", "dontAskAgain", "rememberConsent"]) {
+  it("offers no way to stop being asked forever", () => {
+    for (const forbidden of ["Don't ask again", "Do not ask again", "dontAskAgain"]) {
       assert.equal(composer.includes(forbidden), false, `must not offer "${forbidden}"`);
     }
   });
 
-  it("clears the consent before the device is touched, so the next tap asks again", () => {
+  it("the composer records the grant on Allow and records nothing on Cancel", () => {
     const accept = composerCode.slice(
       composerCode.indexOf("function acceptConsent()"),
       composerCode.indexOf("function stopMediaTracks()")
     );
-    assert.ok(accept.includes("setConsent(null)"));
-    // The reset must come BEFORE the media call, not after it.
-    assert.ok(accept.indexOf("setConsent(null)") < accept.indexOf("galleryInputRef.current?.click()"));
-    assert.ok(accept.indexOf("setConsent(null)") < accept.indexOf("cameraInputRef.current?.click()"));
-    assert.ok(accept.indexOf("setConsent(null)") < accept.indexOf("startRecording()"));
+    assert.ok(accept.includes("grantMediaConsent(current, kind)"), "Allow remembers");
+    // Recorded BEFORE the device is opened, so a browser refusal cannot undo
+    // the fact that the worker read and accepted our explanation.
+    assert.ok(accept.indexOf("grantMediaConsent") < accept.indexOf("openMedia(kind)"));
+
+    const decline = composerCode.slice(
+      composerCode.indexOf("function declineConsent()"),
+      composerCode.indexOf("function acceptConsent()")
+    );
+    assert.equal(decline.includes("grantMediaConsent"), false, "Cancel must never grant");
+    assert.ok(decline.includes("declineMediaConsent(current, kind)"));
+  });
+
+  it("a remembered kind skips the sheet but still needs the worker's tap", () => {
+    const request = composerCode.slice(
+      composerCode.indexOf("function requestConsent("),
+      composerCode.indexOf("function declineConsent()")
+    );
+    // Ask on first use...
+    assert.ok(request.includes("needsMediaConsent(consentState, kind)"));
+    assert.ok(request.includes("setConsent(kind)"));
+    // ...and go straight to the existing flow afterwards. requestConsent is
+    // only ever reached from a button's onClick, so this is still a tap.
+    assert.ok(request.includes("openMedia(kind)"));
+  });
+
+  it("consent is NOT reset when the next Issue starts, and starting one opens nothing", () => {
+    const next = composerCode.slice(
+      composerCode.indexOf("function startNextIssue()"),
+      composerCode.indexOf("function startNextIssue()") + 900
+    );
+    assert.equal(next.includes("initialMediaConsent"), false, "consent belongs to the session");
+    assert.equal(next.includes("setConsentState"), false);
+    for (const device of ["click()", "getUserMedia", "startRecording"]) {
+      assert.equal(next.includes(device), false, `the next Issue must not call ${device}`);
+    }
   });
 });
 
@@ -185,19 +299,20 @@ describe("no media entry point can bypass the sheet", () => {
     );
   });
 
-  it("the ONLY device calls sit inside acceptConsent and startRecording", () => {
-    // Gallery and camera: exactly one click() each, both in acceptConsent.
-    const accept = composerCode.slice(
-      composerCode.indexOf("function acceptConsent()"),
-      composerCode.indexOf("function stopMediaTracks()")
+  it("the ONLY device calls sit inside openMedia and startRecording", () => {
+    // openMedia() is the single door. Gallery and camera: exactly one click()
+    // each in the whole file, both inside it.
+    const openMedia = composerCode.slice(
+      composerCode.indexOf("function openMedia("),
+      composerCode.indexOf("function requestConsent(")
     );
     assert.equal((composerCode.match(/galleryInputRef\.current\?\.click\(\)/g) ?? []).length, 1);
     assert.equal((composerCode.match(/cameraInputRef\.current\?\.click\(\)/g) ?? []).length, 1);
-    assert.ok(accept.includes("galleryInputRef.current?.click()"));
-    assert.ok(accept.includes("cameraInputRef.current?.click()"));
+    assert.ok(openMedia.includes("galleryInputRef.current?.click()"));
+    assert.ok(openMedia.includes("cameraInputRef.current?.click()"));
 
     // Microphone: exactly one getUserMedia, inside startRecording, which is
-    // itself only reachable from acceptConsent.
+    // itself only reachable from openMedia.
     const getUserMedia = [...composerCode.matchAll(/navigator\.mediaDevices\.getUserMedia/g)];
     assert.equal(getUserMedia.length, 1, "exactly one getUserMedia call");
     const startRecording = composerCode.indexOf("async function startRecording()");
@@ -205,7 +320,16 @@ describe("no media entry point can bypass the sheet", () => {
     assert.equal(
       (composerCode.match(/startRecording\(\)/g) ?? []).length,
       2,
-      "startRecording is defined once and called once (from acceptConsent)"
+      "startRecording is defined once and called once (from openMedia)"
+    );
+    assert.ok(openMedia.includes("void startRecording()"));
+
+    // And openMedia has exactly TWO callers: the sheet's Allow button, and a
+    // tap on a kind this session has already agreed to. Nothing else.
+    assert.equal(
+      (composerCode.match(/openMedia\(kind\)/g) ?? []).length,
+      2,
+      "openMedia is reached only from acceptConsent and requestConsent"
     );
   });
 

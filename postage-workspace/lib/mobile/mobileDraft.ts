@@ -1,7 +1,9 @@
 import {
   MOBILE_MAX_PHOTOS,
-  MOBILE_VOICE_SLOT,
+  MOBILE_MAX_VOICES,
+  MOBILE_VOICE_SLOT_COUNT,
   mobilePhotoSlot,
+  mobileVoiceSlot,
   type MobileUploadSlot,
 } from "./mobileAccess";
 import type { UploadedAsset } from "./mobileSlots";
@@ -12,7 +14,7 @@ import type { MobileTimelineInput } from "./mobileRegistration";
 // ── ONE SCREEN IS ONE ISSUE ─────────────────────────────────────────────────
 // The /mobile screen is not a conversation. It is ONE Issue being prepared:
 //
-//     IssueDraft { text, photos[], voice }
+//     IssueDraft { text, photos[], voices[] }
 //
 // The UI is chat-styled because that is what a warehouse worker already knows,
 // but there are no messages, no chat backend and no message table. There is a
@@ -24,8 +26,9 @@ import type { MobileTimelineInput } from "./mobileRegistration";
 // Manual UAT found the consequence: text typed BEFORE a photo was appended
 // AFTER it, so the description came out reversed, and the screen looked as
 // though it had become a photo-only report. Shaping the draft as text + photos
-// + voice removes the question entirely — the registration order is fixed
-// (§26): worker text, then photos in the order added, then voice.
+// + voices removes the question entirely — the registration order is fixed
+// (§26): worker text, then photos in the order added, then the recordings in
+// the order they were made.
 //
 // No React, no `server-only`, no network: every rule here is directly
 // unit-testable without rendering anything.
@@ -58,11 +61,15 @@ export interface IssueDraft {
   /** Exactly what is in the composer input. It IS the worker's text. */
   text: string;
   photos: PhotoDraft[];
-  voice: VoiceDraft | null;
+  /** SUPERSEDED: this was `voice: VoiceDraft | null`, and a second recording
+   *  replaced the first. It is a LIST now — up to MOBILE_MAX_VOICES of them, in
+   *  the order they were recorded — so a worker can step away between takes and
+   *  still send everything as ONE Issue. */
+  voices: VoiceDraft[];
 }
 
 export function emptyIssueDraft(): IssueDraft {
-  return { text: "", photos: [], voice: null };
+  return { text: "", photos: [], voices: [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -219,36 +226,99 @@ export function photoAssets(photo: PhotoDraft): UploadedAsset[] {
 // ---------------------------------------------------------------------------
 
 export function hasVoice(draft: IssueDraft): boolean {
-  return draft.voice !== null;
+  return draft.voices.length > 0;
+}
+
+export function voiceCount(draft: IssueDraft): number {
+  return draft.voices.length;
+}
+
+export function canAddVoice(draft: IssueDraft): boolean {
+  return draft.voices.length < MOBILE_MAX_VOICES;
 }
 
 /**
- * Sets the draft's single recording.
+ * The next free voice slot.
  *
- * A second recording takes the place of the first — one voice per Issue — and
- * the previous asset is kept as superseded rather than overwritten, so the
- * post-success cleanup can remove it.
+ * Slots are never recycled within a submission, for exactly the reason photo
+ * slots are not: a removed recording's Cloudinary asset still exists under that
+ * path and uploads are signed `overwrite=false`, so reusing the name would
+ * return the OLD audio.
+ *
+ * There are MORE slots than the five-recording cap on purpose, so removing a
+ * staged recording and making another one does not eat into the worker's
+ * allowance — see MOBILE_VOICE_SLOT_COUNT. Returns null once every name is
+ * spent.
  */
-export function setVoice(
+export function nextVoiceSlot(
   draft: IssueDraft,
-  input: { id: string; attemptId: string; previewUrl?: string | null }
+  usedSlots: readonly string[] = []
+): MobileUploadSlot | null {
+  const taken = new Set<string>([...usedSlots, ...draft.voices.map((voice) => voice.slot)]);
+  for (let index = 1; index <= MOBILE_VOICE_SLOT_COUNT; index++) {
+    const slot = mobileVoiceSlot(index);
+    if (!taken.has(slot)) return slot;
+  }
+  return null;
+}
+
+/**
+ * APPENDS a recording.
+ *
+ * SUPERSEDED: setVoice() replaced the draft's single recording and pushed the
+ * previous asset onto `superseded`. Nothing is replaced now — Voice 2 joins
+ * Voice 1, and both are registered on the same Issue in the order they were
+ * recorded. A recording is dropped only by the worker pressing its own ×.
+ */
+export function addVoice(
+  draft: IssueDraft,
+  input: { id: string; slot: MobileUploadSlot; attemptId: string; previewUrl?: string | null }
 ): IssueDraft {
-  const previous = draft.voice;
+  if (!canAddVoice(draft)) return draft;
   return {
     ...draft,
-    voice: {
-      id: input.id,
-      slot: MOBILE_VOICE_SLOT,
-      attemptId: input.attemptId,
-      status: "uploading",
-      asset: null,
-      previewUrl: input.previewUrl ?? null,
-      error: null,
-      superseded: previous?.asset
-        ? [...previous.superseded, previous.asset]
-        : (previous?.superseded ?? []),
-    },
+    voices: [
+      ...draft.voices,
+      {
+        id: input.id,
+        slot: input.slot,
+        attemptId: input.attemptId,
+        status: "uploading",
+        asset: null,
+        previewUrl: input.previewUrl ?? null,
+        error: null,
+        superseded: [],
+      },
+    ],
   };
+}
+
+export function findVoice(draft: IssueDraft, id: string | null): VoiceDraft | null {
+  if (!id) return null;
+  return draft.voices.find((voice) => voice.id === id) ?? null;
+}
+
+/** Where a recording sits among the recordings, 0-based. -1 when absent. */
+export function voiceIndex(draft: IssueDraft, id: string | null): number {
+  if (!id) return -1;
+  return draft.voices.findIndex((voice) => voice.id === id);
+}
+
+/**
+ * Drops ONE staged recording from the UNSENT draft — the × beside it.
+ *
+ * Touches nothing else: the text, the photos, their captions, the OTHER
+ * recordings and the submission id are all untouched. Nothing is deleted from
+ * Cloudinary here; the caller collects the dropped asset so the existing
+ * post-success cleanup can remove it, exactly as a superseded asset.
+ */
+export function removeVoice(draft: IssueDraft, id: string): IssueDraft {
+  return { ...draft, voices: draft.voices.filter((voice) => voice.id !== id) };
+}
+
+/** Every asset a dropped recording was holding, for that cleanup. */
+export function voiceAssets(voice: VoiceDraft): UploadedAsset[] {
+  return voice.asset ? [...voice.superseded, voice.asset] : [...voice.superseded];
 }
 
 // ---------------------------------------------------------------------------
@@ -259,8 +329,13 @@ function mapMedia(draft: IssueDraft, id: string, change: (media: MediaDraftBase)
   const photos = draft.photos.map((photo) =>
     photo.id === id ? ({ ...photo, ...change(photo) } as PhotoDraft) : photo
   );
-  const voice = draft.voice && draft.voice.id === id ? { ...draft.voice, ...change(draft.voice) } : draft.voice;
-  return { ...draft, photos, voice };
+  // Only the matching recording is rebuilt. Every other voice keeps its own
+  // object identity, its own status and its own error — which is what makes one
+  // upload failure isolated to the recording it belongs to.
+  const voices = draft.voices.map((voice) =>
+    voice.id === id ? ({ ...voice, ...change(voice) } as VoiceDraft) : voice
+  );
+  return { ...draft, photos, voices };
 }
 
 export function mediaUploaded(draft: IssueDraft, id: string, asset: UploadedAsset): IssueDraft {
@@ -279,9 +354,9 @@ export function retryMedia(draft: IssueDraft, id: string): IssueDraft {
   );
 }
 
-/** Every media item in the draft, photos first then voice. */
+/** Every media item in the draft, photos first then the recordings in order. */
 export function allMedia(draft: IssueDraft): MediaDraftBase[] {
-  return draft.voice ? [...draft.photos, draft.voice] : [...draft.photos];
+  return [...draft.photos, ...draft.voices];
 }
 
 export function isDraftBusy(draft: IssueDraft): boolean {
@@ -309,7 +384,7 @@ export function draftSupersededAssets(
  * Nothing is mandatory, and no combination is privileged.
  */
 export function isDraftValid(draft: IssueDraft): boolean {
-  return hasMeaningfulText(draft.text) || draft.photos.length > 0 || draft.voice !== null;
+  return hasMeaningfulText(draft.text) || draft.photos.length > 0 || draft.voices.length > 0;
 }
 
 /** Valid, nothing in flight, and every attached asset actually landed. */
@@ -322,12 +397,14 @@ export function isDraftSendable(draft: IssueDraft): boolean {
 export function draftSummary(draft: IssueDraft): {
   hasText: boolean;
   photos: number;
-  hasVoice: boolean;
+  /** SUPERSEDED: `hasVoice: boolean`. A count, now that a report may carry
+   *  several, so the confirmation states how many are about to be sent. */
+  voices: number;
 } {
   return {
     hasText: hasMeaningfulText(draft.text),
     photos: draft.photos.length,
-    hasVoice: draft.voice !== null,
+    voices: draft.voices.length,
   };
 }
 
@@ -338,7 +415,8 @@ export const DRAFT_TEXT_ID = "issue-text";
  * The adapter onto the EXISTING Stage 2 registration contract.
  *
  * Deterministic order, per the product rule: worker text, then photos in the
- * order they were added, then the recording. Each photo keeps its own caption.
+ * order they were added, then the recordings in the order they were made. Each
+ * photo keeps its own caption.
  * Local preview URLs, attempt ids, statuses and superseded history are
  * deliberately NOT sent — none of them is part of the stored record.
  *
@@ -368,17 +446,20 @@ export function draftToRegistrationItems(draft: IssueDraft): MobileTimelineInput
     });
   }
 
-  if (draft.voice?.asset) {
+  // Every recording, in the order it was made — Voice 1 first. The order is the
+  // draft's order, so what the manager plays back matches what the worker said.
+  for (const voice of draft.voices) {
+    if (!voice.asset) continue;
     items.push({
-      id: draft.voice.id,
+      id: voice.id,
       kind: "voice",
-      slot: MOBILE_VOICE_SLOT,
+      slot: voice.slot,
       asset: {
-        publicId: draft.voice.asset.publicId,
-        secureUrl: draft.voice.asset.secureUrl,
-        bytes: draft.voice.asset.bytes,
-        format: draft.voice.asset.format,
-        resourceType: draft.voice.asset.resourceType,
+        publicId: voice.asset.publicId,
+        secureUrl: voice.asset.secureUrl,
+        bytes: voice.asset.bytes,
+        format: voice.asset.format,
+        resourceType: voice.asset.resourceType,
       },
     });
   }

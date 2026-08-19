@@ -126,3 +126,42 @@ describe("the two portals are genuinely different", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Warehouse Mobile Evidence
+// ---------------------------------------------------------------------------
+//
+// This flag is deliberately NOT in ASSIGNEE_ONLY_FLAGS: it is the one flag that
+// is true for "other". Every other flag ADDS information to a page, so off is
+// the safe default. This one REPLACES the raw extra_data.mobileTimeline dump —
+// internal item ids and Cloudinary public_ids and all — with a version that has
+// every internal stripped out. Turning it on shows a viewer strictly less.
+
+describe("Mobile Evidence is scoped to the portals that needed fixing", () => {
+  it("the Super Admin gets it", () => {
+    assert.equal(resolveIssueDetailView(ADMIN).showMobileEvidence, true);
+  });
+
+  it("Raised-by-Staff gets it — they hold neither status permission, so 'other'", () => {
+    const view = resolveIssueDetailView(NOBODY);
+    assert.equal(view.kind, "other");
+    assert.equal(view.showMobileEvidence, true, "TU-001 must not show raw JSON");
+    // And it is the ONLY thing 'other' gains. Everything else stays closed.
+    for (const flag of ASSIGNEE_ONLY_FLAGS) {
+      assert.equal(view[flag], false);
+    }
+    assert.equal(view.showAiAssistant, false);
+  });
+
+  it("the Assignee portal does NOT get it — its markup is unchanged", () => {
+    assert.equal(resolveIssueDetailView(ASSIGNEE).showMobileEvidence, false);
+  });
+
+  it("an admin who is also an assignee still resolves to the admin view", () => {
+    const view = resolveIssueDetailView({
+      canChangeStatusAny: true,
+      canChangeStatusOwnAssigned: true,
+    });
+    assert.equal(view.showMobileEvidence, true);
+  });
+});

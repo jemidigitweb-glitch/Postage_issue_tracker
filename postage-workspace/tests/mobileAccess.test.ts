@@ -4,10 +4,16 @@ import assert from "node:assert/strict";
 import {
   buildMobilePublicId,
   buildMobileUploadTicket,
+  isAnyPhotoSlot,
+  isAnyVoiceSlot,
   isMobileUploadSlot,
+  isMobileVoiceSlot,
   isValidSubmissionId,
+  mobileVoiceSlot,
+  MOBILE_MAX_VOICES,
   MOBILE_UPLOAD_FOLDER,
   MOBILE_UPLOAD_SLOTS,
+  MOBILE_VOICE_SLOT_COUNT,
   resourceTypeForSlot,
 } from "../lib/mobile/mobileAccess";
 import { permissionsForRole, roleHasPermission, type Permission } from "../lib/access/permissions";
@@ -30,6 +36,48 @@ describe("Mobile Lite upload slots", () => {
     for (const slot of ["photo3", "video", "", "VOICE", "../voice", "voice ", 1, null, undefined]) {
       assert.equal(isMobileUploadSlot(slot), false, `${String(slot)} must not be a valid slot`);
     }
+  });
+
+  it("accepts the numbered voice range, and nothing outside it", () => {
+    for (let index = 1; index <= MOBILE_VOICE_SLOT_COUNT; index++) {
+      const slot = mobileVoiceSlot(index);
+      assert.equal(slot, `voice-${index}`);
+      assert.equal(isMobileVoiceSlot(slot), true);
+      assert.equal(isMobileUploadSlot(slot), true);
+      assert.equal(isAnyVoiceSlot(slot), true);
+      assert.equal(isAnyPhotoSlot(slot), false, "a recording is never a photo");
+    }
+    // Free-form names cannot widen the namespace.
+    for (const slot of ["voice-0", "voice-01", "voice-11", "voice3", "voice-", "voice-1 ", "VOICE-1"]) {
+      assert.equal(isMobileVoiceSlot(slot), false, `${slot} must not be a valid voice slot`);
+      assert.equal(isMobileUploadSlot(slot), false, `${slot} must not be signable`);
+    }
+    for (const index of [0, -1, 1.5, MOBILE_VOICE_SLOT_COUNT + 1, NaN]) {
+      assert.throws(() => mobileVoiceSlot(index), /Invalid voice index/);
+    }
+  });
+
+  it("the legacy single voice slot is still valid, forever", () => {
+    assert.equal(isMobileUploadSlot("voice"), true);
+    assert.equal(isAnyVoiceSlot("voice"), true);
+    assert.equal(isMobileVoiceSlot("voice"), false, "it is not in the numbered range");
+    assert.equal(resourceTypeForSlot("voice"), "video");
+  });
+
+  it("there are more voice SLOTS than the five-recording cap", () => {
+    // A removed recording's slot is never recycled, so the namespace has to be
+    // wider than the cap or re-recording would exhaust it.
+    assert.equal(MOBILE_MAX_VOICES, 5);
+    assert.ok(MOBILE_VOICE_SLOT_COUNT > MOBILE_MAX_VOICES);
+  });
+
+  it("gives every recording of a submission its own Cloudinary path", () => {
+    const paths = new Set(
+      Array.from({ length: MOBILE_VOICE_SLOT_COUNT }, (_, index) =>
+        buildMobilePublicId(VALID_UUID, mobileVoiceSlot(index + 1), ATTEMPT)
+      )
+    );
+    assert.equal(paths.size, MOBILE_VOICE_SLOT_COUNT, "no two recordings collide");
   });
 
   it("maps photos to the image resource type and voice to video", () => {

@@ -81,11 +81,22 @@ export default function MobileEvidence({ items }: { items: MobileEvidenceItem[] 
 
             {item.kind === "voice" && (
               <>
+                {/* Numbered, because a report may carry several. The number is
+                    the recording's position among the recordings — Voice Note 1
+                    is the first thing the worker said. */}
                 <p className={labelClassName}>
                   <span aria-hidden="true">🎤</span>
-                  Voice Note
+                  Voice Note {item.number}
                 </p>
-                <audio controls preload="none" src={item.url} className="w-full max-w-md">
+                {/* Each recording is its own independent player, with its own
+                    source — playing one never touches another. */}
+                <audio
+                  controls
+                  preload="none"
+                  src={item.url}
+                  aria-label={`Voice note ${item.number}`}
+                  className="w-full max-w-md"
+                >
                   Your browser cannot play this recording.
                 </audio>
               </>

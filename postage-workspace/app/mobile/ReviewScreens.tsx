@@ -103,14 +103,37 @@ export function PhotoReviewBody({
   );
 }
 
-export function VoiceReviewBody({ voice }: { voice: VoiceDraft }) {
+/**
+ * @param index 0-based position of this recording among the draft's recordings.
+ * @param total how many recordings the draft holds.
+ *
+ * A report may carry several, so this screen names WHICH one is being reviewed.
+ * The player is bound to this recording's own preview URL — playing it never
+ * touches another.
+ */
+export function VoiceReviewBody({
+  voice,
+  index,
+  total,
+}: {
+  voice: VoiceDraft;
+  index: number;
+  total: number;
+}) {
+  const position = index >= 0 ? index + 1 : 1;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center px-4 pb-2 pt-2">
       <div className="rounded-2xl bg-white p-4 shadow-sm dark:bg-neutral-900">
         <div className="flex items-center gap-2 pb-2">
           <p className="text-[15px] font-semibold text-neutral-900 dark:text-neutral-50">
-            Voice recording
+            Voice {position}
           </p>
+          {total > 1 && (
+            <span className="rounded-full bg-neutral-200 px-2.5 py-1 text-xs font-semibold tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+              {position} / {total}
+            </span>
+          )}
           <span className="ml-auto text-xs text-neutral-500 dark:text-neutral-400">
             {voice.status === "uploading" && (
               <span className="flex items-center gap-1">
@@ -127,7 +150,7 @@ export function VoiceReviewBody({ voice }: { voice: VoiceDraft }) {
             preload="metadata"
             src={voice.previewUrl}
             className="w-full"
-            aria-label="Play back your voice recording"
+            aria-label={`Play back voice note ${position}`}
           />
         )}
         {voice.status === "failed" && (
@@ -137,7 +160,8 @@ export function VoiceReviewBody({ voice }: { voice: VoiceDraft }) {
           </p>
         )}
         <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
-          This recording is already part of your Issue. Send registers everything you have added.
+          This recording is already part of your Issue. Go back to add another, or send to register
+          everything you have added.
         </p>
       </div>
     </div>

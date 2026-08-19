@@ -78,6 +78,26 @@ export interface IssueDetailView {
    *  else. Rendering the panel is presentation; the Server Action checks the
    *  matching permission independently. */
   showAiAssistant: boolean;
+  /**
+   * The readable Warehouse Mobile Evidence section, instead of leaving
+   * extra_data.mobileTimeline to the generic "Additional details" JSON dump.
+   *
+   * ── WHY THIS ONE IS TRUE FOR "other" ──────────────────────────────────────
+   * Every other flag on this interface ADDS information to a page, so the safe
+   * default is off. This one does the opposite: the timeline is ALREADY on the
+   * page for anyone who can open the Issue — stringified, complete with
+   * internal item ids and Cloudinary public_ids. Turning this on REPLACES that
+   * dump with a version that has all of it stripped out. Leaving it off for a
+   * role does not withhold anything from them; it shows them more.
+   *
+   * That is what makes it correct for `raised_by`, who resolves to "other"
+   * here: TU-001 is their own Issue, raised from their own phone, and it was
+   * showing them raw JSON. It is the same reason it is on for the Super Admin.
+   *
+   * FALSE for the Assignee, and only for them — that portal's markup is frozen
+   * by the no-regression requirement and this change does not touch it.
+   */
+  showMobileEvidence: boolean;
 }
 
 /** Every flag off. The shape "other" resolves to, and the safe default. */
@@ -87,6 +107,7 @@ const NOTHING_EXTRA: Omit<IssueDetailView, "kind"> = {
   showAssignedTo: false,
   showFixAndActionRequired: false,
   showAiAssistant: false,
+  showMobileEvidence: false,
 };
 
 /**
@@ -102,7 +123,7 @@ export function resolveIssueDetailView(input: IssueDetailViewerInput): IssueDeta
   if (input.canChangeStatusAny) {
     // The Super Admin's page is otherwise unchanged — every Stage 6 flag stays
     // off. The AI panel is the one deliberate addition.
-    return { kind: "admin", ...NOTHING_EXTRA, showAiAssistant: true };
+    return { kind: "admin", ...NOTHING_EXTRA, showAiAssistant: true, showMobileEvidence: true };
   }
 
   if (input.canChangeStatusOwnAssigned) {
@@ -113,8 +134,13 @@ export function resolveIssueDetailView(input: IssueDetailViewerInput): IssueDeta
       showAssignedTo: true,
       showFixAndActionRequired: true,
       showAiAssistant: true,
+      // The one flag the Assignee does NOT get. See the field's doc comment:
+      // this portal is deliberately left exactly as it is.
+      showMobileEvidence: false,
     };
   }
 
-  return { kind: "other", ...NOTHING_EXTRA };
+  // Raised-by-Staff lands here. They get the readable evidence and nothing
+  // else — see the showMobileEvidence doc for why that is a narrowing.
+  return { kind: "other", ...NOTHING_EXTRA, showMobileEvidence: true };
 }

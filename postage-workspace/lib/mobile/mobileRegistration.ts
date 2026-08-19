@@ -1,9 +1,10 @@
 import {
   MOBILE_MAX_PHOTOS,
+  MOBILE_MAX_VOICES,
   MOBILE_UPLOAD_FOLDER,
   MOBILE_UPLOAD_SLOTS,
-  MOBILE_VOICE_SLOT,
   isAnyPhotoSlot,
+  isAnyVoiceSlot,
   isMobileUploadSlot,
   isValidAttemptId,
   isValidSubmissionId,
@@ -147,18 +148,19 @@ export function verifySubmittedAsset(
     return { ok: false, error: "Evidence type does not match the expected slot." };
   }
 
-  const allowedFormats = slot === "voice" ? VOICE_FORMATS : PHOTO_FORMATS;
+  const isVoice = isAnyVoiceSlot(slot);
+  const allowedFormats = isVoice ? VOICE_FORMATS : PHOTO_FORMATS;
   const format = typeof asset.format === "string" ? asset.format.toLowerCase() : "";
   // An empty format is tolerated only for audio, where Cloudinary does not
   // always report one for a browser recording container.
   if (format && !allowedFormats.includes(format)) {
     return { ok: false, error: "Evidence format is not supported." };
   }
-  if (!format && slot !== "voice") {
+  if (!format && !isVoice) {
     return { ok: false, error: "Evidence format is not supported." };
   }
 
-  const maxBytes = slot === "voice" ? MOBILE_MAX_VOICE_BYTES : MOBILE_MAX_PHOTO_BYTES;
+  const maxBytes = isVoice ? MOBILE_MAX_VOICE_BYTES : MOBILE_MAX_PHOTO_BYTES;
   if (typeof asset.bytes !== "number" || !Number.isFinite(asset.bytes) || asset.bytes <= 0) {
     return { ok: false, error: "Evidence size could not be confirmed." };
   }
@@ -277,9 +279,19 @@ export function buildMobileExtraData(
 // worker's own text and their own photo captions — and both are normalised and
 // length-capped here before they reach the database.
 
-/** At most one voice note per report, in every stage. */
-export const MOBILE_MAX_VOICE_ITEMS = 1;
-/** A generous cap that still bounds one request. 10 photos + 1 voice + text. */
+/**
+ * Voice notes per report.
+ *
+ * SUPERSEDED: this was 1, and a second recording replaced the first. It is now
+ * the approved cap of five, re-exported from the slot vocabulary so the number
+ * of slots and the number of items can never disagree.
+ *
+ * THIS is the enforcement that matters. The composer hides the microphone at
+ * five, but a request carrying six voice items is refused here regardless of
+ * what any client did or did not do.
+ */
+export const MOBILE_MAX_VOICE_ITEMS = MOBILE_MAX_VOICES;
+/** A generous cap that still bounds one request. 10 photos + 5 voices + text. */
 export const MOBILE_MAX_TIMELINE_ITEMS = 40;
 /** Per-item text caps. Long enough for a real report, short enough that a
  *  description cannot be used as bulk storage. */
@@ -346,8 +358,8 @@ export function normaliseMobileCaption(value: unknown): string | null {
  *   - 1..40 items, each an object with a unique, shape-checked id
  *   - kind is exactly "text", "image" or "voice" — nothing else
  *   - text is normalised and must survive as non-empty
- *   - an image sits in a photo slot; a voice sits in the voice slot
- *   - at most 10 images and at most 1 voice
+ *   - an image sits in a photo slot; a voice sits in a voice slot
+ *   - at most 10 images and at most 5 voices
  *   - no two items claim the same slot
  *   - no two items carry the same Cloudinary asset
  *   - every asset passes the SAME per-asset check Stage 1 used: namespace,
@@ -408,7 +420,9 @@ export function verifyMobileTimeline(submissionId: string, items: unknown): Time
       if (wantsPhoto !== isAnyPhotoSlot(slot)) {
         return { ok: false, error: "Evidence does not match the expected slot." };
       }
-      if (!wantsPhoto && slot !== MOBILE_VOICE_SLOT) {
+      // A voice item must sit in a voice slot — the legacy single "voice" or one
+      // of voice-1…voice-5. Nothing else is a recording.
+      if (!wantsPhoto && !isAnyVoiceSlot(slot)) {
         return { ok: false, error: "Evidence does not match the expected slot." };
       }
       if (seenSlots.has(slot)) {
@@ -442,7 +456,10 @@ export function verifyMobileTimeline(submissionId: string, items: unknown): Time
       } else {
         voices += 1;
         if (voices > MOBILE_MAX_VOICE_ITEMS) {
-          return { ok: false, error: "A report may carry only one voice recording." };
+          return {
+            ok: false,
+            error: `A report may carry at most ${MOBILE_MAX_VOICE_ITEMS} voice recordings.`,
+          };
         }
         verified.push({ id, kind: "voice", slot, asset: asset! });
       }
@@ -523,6 +540,7 @@ export function buildMobileTimelineExtraData(
   const attachments: StoredAttachmentEntry[] = [];
   const timeline: StoredTimelineEntry[] = [];
   let photoNumber = 0;
+  let voiceNumber = 0;
 
   for (const item of items) {
     if (item.kind === "text") {
@@ -558,11 +576,15 @@ export function buildMobileTimelineExtraData(
       continue;
     }
 
+    // Numbered, because a report may now carry up to five. The number is the
+    // recording's position among the recordings, which is exactly what the
+    // Mobile Evidence section labels it as.
+    voiceNumber += 1;
     attachments.push({
       type: "audio",
       url: item.asset.secureUrl,
       public_id: item.asset.publicId,
-      original_name: "voice-recording",
+      original_name: `voice-recording-${voiceNumber}`,
       mime_type: item.asset.format ? `audio/${item.asset.format}` : "",
       source: "voice_recording",
       bytes: item.asset.bytes,

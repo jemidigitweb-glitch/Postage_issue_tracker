@@ -5,8 +5,10 @@ import assert from "node:assert/strict";
 
 import {
   addPhoto,
+  addVoice,
   adjacentPhotoId,
   canAddPhoto,
+  canAddVoice,
   draftSummary,
   draftToRegistrationItems,
   emptyIssueDraft,
@@ -16,12 +18,15 @@ import {
   mediaFailed,
   mediaUploaded,
   nextPhotoSlot,
+  nextVoiceSlot,
   photoCount,
   photoIndex,
   removePhoto,
+  removeVoice,
   setDraftText,
   setPhotoCaption,
-  setVoice,
+  voiceCount,
+  voiceIndex,
   type IssueDraft,
 } from "../lib/mobile/mobileDraft";
 import {
@@ -29,7 +34,7 @@ import {
   verifyMobileTimeline,
   type SubmittedAsset,
 } from "../lib/mobile/mobileRegistration";
-import { buildMobilePublicId } from "../lib/mobile/mobileAccess";
+import { MOBILE_MAX_VOICES, buildMobilePublicId } from "../lib/mobile/mobileAccess";
 
 // Warehouse Mobile Lite — STAGE 2: the Issue Draft, driven as STATE.
 //
@@ -58,10 +63,12 @@ function photoAsset(slot: string): SubmittedAsset {
   };
 }
 
-function voiceAsset(): SubmittedAsset {
+/** One recording's asset. Per-SLOT, because a report may carry several and no
+ *  two of them may share a Cloudinary path. */
+function voiceAsset(slot: `voice-${number}` = "voice-1"): SubmittedAsset {
   return {
-    publicId: buildMobilePublicId(SUBMISSION, "voice", ATTEMPT),
-    secureUrl: "https://res.cloudinary.com/demo/a.webm",
+    publicId: buildMobilePublicId(SUBMISSION, slot, ATTEMPT),
+    secureUrl: `https://res.cloudinary.com/demo/${slot}.webm`,
     bytes: 400_000,
     format: "webm",
     resourceType: "video",
@@ -79,6 +86,9 @@ class Composer {
   draft: IssueDraft = emptyIssueDraft();
   screen: Screen = "main";
   reviewPhotoId: string | null = null;
+  reviewVoiceId: string | null = null;
+  /** Slots spent in THIS submission — the composer's usedSlotsRef. */
+  usedSlots = new Set<string>();
   confirming = false;
   confirmOrigin: Screen = "main";
   registerCalls = 0;
@@ -159,18 +169,55 @@ class Composer {
     this.draft = setPhotoCaption(this.draft, this.reviewPhotoId, text);
   }
 
-  /** Mic or + → Voice: the recording is STAGED and its review opens. */
-  recordVoice() {
-    const id = `voice-item-${crypto.randomUUID().slice(0, 8)}`;
-    this.draft = setVoice(this.draft, { id, attemptId: crypto.randomUUID() });
+  /**
+   * Mic or + → Voice, when the composer would actually allow it.
+   *
+   * Returns null when it would refuse — at the five-recording cap the
+   * microphone is not offered at all, and acceptRecording() stages nothing even
+   * if it were reached.
+   */
+  tryRecordVoice(): string | null {
+    if (!canAddVoice(this.draft)) return null;
+    // usedSlots mirrors the composer's usedSlotsRef: a slot spent by a removed
+    // recording is never handed out again inside one submission.
+    const slot = nextVoiceSlot(this.draft, [...this.usedSlots]);
+    if (!slot) return null;
+    this.usedSlots.add(slot);
+    const id = `voice-item-${voiceCount(this.draft) + 1}`;
+    this.draft = addVoice(this.draft, { id, slot, attemptId: crypto.randomUUID() });
+    this.reviewVoiceId = id;
     this.screen = "voice";
     return id;
+  }
+
+  /** The recording is APPENDED and its own review opens. Fails the test if the
+   *  composer would have refused — use tryRecordVoice() to assert the cap. */
+  recordVoice(): string {
+    const id = this.tryRecordVoice();
+    assert.ok(id, "the composer refused another recording");
+    return id;
+  }
+
+  /** Tapping one unsent recording in the tray to open its review. */
+  openVoice(id: string) {
+    this.reviewVoiceId = id;
+    this.screen = "voice";
+  }
+
+  /** The × beside ONE unsent recording. */
+  removeVoice(id: string) {
+    this.draft = removeVoice(this.draft, id);
+    if (this.reviewVoiceId === id) {
+      this.reviewVoiceId = null;
+      this.screen = "main";
+    }
   }
 
   /** "Back to issue" from a review screen. The media stays staged. */
   backToIssue() {
     this.screen = "main";
     this.reviewPhotoId = null;
+    this.reviewVoiceId = null;
   }
 
   uploadDone(id: string, asset: SubmittedAsset) {
@@ -241,6 +288,8 @@ class Composer {
     this.submissionIds.push(this.submissionId);
     this.draft = emptyIssueDraft();
     this.reviewPhotoId = null;
+    this.reviewVoiceId = null;
+    this.usedSlots = new Set();
     this.failure = null;
     this.screen = "main";
   }
@@ -267,9 +316,11 @@ function withPhoto(c: Composer, caption = "") {
   return id;
 }
 
+/** Records ONE more voice note, waits for its upload, and returns to the draft.
+ *  Call it repeatedly to build Voice 1, Voice 2, Voice 3 … */
 function withVoice(c: Composer) {
   const id = c.recordVoice();
-  c.uploadDone(id, voiceAsset());
+  c.uploadDone(id, voiceAsset(`voice-${voiceCount(c.draft)}`));
   c.backToIssue();
   return id;
 }
@@ -428,7 +479,7 @@ describe("Issue Draft — the note survives every media flow", () => {
     assert.equal(photoCount(c.draft), 1, "the photo survived the recording");
 
     withPhoto(c, "second");
-    assert.equal(c.draft.voice !== null, true, "the recording survived the next photo");
+    assert.equal(voiceCount(c.draft) > 0, true, "the recording survived the next photo");
     assert.equal(photoCount(c.draft), 2);
     assert.equal(c.draft.text, NOTE, "and the note survived all of it");
 
@@ -550,7 +601,7 @@ describe("Issue Draft — the confirmation is the only door to registration", ()
     assert.equal(c.draft.text, NOTE, "the note is kept");
     assert.equal(photoCount(c.draft), 1, "the photo is kept");
     assert.equal(c.draft.photos[0].caption, "Outer carton torn", "the caption is kept");
-    assert.equal(c.draft.voice !== null, true, "the recording is kept");
+    assert.equal(voiceCount(c.draft) > 0, true, "the recording is kept");
 
     c.mainSend();
     assert.equal(c.confirming, true, "no confirmation bypass on retry");
@@ -608,7 +659,7 @@ describe("UAT bug — an unsent draft must never look sent", () => {
     // What must never appear is the ACTIVE draft, so its readings are removed
     // before checking.
     const unsentOnly = timeline.split("issue.draft.").join("SNAPSHOT_");
-    for (const draftPiece of ["draft.text", "draft.photos.map", "draft.voice &&", "draft.voice.previewUrl"]) {
+    for (const draftPiece of ["draft.text", "draft.photos.map", "draft.voices.map"]) {
       assert.equal(
         unsentOnly.includes(draftPiece),
         false,
@@ -623,7 +674,8 @@ describe("UAT bug — an unsent draft must never look sent", () => {
 
   it("the draft tray is where photos and voice live, above the composer", () => {
     assert.ok(tray.includes("draft.photos.map"), "thumbnails belong to the tray");
-    assert.ok(tray.includes("draft.voice"), "the recording belongs to the tray");
+    assert.ok(tray.includes("draft.voices.map"), "every recording belongs to the tray");
+    assert.ok(tray.includes('aria-label={`Remove voice note ${index + 1}`}'), "each has its own ×");
     assert.ok(tray.includes("Not sent yet"), "and it says so");
     assert.ok(tray.includes("overflow-x-auto"), "thumbnails scroll rather than overflow the page");
     assert.ok(tray.includes("h-16 w-16"), "compact thumbnails, not full bubbles");
@@ -827,13 +879,13 @@ describe("Gallery goes straight to the draft; the camera still reviews", () => {
       ["uploaded", "failed", "uploaded"],
       "only the failed one is marked"
     );
-    assert.equal(c.draft.voice?.status, "uploaded", "the recording is unaffected");
+    assert.equal(c.draft.voices[0]?.status, "uploaded", "the recording is unaffected");
     assert.equal(c.registerCalls, 0);
     assert.equal(isDraftSendable(c.draft), false, "and Send waits for it");
 
     // A retry is offered, and clears the block.
     assert.ok(composerSource.includes("reviewPhoto.status === \"failed\""));
-    assert.ok(composerSource.includes("draft.voice.status === \"failed\""));
+    assert.ok(composerSource.includes("reviewVoice.status === \"failed\""));
     c.uploadDone(photos[1], photoAsset("photo-2"));
     assert.equal(isDraftSendable(c.draft), true);
   });
@@ -890,7 +942,7 @@ describe("UAT bug — after a successful send, the draft is cleared and shown as
     // The bug: the old text used to stay in the input.
     assert.equal(c.draft.text, "", "the composer input is empty again");
     assert.equal(photoCount(c.draft), 0);
-    assert.equal(c.draft.voice, null);
+    assert.equal(voiceCount(c.draft), 0);
     assert.equal(isDraftValid(c.draft), false, "a fresh, empty draft");
 
     // And what was submitted is preserved for display.
@@ -925,12 +977,12 @@ describe("UAT bug — after a successful send, the draft is cleared and shown as
     c.confirm();
 
     assert.deepEqual(
-      { text: c.draft.text, photos: photoCount(c.draft), voice: c.draft.voice },
-      { text: "", photos: 0, voice: null },
+      { text: c.draft.text, photos: photoCount(c.draft), voices: voiceCount(c.draft) },
+      { text: "", photos: 0, voices: 0 },
       "the active draft is completely empty"
     );
     assert.equal(c.submittedIssues.at(-1)!.draft.photos.length, 2);
-    assert.equal(c.submittedIssues.at(-1)!.draft.voice !== null, true);
+    assert.equal(c.submittedIssues.at(-1)!.draft.voices.length, 1);
     assert.equal(c.registerCalls, 1);
   });
 
@@ -948,7 +1000,7 @@ describe("UAT bug — after a successful send, the draft is cleared and shown as
     assert.equal(c.draft.text, "Testing testing", "the note is kept");
     assert.equal(photoCount(c.draft), 1, "the photo is kept");
     assert.equal(c.draft.photos[0].caption, "cap", "the caption is kept");
-    assert.equal(c.draft.voice !== null, true, "the recording is kept");
+    assert.equal(voiceCount(c.draft) > 0, true, "the recording is kept");
     assert.equal(isDraftSendable(c.draft), true, "and it can be sent again");
   });
 
@@ -1042,7 +1094,7 @@ describe("UAT bug — after a successful send, the draft is cleared and shown as
     assert.equal(body.includes("setSubmittedIssues"), false, "the history is never cleared");
 
     const fresh = emptyIssueDraft();
-    assert.deepEqual(fresh, { text: "", photos: [], voice: null });
+    assert.deepEqual(fresh, { text: "", photos: [], voices: [] });
     assert.equal(isDraftValid(fresh), false);
   });
 
@@ -1147,26 +1199,38 @@ describe("Composer controls — typing never hides Camera or Mic", () => {
     assert.equal(c.draft.text, "Box damaged", "and the note is untouched throughout");
   });
 
-  it("6: the one-voice rule is unchanged — a second recording replaces the first", () => {
+  it("6: a second recording JOINS the first — it no longer replaces it", () => {
     const c = new Composer();
     c.type("Box damaged");
     const first = c.recordVoice();
-    c.uploadDone(first, voiceAsset());
-    const firstAsset = c.draft.voice!.asset;
+    c.uploadDone(first, voiceAsset("voice-1"));
+    const firstAsset = c.draft.voices[0].asset;
 
+    // Back to the composer, then record again — the worker's real sequence.
+    c.backToIssue();
     const second = c.recordVoice();
-    c.uploadDone(second, voiceAsset());
+    c.uploadDone(second, voiceAsset("voice-2"));
 
-    assert.notEqual(c.draft.voice, null);
-    assert.equal(c.draft.voice!.id, second, "the newest recording is the draft's voice");
-    assert.deepEqual(c.draft.voice!.superseded, [firstAsset], "the first is superseded, not lost");
-    assert.equal(draftSummary(c.draft).hasVoice, true);
+    assert.equal(voiceCount(c.draft), 2, "both recordings are in the Issue");
+    assert.deepEqual(
+      c.draft.voices.map((voice) => voice.id),
+      [first, second],
+      "and in the order they were made"
+    );
+    assert.deepEqual(c.draft.voices[0].asset, firstAsset, "the first is untouched");
+    assert.deepEqual(
+      c.draft.voices.flatMap((voice) => voice.superseded),
+      [],
+      "nothing was superseded — the second did not replace the first"
+    );
+    assert.equal(draftSummary(c.draft).voices, 2);
     assert.equal(c.draft.text, "Box damaged");
 
-    // And exactly one voice item reaches registration.
+    // And BOTH voice items reach registration, on one Issue.
     c.send("main");
     c.confirm();
-    assert.equal(c.kinds().filter((kind) => kind === "voice").length, 1);
+    assert.equal(c.kinds().filter((kind) => kind === "voice").length, 2);
+    assert.equal(c.registerCalls, 1, "one Issue, not two");
   });
 
   it("all five controls plus the input fit one row", () => {
@@ -1224,7 +1288,7 @@ describe("Continuous chat — one Issue after another, no reload", () => {
 
     assert.equal(c.draft.text, "", "the composer is empty");
     assert.equal(photoCount(c.draft), 0);
-    assert.equal(c.draft.voice, null);
+    assert.equal(voiceCount(c.draft), 0);
     assert.notEqual(c.submissionId, before, "a NEW submission id, automatically");
     assert.equal(c.submissionIds.length, 2);
   });
@@ -1464,7 +1528,7 @@ describe("Photo review — Previous / Next between staged photos", () => {
     assert.equal(c.registerCalls, 0, "navigation must not register");
     assert.equal(c.confirming, false, "and must not open the confirmation");
     assert.equal(c.draft.text, "test");
-    assert.equal(c.draft.voice !== null, true);
+    assert.equal(voiceCount(c.draft) > 0, true);
 
     // The handler only picks a different id to look at.
     const handler = composerSource.slice(
@@ -1525,7 +1589,7 @@ describe("Unsent photo strip — thumbnails, ×, and adding more", () => {
 
     assert.equal(c.draft.text, "test", "the note is untouched");
     assert.deepEqual(c.draft.photos.map((photo) => photo.id), [ids[0], ids[2]], "only #2 is gone");
-    assert.equal(c.draft.voice !== null, true, "the recording is untouched");
+    assert.equal(voiceCount(c.draft) > 0, true, "the recording is untouched");
     assert.equal(c.registerCalls, 0, "removal registers nothing");
     assert.equal(c.submissionId, c.submissionIdAtStart, "the submission id is unchanged");
   });
@@ -1570,7 +1634,7 @@ describe("Unsent photo strip — thumbnails, ×, and adding more", () => {
     c.uploadDone(voice, voiceAsset());
     c.backToIssue();
 
-    assert.deepEqual(draftSummary(c.draft), { hasText: true, photos: 2, hasVoice: true });
+    assert.deepEqual(draftSummary(c.draft), { hasText: true, photos: 2, voices: 1 });
     c.send("main");
     assert.equal(c.confirming, true);
     assert.equal(c.registerCalls, 0);
@@ -1593,7 +1657,7 @@ describe("Unsent photo strip — thumbnails, ×, and adding more", () => {
     assert.equal(c.registeredId, null, "still unsent");
     assert.equal(c.draft.text, "test");
     assert.equal(photoCount(c.draft), 2);
-    assert.equal(c.draft.voice !== null, true);
+    assert.equal(voiceCount(c.draft) > 0, true);
     assert.equal(canAddPhoto(c.draft), true, "more photos can still be added");
 
     // And the worker can correct the draft, then send again.
@@ -1720,7 +1784,7 @@ describe("Unified send — the screen never decides the payload", () => {
 
     assert.equal(c.screen, "voice");
     assert.equal(c.draft.text, spoken, "the note survives the recording");
-    assert.equal(c.draft.voice !== null, true);
+    assert.equal(voiceCount(c.draft) > 0, true);
 
     c.uploadDone(id, voiceAsset());
     c.send("voice");
@@ -1753,7 +1817,7 @@ describe("Unified send — the screen never decides the payload", () => {
     const voice = c.recordVoice();
     c.uploadDone(voice, voiceAsset());
 
-    assert.deepEqual(draftSummary(c.draft), { hasText: true, photos: 1, hasVoice: true });
+    assert.deepEqual(draftSummary(c.draft), { hasText: true, photos: 1, voices: 1 });
 
     c.send("voice");
     assert.equal(c.confirming, true);
@@ -1772,7 +1836,7 @@ describe("Unified send — the screen never decides the payload", () => {
     c.uploadDone(second, photoAsset("photo-2"));
 
     assert.equal(photoCount(c.draft), 2, "the first photo survived Back and a second selection");
-    assert.deepEqual(draftSummary(c.draft), { hasText: false, photos: 2, hasVoice: false });
+    assert.deepEqual(draftSummary(c.draft), { hasText: false, photos: 2, voices: 0 });
 
     c.send("photo");
     c.confirm();
@@ -1836,9 +1900,9 @@ describe("Unified send — the screen never decides the payload", () => {
 
 describe("Issue Draft — the confirmation summary claims only what exists", () => {
   it("reports text, photo count and voice exactly", () => {
-    const cases: Array<[string, (c: Composer) => void, { hasText: boolean; photos: number; hasVoice: boolean }]> = [
-      ["text only", (c) => c.type(NOTE), { hasText: true, photos: 0, hasVoice: false }],
-      ["photo only", (c) => void withPhoto(c), { hasText: false, photos: 1, hasVoice: false }],
+    const cases: Array<[string, (c: Composer) => void, { hasText: boolean; photos: number; voices: number }]> = [
+      ["text only", (c) => c.type(NOTE), { hasText: true, photos: 0, voices: 0 }],
+      ["photo only", (c) => void withPhoto(c), { hasText: false, photos: 1, voices: 0 }],
       [
         "three photos",
         (c) => {
@@ -1846,9 +1910,9 @@ describe("Issue Draft — the confirmation summary claims only what exists", () 
           withPhoto(c);
           withPhoto(c);
         },
-        { hasText: false, photos: 3, hasVoice: false },
+        { hasText: false, photos: 3, voices: 0 },
       ],
-      ["voice only", (c) => void withVoice(c), { hasText: false, photos: 0, hasVoice: true }],
+      ["voice only", (c) => void withVoice(c), { hasText: false, photos: 0, voices: 1 }],
       [
         "photo + voice",
         (c) => {
@@ -1856,7 +1920,7 @@ describe("Issue Draft — the confirmation summary claims only what exists", () 
           withPhoto(c);
           withVoice(c);
         },
-        { hasText: false, photos: 2, hasVoice: true },
+        { hasText: false, photos: 2, voices: 1 },
       ],
       [
         "text + photos + voice",
@@ -1866,7 +1930,7 @@ describe("Issue Draft — the confirmation summary claims only what exists", () 
           withPhoto(c);
           withVoice(c);
         },
-        { hasText: true, photos: 2, hasVoice: true },
+        { hasText: true, photos: 2, voices: 1 },
       ],
     ];
 
@@ -1881,6 +1945,274 @@ describe("Issue Draft — the confirmation summary claims only what exists", () 
     const c = new Composer();
     c.type("   ");
     withPhoto(c);
-    assert.deepEqual(draftSummary(c.draft), { hasText: false, photos: 1, hasVoice: false });
+    assert.deepEqual(draftSummary(c.draft), { hasText: false, photos: 1, voices: 0 });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// SEVERAL RECORDINGS, ONE ISSUE
+// ---------------------------------------------------------------------------
+//
+// SUPERSEDED: a report carried exactly one recording, and a second one replaced
+// the first. These tests drive the real draft functions the composer calls and
+// assert what the worker ends up with. NOTHING here writes: no Issue, no
+// database, no Cloudinary asset, no media device.
+
+describe("Multiple voice notes — record, return, record again", () => {
+  const composerSource = readFileSync(join(process.cwd(), "app/mobile/MobileComposer.tsx"), "utf8");
+  const code = composerSource
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return (
+        !trimmed.startsWith("//") &&
+        !trimmed.startsWith("*") &&
+        !trimmed.startsWith("/*") &&
+        !trimmed.startsWith("{/*")
+      );
+    })
+    .join("\n");
+
+  it("one recording still works exactly as before", () => {
+    const c = new Composer();
+    withVoice(c);
+    assert.equal(voiceCount(c.draft), 1);
+    assert.equal(isDraftSendable(c.draft), true);
+    c.send("main");
+    c.confirm();
+    assert.deepEqual(c.kinds(), ["voice"]);
+    assert.equal(c.registerCalls, 1);
+  });
+
+  it("the worker records, RETURNS to the composer, and records again", () => {
+    const c = new Composer();
+    const first = withVoice(c);
+    assert.equal(c.screen, "main", "Back to issue landed on the composer");
+    const second = withVoice(c);
+    const third = withVoice(c);
+
+    assert.equal(voiceCount(c.draft), 3);
+    assert.deepEqual(c.draft.voices.map((voice) => voice.id), [first, second, third]);
+    assert.deepEqual(
+      c.draft.voices.map((voice) => voice.slot),
+      ["voice-1", "voice-2", "voice-3"],
+      "each takes its own slot — no two share a Cloudinary path"
+    );
+  });
+
+  it("five are accepted, and the microphone closes at the cap", () => {
+    const c = new Composer();
+    for (let index = 0; index < MOBILE_MAX_VOICES; index++) {
+      assert.equal(canAddVoice(c.draft), true, `the mic is still offered before #${index + 1}`);
+      withVoice(c);
+    }
+    assert.equal(voiceCount(c.draft), 5);
+    assert.equal(canAddVoice(c.draft), false, "at five, the mic is gone");
+    // THE CLIENT refuses a sixth: nothing is staged and nothing is uploaded.
+    assert.equal(c.tryRecordVoice(), null, "the sixth is refused client-side");
+    assert.equal(voiceCount(c.draft), 5, "and the draft is unchanged");
+  });
+
+  it("the microphone stays available while under five", () => {
+    const c = new Composer();
+    for (let recorded = 0; recorded < 4; recorded++) {
+      withVoice(c);
+      assert.equal(canAddVoice(c.draft), true, `still room after ${recorded + 1}`);
+    }
+  });
+
+  it("1 text + 2 photos + 3 voices registers as ONE Issue, in order", () => {
+    const c = new Composer();
+    c.type("Pallet crushed");
+    const photos = c.selectPhotos(2);
+    photos.forEach((id, index) => c.uploadDone(id, photoAsset(`photo-${index + 1}`)));
+    withVoice(c);
+    withVoice(c);
+    withVoice(c);
+
+    assert.deepEqual(draftSummary(c.draft), { hasText: true, photos: 2, voices: 3 });
+    c.send("main");
+    c.confirm();
+
+    assert.equal(c.registerCalls, 1, "ONE Issue, not six");
+    assert.deepEqual(c.kinds(), ["text", "image", "image", "voice", "voice", "voice"]);
+    assert.deepEqual(
+      (c.lastPayload ?? []).flatMap((item) => (item.kind === "voice" ? [item.slot] : [])),
+      ["voice-1", "voice-2", "voice-3"],
+      "voice order preserved"
+    );
+  });
+
+  it("the description invents no per-recording lines", () => {
+    const c = new Composer();
+    c.type("Pallet crushed");
+    withVoice(c);
+    withVoice(c);
+    c.send("main");
+    c.confirm();
+    assert.equal(c.description(), "Pallet crushed", "the worker's own words, and nothing added");
+    for (const invented of ["Voice attached", "Voice 1", "Voice 2", "Voice note"]) {
+      assert.equal(c.description().includes(invented), false, `must not add "${invented}"`);
+    }
+  });
+
+  it("a media-only report still falls back to the existing description", () => {
+    const c = new Composer();
+    withVoice(c);
+    withVoice(c);
+    c.send("main");
+    c.confirm();
+    assert.equal(c.description(), "Warehouse mobile evidence report.");
+  });
+
+  it("each recording uploads independently, and one failure is isolated", () => {
+    const c = new Composer();
+    const first = c.recordVoice();
+    c.backToIssue();
+    const second = c.recordVoice();
+    c.backToIssue();
+    const third = c.recordVoice();
+    c.backToIssue();
+
+    // Only the second lands; the other two are still in flight.
+    c.uploadDone(second, voiceAsset("voice-2"));
+    assert.equal(c.draft.voices[0].status, "uploading");
+    assert.equal(c.draft.voices[1].status, "uploaded");
+    assert.equal(c.draft.voices[2].status, "uploading");
+    assert.equal(isDraftSendable(c.draft), false, "Send waits for all of them");
+
+    // One fails. The others are untouched, and so is everything else.
+    c.uploadFailed(first, "network");
+    assert.equal(c.draft.voices[0].status, "failed");
+    assert.equal(c.draft.voices[1].status, "uploaded", "the landed one is unaffected");
+    assert.equal(c.draft.voices[2].status, "uploading", "the in-flight one is unaffected");
+
+    c.uploadDone(first, voiceAsset("voice-1"));
+    c.uploadDone(third, voiceAsset("voice-3"));
+    assert.equal(isDraftSendable(c.draft), true);
+    // Each carries its OWN asset — no recording is overwritten by another.
+    assert.deepEqual(
+      c.draft.voices.map((voice) => voice.asset!.publicId),
+      (["voice-1", "voice-2", "voice-3"] as const).map((slot) => voiceAsset(slot).publicId)
+    );
+  });
+
+  it("removing ONE unsent recording touches nothing else", () => {
+    const c = new Composer();
+    c.type("Pallet crushed");
+    const photo = withPhoto(c, "Front");
+    const before = c.submissionId;
+    const first = withVoice(c);
+    const second = withVoice(c);
+    const third = withVoice(c);
+
+    c.removeVoice(second);
+
+    assert.equal(voiceCount(c.draft), 2);
+    assert.deepEqual(c.draft.voices.map((voice) => voice.id), [first, third], "only #2 is gone");
+    assert.equal(c.draft.text, "Pallet crushed", "the note is untouched");
+    assert.equal(photoCount(c.draft), 1, "the photo is untouched");
+    assert.equal(c.draft.photos[0].id, photo);
+    assert.equal(c.draft.photos[0].caption, "Front", "the caption is untouched");
+    assert.equal(c.submissionId, before, "the submission id is unchanged");
+    assert.equal(c.registerCalls, 0, "removal registers nothing");
+
+    // And what remains is what registers.
+    c.send("main");
+    c.confirm();
+    assert.deepEqual(c.kinds(), ["text", "image", "voice", "voice"]);
+  });
+
+  it("removing every recording leaves a valid text-and-photo Issue", () => {
+    const c = new Composer();
+    c.type("Pallet crushed");
+    const ids = [withVoice(c), withVoice(c)];
+    ids.forEach((id) => c.removeVoice(id));
+    assert.equal(voiceCount(c.draft), 0);
+    assert.equal(isDraftValid(c.draft), true);
+    assert.equal(isDraftSendable(c.draft), true);
+  });
+
+  it("removing a recording frees the microphone again, with a FRESH slot", () => {
+    const c = new Composer();
+    const ids = Array.from({ length: MOBILE_MAX_VOICES }, () => withVoice(c));
+    assert.equal(canAddVoice(c.draft), false);
+    c.removeVoice(ids[0]);
+    assert.equal(canAddVoice(c.draft), true, "under the cap, the mic returns");
+    const replacement = c.recordVoice();
+    assert.equal(c.draft.voices.at(-1)!.id, replacement);
+    assert.equal(
+      c.draft.voices.some((voice) => voice.slot === "voice-1"),
+      false,
+      "voice-1 is spent for this submission and is never reused"
+    );
+  });
+
+  it("opening one recording's review shows THAT recording", () => {
+    const c = new Composer();
+    const first = withVoice(c);
+    const second = withVoice(c);
+    c.openVoice(first);
+    assert.equal(c.screen, "voice");
+    assert.equal(voiceIndex(c.draft, c.reviewVoiceId), 0, "Voice 1");
+    c.openVoice(second);
+    assert.equal(voiceIndex(c.draft, c.reviewVoiceId), 1, "Voice 2");
+    assert.equal(voiceCount(c.draft), 2, "looking at one changes nothing");
+  });
+
+  it("the next Issue starts with no recordings", () => {
+    const c = new Composer();
+    withVoice(c);
+    withVoice(c);
+    c.send("main");
+    c.confirm();
+    assert.equal(voiceCount(c.draft), 0);
+    assert.equal(canAddVoice(c.draft), true);
+    assert.equal(c.submittedIssues.at(-1)!.draft.voices.length, 2, "both stay in the history");
+  });
+
+  it("the composer hides the microphone at the cap rather than disabling it", () => {
+    assert.ok(code.includes("{canAddVoice(draft) && ("), "the mic is conditional on room");
+    assert.ok(code.includes("Maximum {MOBILE_MAX_VOICES} voice notes."));
+    // Two entry points, both behind the same gate.
+    assert.equal((code.match(/onClick=\{openVoice\}/g) ?? []).length, 2);
+  });
+
+  it("each unsent recording gets its own player, × and review", () => {
+    assert.ok(code.includes("draft.voices.map((voice, index) => ("));
+    assert.ok(code.includes("aria-label={`Remove voice note ${index + 1}`}"));
+    assert.ok(code.includes("aria-label={`Open voice note ${index + 1}`}"));
+    assert.ok(code.includes("aria-label={`Play back voice note ${index + 1}`}"));
+    assert.ok(code.includes("dropVoice(voice.id)"));
+    assert.ok(code.includes("setReviewVoiceId(voice.id)"));
+  });
+
+  it("dropping one recording writes nothing and clears no other state", () => {
+    const drop = code.slice(
+      code.indexOf("function dropVoice("),
+      code.indexOf("function stopRecording()")
+    );
+    assert.ok(drop.includes("removeVoice(current, id)"));
+    for (const forbidden of [
+      "registerMobileIssue",
+      "setSubmissionId",
+      "emptyIssueDraft",
+      "setDraftText",
+      "removePhoto",
+    ]) {
+      assert.equal(drop.includes(forbidden), false, `dropping a recording must not call ${forbidden}`);
+    }
+  });
+
+  it("a recording no longer replaces another — nothing is superseded by adding one", () => {
+    const c = new Composer();
+    withVoice(c);
+    withVoice(c);
+    withVoice(c);
+    assert.deepEqual(
+      c.draft.voices.flatMap((voice) => voice.superseded),
+      [],
+      "adding a recording never supersedes an earlier one"
+    );
   });
 });
