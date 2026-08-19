@@ -14,6 +14,7 @@ import {
 import {
   MOBILE_SOURCE_KEY as WRITER_SOURCE_KEY,
   MOBILE_SOURCE_VALUE as WRITER_SOURCE_VALUE,
+  MOBILE_SUBMISSION_KEY,
   MOBILE_TIMELINE_KEY as WRITER_TIMELINE_KEY,
   buildMobileTimelineExtraData,
   type VerifiedTimelineItem,
@@ -403,6 +404,17 @@ describe("Mobile Evidence — the Issue detail page wiring", () => {
     assert.equal(assignee.showAssignedTo, true);
     assert.equal(assignee.showFixAndActionRequired, true);
     assert.equal(assignee.showAiAssistant, true);
+  });
+
+  it("the internal submission id is not printed, but is still stored", () => {
+    // Display only. The UUID stays in extra_data — it is what makes one
+    // REGISTER press create exactly one Issue — it is just not shown.
+    assert.ok(detailSource.includes('"mobilesubmissionid"'), "filtered from display");
+    const stored = storedExtraData([textItem("test")]);
+    assert.equal(stored[MOBILE_SUBMISSION_KEY], SUBMISSION, "still written, unchanged");
+    // Mobile Source is deliberately NOT hidden — where an Issue came from is
+    // worth showing; an internal id is not.
+    assert.equal(detailSource.includes('"mobilesource"'), false);
   });
 
   it("the raw timeline no longer reaches the generic JSON dump", () => {

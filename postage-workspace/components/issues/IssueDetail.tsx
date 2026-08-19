@@ -111,12 +111,20 @@ function normalizeKey(key: string): string {
 // Intake/tracking metadata from the daily-issue ingestion pipeline — not
 // useful on the operational issue detail page, so filtered from display
 // only. The underlying extra_data values are untouched.
+//
+// `mobilesubmissionid` joins them: extra_data.mobileSubmissionId is the UUID
+// that makes a Mobile Lite registration idempotent (one REGISTER press = one
+// Issue). It is still WRITTEN, still read by the duplicate lookup in
+// lib/queries/issues.ts, and still exactly as stored — it simply means nothing
+// to a person reading the Issue, so it is no longer printed. Mobile Source
+// stays: "this came from Warehouse Mobile Lite" is a fact worth showing.
 const HIDDEN_META_KEYS = new Set([
   "sourceid",
   "sourcefile",
   "evidencefiles",
   "originalowner",
   "classification",
+  "mobilesubmissionid",
 ]);
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
