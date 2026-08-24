@@ -44,6 +44,7 @@ export type Permission =
   | "issue:analyse_any"
   | "issue:assign"
   | "issue:delete"
+  | "issue:edit"
   | "issue:approve_reopen"
   | "user:manage"
   | "tracker:view"
@@ -111,6 +112,7 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:change_status_any",
     "issue:assign",
     "issue:delete",
+    "issue:edit",
     "issue:approve_reopen",
     "issue:analyse_any",
     "user:manage",

@@ -6,8 +6,13 @@ import { issueScopeQueryArgs, type IssueAccessScope } from "../access/permission
 // Queries against issue_tracking.issues, joined to issue_tracking.issue_staff
 // for the staff name. Never a DELETE statement anywhere in this file —
 // "deletion" is soft (deleted_at/deleted_by columns, see
-// migration/004_soft_delete.sql); issue rows are never physically removed
-// and issue_id is never altered or renumbered.
+// migration/004_soft_delete.sql); issue rows are never physically removed.
+// An ACTIVE Issue's issue_id is never altered or renumbered. The one
+// exception lives entirely inside issue_tracking.next_issue_id() (database
+// function, see migration/017_issue_id_gap_reuse.sql): a soft-deleted Issue
+// with zero related rows anywhere may have its issue_id silently archived so
+// its released number can be handed to a brand-new Issue — nothing in this
+// file issues that rename directly.
 //
 // ── ACCESS SCOPE (Stage 3) ──────────────────────────────────────────────────
 // Every read in this file that can return an Issue takes an IssueAccessScope
@@ -161,6 +166,12 @@ const MAX_PAGE_SIZE = 100;
 // reject obviously-malformed input before it ever reaches a query — lets
 // the detail page distinguish "Invalid Issue ID" from "Issue not found"
 // instead of treating every non-match the same way.
+//
+// An ARCHIVED row (see migration/017_issue_id_gap_reuse.sql — a soft-deleted,
+// childless Issue whose number has been released back for reuse) instead
+// holds "<staff_code>-<digits>~released~<epoch_ms>", which this pattern
+// deliberately does NOT match — an archived row is never a valid lookup
+// target from the UI.
 const ISSUE_ID_PATTERN = /^[A-Za-z0-9]{1,10}-[0-9]+$/;
 
 export function isValidIssueId(issueId: string): boolean {
@@ -543,10 +554,17 @@ export class InvalidStaffError extends Error {}
  * migration/002_issue_management_system.sql, self-healing as of
  * migration/006_next_issue_id_lazy_counter.sql — a staff_code added after
  * migration 002's original seed no longer needs any manual counter setup).
- * next_issue_id() is atomic and concurrency-safe, and only ever hands out
- * new numbers, so historical issue_ids are never touched or renumbered. ID
- * allocation + INSERT run in one transaction so a failed insert can never
- * burn a number silently.
+ * next_issue_id() is atomic and concurrency-safe. ID allocation + INSERT run
+ * in one transaction so a failed insert can never burn a number silently.
+ *
+ * As of migration/017_issue_id_gap_reuse.sql, next_issue_id() may return a
+ * previously-issued number instead of a brand-new one: if a soft-deleted,
+ * childless Issue (no comments/status-history/assignment-history/
+ * discussion links — see the migration for the full eligibility rule) holds
+ * a released number for this staff_code, that number is reused here and the
+ * old row is archived (renamed) under the hood, never renumbered visibly and
+ * never hard-deleted. An ACTIVE Issue's issue_id, or any Issue that has ever
+ * had activity recorded against it, is never touched or renumbered.
  *
  * New issues always start at status 'RED' — not a caller-supplied value.
  */
@@ -672,4 +690,52 @@ export async function restoreIssues(issueIds: string[]): Promise<string[]> {
   } finally {
     client.release();
   }
+}
+
+export interface UpdateIssueDetailsInput {
+  title: string;
+  description: string;
+  /** issues.category — the "Domain" field. */
+  category: string;
+  priority: IssuePriority | null;
+  /** issues.resolution — the historical intake-time "Fix & Action Required".
+   *  NOT final_resolution, which the work-progress workflow owns exclusively. */
+  resolution: string | null;
+}
+
+/**
+ * Updates the normal, editable fields of exactly one Issue: Title,
+ * Description, Domain, Priority, and Fix & Action Required.
+ *
+ * Deliberately NEVER touches: issue_id, staff_code, status, created_date,
+ * created_at, extra_data, deleted_at/deleted_by, or any of the Stage 6
+ * work-progress columns (implementation_progress, implementation_done,
+ * final_resolution, process_started_at, completed_at, completed_date) —
+ * those belong to their own dedicated workflows (status-actions.ts,
+ * assign-actions.ts, delete-actions.ts) and this function has no path that
+ * writes to them.
+ *
+ * WHERE ... AND deleted_at IS NULL means a soft-deleted Issue can never be
+ * edited through this function — editing history that has already been
+ * removed from the active list is not a supported operation. Returns false
+ * (no row matched) rather than throwing, so the caller can distinguish
+ * "nothing to update" from a real database error.
+ */
+export async function updateIssueDetails(
+  issueId: string,
+  input: UpdateIssueDetailsInput
+): Promise<boolean> {
+  const result = await query(
+    `UPDATE issue_tracking.issues
+     SET issue_title = $2,
+         issue_description = $3,
+         category = $4,
+         priority = $5,
+         resolution = $6,
+         updated_at = now()
+     WHERE issue_id = $1 AND deleted_at IS NULL
+     RETURNING issue_id`,
+    [issueId, input.title, input.description, input.category, input.priority, input.resolution]
+  );
+  return (result.rowCount ?? 0) > 0;
 }
