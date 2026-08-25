@@ -103,7 +103,6 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:analyse_own_assigned",
   ]),
 
-  // RAISED BY STAFF. A shared warehouse login: reads every Issue, and raises
   // Issues as itself from both the web and Warehouse Mobile Lite.
   //
   // Exactly three permissions, and deliberately no fourth. `issue:create` is
