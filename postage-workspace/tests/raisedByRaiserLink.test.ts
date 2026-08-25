@@ -217,8 +217,12 @@ describe("the browser cannot choose who raised an Issue, for a raised_by user", 
   it("raised_by creates only as itself, on both channels", () => {
     assert.equal(roleHasPermission("raised_by", "issue:create"), true);
     assert.equal(roleHasPermission("raised_by", "user:manage"), false);
+    // issue:edit and issue:delete were added after this test was written —
+    // see tests/raisedByAccess.test.ts for the full, current permission set.
     assert.deepEqual([...permissionsForRole("raised_by")].sort(), [
       "issue:create",
+      "issue:delete",
+      "issue:edit",
       "issue:view_all",
       "mobile:submit",
     ]);

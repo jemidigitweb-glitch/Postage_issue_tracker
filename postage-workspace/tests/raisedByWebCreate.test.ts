@@ -35,9 +35,14 @@ const ROLE = "raised_by" as const;
 // ---------------------------------------------------------------------------
 
 describe("raised_by gains issue:create and nothing else", () => {
-  it("holds exactly three permissions", () => {
+  it("holds exactly five permissions", () => {
+    // Grew from three since this file was first written: issue:edit (correct
+    // its own submission) and issue:delete (remove one it should not have
+    // raised) were both added later — see tests/raisedByAccess.test.ts.
     assert.deepEqual([...permissionsForRole(ROLE)].sort(), [
       "issue:create",
+      "issue:delete",
+      "issue:edit",
       "issue:view_all",
       "mobile:submit",
     ]);
@@ -49,7 +54,7 @@ describe("raised_by gains issue:create and nothing else", () => {
     }
   });
 
-  it("still cannot assign, change status, investigate, resolve, reopen or delete", () => {
+  it("still cannot assign, change status, investigate, resolve or reopen", () => {
     for (const permission of [
       "issue:assign",
       "issue:change_status_any",
@@ -57,7 +62,6 @@ describe("raised_by gains issue:create and nothing else", () => {
       "issue:analyse_any",
       "issue:analyse_own_assigned",
       "issue:approve_reopen",
-      "issue:delete",
       "issue:comment",
     ] as Permission[]) {
       assert.equal(roleHasPermission(ROLE, permission), false, `must not hold ${permission}`);
@@ -79,8 +83,9 @@ describe("raised_by gains issue:create and nothing else", () => {
   it("gained issue:create WITHOUT inheriting anything else from admin", () => {
     const admin = permissionsForRole("admin");
     const mine = permissionsForRole(ROLE);
+    const held: Permission[] = ["issue:view_all", "issue:create", "issue:edit", "issue:delete", "mobile:submit"];
     for (const permission of admin) {
-      if (permission === "issue:view_all" || permission === "issue:create" || permission === "mobile:submit") {
+      if (held.includes(permission)) {
         continue;
       }
       assert.equal(mine.has(permission), false, `must not inherit ${permission}`);
@@ -143,11 +148,13 @@ describe("the New Issue button follows issue:create", () => {
     assert.equal(codeOnly(listPage).includes('"raised_by"'), false);
   });
 
-  it("Add Staff and Delete remain behind permissions raised_by lacks", () => {
+  it("Add Staff remains behind a permission raised_by lacks; Delete is now available to it", () => {
     assert.ok(listPage.includes('hasPermission(currentUser, "user:manage")'));
     assert.ok(listPage.includes('hasPermission(currentUser, "issue:delete")'));
     assert.equal(roleHasPermission(ROLE, "user:manage"), false);
-    assert.equal(roleHasPermission(ROLE, "issue:delete"), false);
+    // SUPERSEDED: issue:delete was later granted to this role for the same
+    // reason issue:edit was — it already sees and can correct every Issue.
+    assert.equal(roleHasPermission(ROLE, "issue:delete"), true);
   });
 });
 
@@ -369,7 +376,7 @@ describe("Super Admin and Assignee are unchanged", () => {
     ] as Permission[]) {
       assert.equal(admin.has(permission), true, `admin must keep ${permission}`);
     }
-    assert.equal(admin.size, 20);
+    assert.equal(admin.size, 21);
     // isIssuesOnlyRole is false for admin, so they take the on-behalf branch.
     assert.equal(isDashboardPathAllowedForRole("admin", "/dashboard/tracker"), true);
   });

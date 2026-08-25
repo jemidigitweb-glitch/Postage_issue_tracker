@@ -53,11 +53,13 @@ export default function IssueTable({
    *  management only. The Assign control is hidden, not just disabled, for
    *  everyone else; the Server Action enforces this independently either way. */
   canAssign: boolean;
-  /** From issue:delete — Super Admin only. Same rule: the Server Action
-   *  (delete-actions.ts) is the guard; hiding the button is defense in depth. */
+  /** From issue:delete — Super Admin and Raised-by-Staff. Same rule: the
+   *  Server Action (delete-actions.ts) is the guard; hiding the button is
+   *  defense in depth. */
   canDelete: boolean;
-  /** From issue:edit — Super Admin only. Same rule: updateIssueDetailsAction
-   *  (edit-actions.ts) is the guard; hiding the Edit link is defense in depth. */
+  /** From issue:edit — Super Admin and Raised-by-Staff. Same rule:
+   *  updateIssueDetailsAction (edit-actions.ts) is the guard; hiding the
+   *  Edit link is defense in depth. */
   canEdit: boolean;
   /** Current sort key/direction from the URL, for header indicators. */
   sort?: string;

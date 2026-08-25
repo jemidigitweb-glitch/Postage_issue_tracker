@@ -253,8 +253,10 @@ describe("Mobile Lite requires a signed-in submitter (Raised-by-Staff)", () => {
   });
 
   it("mobile:submit is the ONLY thing added to the Super Admin set", () => {
-    // Nineteen before this feature; twenty now, and the twentieth is named.
-    assert.equal(permissionsForRole("admin").size, 20);
+    // Twenty before this feature; twenty-one now, and the twenty-first is
+    // named. (issue:edit was added separately, after this test was written —
+    // the count below already accounts for it.)
+    assert.equal(permissionsForRole("admin").size, 21);
     assert.equal(permissionsForRole("admin").has("mobile:submit"), true);
   });
 });

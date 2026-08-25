@@ -43,11 +43,20 @@ import {
 
 const ROLE: Role = "raised_by";
 
-/** Every permission the role is allowed to hold. Exactly three. */
-const GRANTED: Permission[] = ["issue:view_all", "issue:create", "mobile:submit"];
+/** Every permission the role is allowed to hold. Exactly five: the original
+ *  three (view_all/create/mobile:submit), plus issue:edit (a self-raiser
+ *  correcting its own submission) and issue:delete (removing one it should
+ *  not have raised) — both added after this file was first written. */
+const GRANTED: Permission[] = [
+  "issue:view_all",
+  "issue:create",
+  "issue:edit",
+  "issue:delete",
+  "mobile:submit",
+];
 
 /** Every permission it must NOT hold. Any new key added to the matrix without
- *  a deliberate decision will fail the "exactly three" test above this list. */
+ *  a deliberate decision will fail the "exactly five" test above this list. */
 const REFUSED: Permission[] = [
   "issue:view_own_assigned",
   "issue:comment",
@@ -56,7 +65,6 @@ const REFUSED: Permission[] = [
   "issue:analyse_own_assigned",
   "issue:analyse_any",
   "issue:assign",
-  "issue:delete",
   "issue:approve_reopen",
   "user:manage",
   "tracker:view",
@@ -72,7 +80,7 @@ const REFUSED: Permission[] = [
 ];
 
 describe("raised_by — the permission set", () => {
-  it("is recognized as a role and holds exactly three permissions", () => {
+  it("is recognized as a role and holds exactly five permissions", () => {
     assert.deepEqual([...permissionsForRole(ROLE)].sort(), [...GRANTED].sort());
   });
 
@@ -105,7 +113,7 @@ describe("raised_by — the permission set", () => {
     }
   });
 
-  it("holds no mutation beyond creating its own Issue", () => {
+  it("holds no mutation beyond creating, editing and deleting its own Issues", () => {
     const otherWriteKeys = [...permissionsForRole("admin")].filter(
       (permission) => !GRANTED.includes(permission)
     );
@@ -379,9 +387,11 @@ describe("wiring — privileged surfaces still refuse the role on their own", ()
   // issue:create, so that page admits it on purpose. What replaces the refusal
   // there is a different guarantee — the raiser is server-derived, so creating
   // does not mean creating as somebody else. See tests/raisedByWebCreate.test.ts.
+  // delete-actions.ts is ALSO absent now: the role was later granted
+  // issue:delete (soft delete only, independently re-checked there), so it no
+  // longer belongs on a list of surfaces that refuse it.
   const guarded: Array<[string, Permission]> = [
     ["app/dashboard/issues/add-staff/page.tsx", "user:manage"],
-    ["app/dashboard/issues/delete-actions.ts", "issue:delete"],
     ["app/dashboard/tracker/page.tsx", "tracker:view"],
   ];
 

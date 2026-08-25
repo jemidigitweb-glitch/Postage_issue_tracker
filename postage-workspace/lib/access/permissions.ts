@@ -112,10 +112,16 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   // key for it, so "create" means "create AS MYSELF" and cannot be used to file
   // an Issue in somebody else's name.
   //
+  // issue:delete was added alongside it, same rationale: this role already
+  // sees and can correct every Issue (issue:view_all), so it can also remove
+  // one it should not have raised — softDeleteIssuesAction is a soft delete
+  // only (deleted_at/deleted_by), never a hard DELETE, and is independently
+  // re-checked there regardless of what this role's UI chooses to show.
+  //
   // Everything else remains absent — comment, assign, status, investigate,
-  // resolve, reopen, delete, and every administrative surface (users, staff,
-  // discussions, tracker) — so each existing server-side guard already refuses
-  // this role without a single new check being written for it.
+  // resolve, reopen, and every administrative surface (users, staff,
+  // discussions, tracker) — so each existing server-side guard already
+  // refuses this role without a single new check being written for it.
   //
   // issue:edit was added here so a Raised-by-Staff session can correct its
   // own typos/details after submission (same Title/Domain/Priority/
@@ -123,7 +129,17 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   // additionally refuses to let this role touch `resolution` ("Fix & Action
   // Required"), the one field createIssueAction has always withheld from it
   // too: deciding the fix is management work, reporting the problem is not.
-  raised_by: new Set<Permission>(["issue:view_all", "issue:create", "issue:edit", "mobile:submit"]),
+  //
+  // mobile:submit lets this role also use /mobile — the only place this
+  // role's permission set differs from main's, since main has no /mobile
+  // route to hold that permission for.
+  raised_by: new Set<Permission>([
+    "issue:view_all",
+    "issue:create",
+    "issue:edit",
+    "issue:delete",
+    "mobile:submit",
+  ]),
 
   // Unchanged from the pre-Stage-3 matrix. No account holds this role.
   management: new Set<Permission>([
