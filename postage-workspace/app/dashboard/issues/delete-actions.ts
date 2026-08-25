@@ -16,9 +16,9 @@ export interface DeleteState {
  * SECURITY (Stage 3): before this fix, this action checked only that a
  * session existed — any authenticated user could soft-delete any Issue by
  * POSTing arbitrary issue_ids straight at the action, with no permission
- * check of any kind. Deletion now requires "issue:delete", which only the
- * Super Admin (role 'admin') holds. Hiding the button is not the guard —
- * this check is.
+ * check of any kind. Deletion now requires "issue:delete", held by the
+ * Super Admin (role 'admin') and by Raised-by-Staff (role 'raised_by').
+ * Hiding the button is not the guard — this check is.
  */
 export async function softDeleteIssuesAction(
   _prevState: DeleteState,

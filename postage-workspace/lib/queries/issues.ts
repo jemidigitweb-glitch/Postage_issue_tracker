@@ -701,19 +701,26 @@ export interface UpdateIssueDetailsInput {
   /** issues.resolution — the historical intake-time "Fix & Action Required".
    *  NOT final_resolution, which the work-progress workflow owns exclusively. */
   resolution: string | null;
+  /** Full replacement for issues.extra_data — the caller (edit-actions.ts)
+   *  builds this by merging any edited fields on top of the EXISTING value,
+   *  so every key this function does not know about (images, attachments,
+   *  intake metadata, anything not rendered as an editable input) is carried
+   *  over unchanged. This function never merges; it writes exactly what it
+   *  is given. */
+  extraData: Record<string, unknown>;
 }
 
 /**
  * Updates the normal, editable fields of exactly one Issue: Title,
- * Description, Domain, Priority, and Fix & Action Required.
+ * Description, Domain, Priority, Fix & Action Required, and the editable
+ * subset of extra_data (Additional details).
  *
  * Deliberately NEVER touches: issue_id, staff_code, status, created_date,
- * created_at, extra_data, deleted_at/deleted_by, or any of the Stage 6
- * work-progress columns (implementation_progress, implementation_done,
- * final_resolution, process_started_at, completed_at, completed_date) —
- * those belong to their own dedicated workflows (status-actions.ts,
- * assign-actions.ts, delete-actions.ts) and this function has no path that
- * writes to them.
+ * created_at, deleted_at/deleted_by, or any of the Stage 6 work-progress
+ * columns (implementation_progress, implementation_done, final_resolution,
+ * process_started_at, completed_at, completed_date) — those belong to their
+ * own dedicated workflows (status-actions.ts, assign-actions.ts,
+ * delete-actions.ts) and this function has no path that writes to them.
  *
  * WHERE ... AND deleted_at IS NULL means a soft-deleted Issue can never be
  * edited through this function — editing history that has already been
@@ -732,10 +739,19 @@ export async function updateIssueDetails(
          category = $4,
          priority = $5,
          resolution = $6,
+         extra_data = $7,
          updated_at = now()
      WHERE issue_id = $1 AND deleted_at IS NULL
      RETURNING issue_id`,
-    [issueId, input.title, input.description, input.category, input.priority, input.resolution]
+    [
+      issueId,
+      input.title,
+      input.description,
+      input.category,
+      input.priority,
+      input.resolution,
+      JSON.stringify(input.extraData),
+    ]
   );
   return (result.rowCount ?? 0) > 0;
 }
