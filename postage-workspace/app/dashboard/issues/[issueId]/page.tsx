@@ -41,11 +41,17 @@ const backLinkDisabledClassName =
   "rounded-lg border border-neutral-100 dark:border-neutral-900 px-3 py-1.5 text-sm font-medium text-neutral-300 dark:text-neutral-700";
 
 function NavBar({
+  issueId,
   previousId,
   nextId,
+  canEdit,
 }: {
+  issueId: string;
   previousId: string | null;
   nextId: string | null;
+  /** From issue:edit — Super Admin only. updateIssueDetailsAction re-checks
+   *  this independently; hiding the link here is presentation, not the guard. */
+  canEdit: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -53,6 +59,11 @@ function NavBar({
         ← Back to Issue List
       </Link>
       <div className="flex items-center gap-2">
+        {canEdit && (
+          <Link href={`/dashboard/issues/${issueId}/edit`} className={backLinkClassName}>
+            Edit Issue
+          </Link>
+        )}
         {previousId ? (
           <Link href={`/dashboard/issues/${previousId}`} className={backLinkClassName}>
             ← Previous Issue
@@ -107,13 +118,14 @@ export default async function IssueDetailPage({
 
   // Resolved from the session only — never from params or search params.
   const { user: currentUser, scope } = await getCurrentUserWithScope();
-  const [canAssign, canChangeAny, canChangeOwn] = currentUser
+  const [canAssign, canChangeAny, canChangeOwn, canEdit] = currentUser
     ? await Promise.all([
         hasPermission(currentUser, "issue:assign"),
         hasPermission(currentUser, "issue:change_status_any"),
         hasPermission(currentUser, "issue:change_status_own_assigned"),
+        hasPermission(currentUser, "issue:edit"),
       ])
-    : [false, false, false];
+    : [false, false, false, false];
   // ── WHAT THIS VIEWER SEES ─────────────────────────────────────────────────
   // One pure decision (lib/access/issueDetailView.ts) instead of ad-hoc role
   // checks scattered through the JSX below. For a Super Admin every Stage 6
@@ -183,7 +195,12 @@ export default async function IssueDetailPage({
   return (
     <DashboardLayout>
       <div className="flex flex-col gap-5">
-        <NavBar previousId={adjacent.previousId} nextId={adjacent.nextId} />
+        <NavBar
+          issueId={issueId}
+          previousId={adjacent.previousId}
+          nextId={adjacent.nextId}
+          canEdit={canEdit}
+        />
         {/* Both extra props are undefined for a Super Admin, so IssueDetail
             renders exactly the markup it did before Stage 6. */}
         <IssueDetail

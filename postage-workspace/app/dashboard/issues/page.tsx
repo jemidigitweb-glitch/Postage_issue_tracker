@@ -137,14 +137,15 @@ export default async function IssuesPage({
 
   // UI affordances only — every one of these is independently enforced in
   // the corresponding Server Action, which is the real guard.
-  const [canAssign, canManageStaff, canCreate, canDelete] = currentUser
+  const [canAssign, canManageStaff, canCreate, canDelete, canEdit] = currentUser
     ? await Promise.all([
         hasPermission(currentUser, "issue:assign"),
         hasPermission(currentUser, "user:manage"),
         hasPermission(currentUser, "issue:create"),
         hasPermission(currentUser, "issue:delete"),
+        hasPermission(currentUser, "issue:edit"),
       ])
-    : [false, false, false, false];
+    : [false, false, false, false, false];
 
   // Search/filter params only — shared by the pagination links and the
   // sortable headers. Sort is added on top of this for pagination (so paging
@@ -219,6 +220,7 @@ export default async function IssuesPage({
               assignmentUsers={assignmentUsers}
               canAssign={canAssign}
               canDelete={canDelete}
+              canEdit={canEdit}
               sort={sort}
               order={order}
               baseParams={filterParams.toString()}

@@ -19,6 +19,20 @@ export function EyeIcon() {
   );
 }
 
+export function PencilIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path
+        d="M11.3 2.3a1.4 1.4 0 0 1 2 2L5.5 12.1l-2.7.6.6-2.7 8-7.7Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function TrashIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" className="h-4 w-4" aria-hidden="true">

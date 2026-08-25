@@ -58,6 +58,7 @@ export type Permission =
   | "issue:analyse_any"
   | "issue:assign"
   | "issue:delete"
+  | "issue:edit"
   | "issue:approve_reopen"
   | "user:manage"
   | "tracker:view"
@@ -116,7 +117,14 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   // resolve, reopen, delete, and every administrative surface (users, staff,
   // discussions, tracker) — so each existing server-side guard already refuses
   // this role without a single new check being written for it.
-  raised_by: new Set<Permission>(["issue:view_all", "issue:create", "mobile:submit"]),
+  //
+  // issue:edit was added here so a Raised-by-Staff session can correct its
+  // own typos/details after submission (same Title/Domain/Priority/
+  // Description they can already set at creation) — updateIssueDetailsAction
+  // additionally refuses to let this role touch `resolution` ("Fix & Action
+  // Required"), the one field createIssueAction has always withheld from it
+  // too: deciding the fix is management work, reporting the problem is not.
+  raised_by: new Set<Permission>(["issue:view_all", "issue:create", "issue:edit", "mobile:submit"]),
 
   // Unchanged from the pre-Stage-3 matrix. No account holds this role.
   management: new Set<Permission>([
@@ -145,6 +153,7 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:change_status_any",
     "issue:assign",
     "issue:delete",
+    "issue:edit",
     "issue:approve_reopen",
     "issue:analyse_any",
     "user:manage",

@@ -12,7 +12,7 @@ import { assignIssuesAction, type AssignBulkState } from "@/app/dashboard/issues
 // Shared inline-SVG icon set — the project has no icon library dependency,
 // so these live in one place and are reused rather than duplicated. Same
 // EyeIcon the Discussions table uses in its Actions column.
-import { EyeIcon } from "@/components/discussions/icons";
+import { EyeIcon, PencilIcon } from "@/components/discussions/icons";
 import SortableHeader, { type SortOrder } from "@/components/common/SortableHeader";
 import IssuePriorityBadge from "./IssuePriorityBadge";
 import IssueStatusBadge from "./IssueStatusBadge";
@@ -42,6 +42,7 @@ export default function IssueTable({
   assignmentUsers,
   canAssign,
   canDelete,
+  canEdit,
   sort = "",
   order = "asc",
   baseParams = "",
@@ -55,6 +56,9 @@ export default function IssueTable({
   /** From issue:delete — Super Admin only. Same rule: the Server Action
    *  (delete-actions.ts) is the guard; hiding the button is defense in depth. */
   canDelete: boolean;
+  /** From issue:edit — Super Admin only. Same rule: updateIssueDetailsAction
+   *  (edit-actions.ts) is the guard; hiding the Edit link is defense in depth. */
+  canEdit: boolean;
   /** Current sort key/direction from the URL, for header indicators. */
   sort?: string;
   order?: SortOrder;
@@ -297,6 +301,20 @@ export default function IssueTable({
                       >
                         <EyeIcon />
                       </Link>
+                      {/* Plain navigation link, same rationale as View above —
+                          sits outside both toolbar forms, can never submit
+                          delete/assign. updateIssueDetailsAction re-checks
+                          issue:edit independently; this is presentation only. */}
+                      {canEdit && (
+                        <Link
+                          href={`/dashboard/issues/${issue.issueId}/edit`}
+                          title="Edit issue"
+                          aria-label="Edit issue"
+                          className="inline-flex items-center justify-center rounded-md p-1.5 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-100 dark:hover:bg-neutral-800 hover:text-neutral-800 dark:hover:text-neutral-200 transition-colors"
+                        >
+                          <PencilIcon />
+                        </Link>
+                      )}
                     </div>
                   </td>
                 </tr>
