@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { getCurrentUserWithScope, hasPermission } from "@/lib/auth";
+import { isIssuesOnlyRole } from "@/lib/access/raisedByAccess";
 import { getIssueById, isValidIssueId, listCategories } from "@/lib/queries/issues";
 import EditIssueForm from "./EditIssueForm";
 
@@ -33,7 +34,8 @@ function MessagePanel({
 }
 
 /**
- * Edit Issue — Super Admin only.
+ * Edit Issue — Super Admin and Raised-by-Staff (self-raisers, correcting
+ * their own submission).
  *
  * Page-level gate matching app/dashboard/issues/new/page.tsx's pattern: the
  * real guard is updateIssueDetailsAction's own `issue:edit` check in
@@ -126,7 +128,11 @@ export default async function EditIssuePage({
           <p className="font-mono text-xs text-neutral-500 dark:text-neutral-400">{issue.issueId}</p>
         </div>
 
-        <EditIssueForm issue={issue} categories={categories} />
+        <EditIssueForm
+          issue={issue}
+          categories={categories}
+          hideResolution={isIssuesOnlyRole(currentUser?.role ?? null)}
+        />
       </div>
     </DashboardLayout>
   );

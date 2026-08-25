@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { isIssuesOnlyRole } from "@/lib/access/raisedByAccess";
+import { findRaiserForUser } from "@/lib/queries/raiserLink";
 import { createIssue, InvalidStaffError, type IssuePriority } from "@/lib/queries/issues";
 import {
   validateFile,
@@ -175,13 +177,48 @@ export async function createIssueAction(
     return { error: "You do not have permission to create issues." };
   }
 
+  // ── 0. WHO IS RAISING THIS ────────────────────────────────────────────────
+  // Two kinds of author, and they are not treated the same:
+  //
+  //   SELF-RAISER (role raised_by) — files Issues AS THEMSELVES. The raiser is
+  //     resolved from the verified session through their linked issue_staff row
+  //     and the form key is NEVER read for them, so a crafted submission naming
+  //     another staff code has nothing to act on. If the link is missing or the
+  //     raiser was deactivated, the submission is refused — never reassigned to
+  //     WH or to anyone else.
+  //
+  //   ON-BEHALF AUTHOR (Super Admin / management) — files Issues for other
+  //     people, so they pick the raiser from the form exactly as before. This
+  //     branch is byte-for-byte the previous behaviour.
+  const selfRaiser = isIssuesOnlyRole(user.role);
+
+  let staffCode: string;
+  if (selfRaiser) {
+    const raiser = await findRaiserForUser(user.userId);
+    if (!raiser) {
+      console.error(
+        `[issues/new] blocked — user ${user.userId} may create Issues but has no active linked raiser`
+      );
+      return {
+        error:
+          "Your account is not set up to raise Issues yet. Please contact an administrator.",
+      };
+    }
+    staffCode = raiser.staffCode;
+  } else {
+    staffCode = readText(formData, "staffCode");
+  }
+
   // ── 1. Text fields ────────────────────────────────────────────────────────
-  const staffCode = readText(formData, "staffCode");
   const title = readText(formData, "title");
   const description = readText(formData, "description");
   const category = readText(formData, "category");
   const priorityRaw = readText(formData, "priority");
-  const resolution = readText(formData, "resolution");
+  // Fix & Action Required is a RESOLUTION field. A self-raiser reports the
+  // problem; deciding the fix is management work they hold no permission for,
+  // so the key is not read for them at all — hiding the input is presentation,
+  // this is the guard.
+  const resolution = selfRaiser ? "" : readText(formData, "resolution");
 
   if (!staffCode || !title || !description || !category) {
     return { error: "Raised By, Title, Domain, and Description are all required." };
@@ -202,6 +239,9 @@ export async function createIssueAction(
 
   const extraData: Record<string, unknown> = {};
   for (const field of EXTRA_TEXT_FIELDS) {
+    // Root Cause is investigation content, which a self-raiser has no
+    // permission to author. Skipped server-side, not merely hidden.
+    if (selfRaiser && field.formKey === "rootCause") continue;
     const value = readText(formData, field.formKey);
     if (!value) continue;
     if (value.length > field.max) {

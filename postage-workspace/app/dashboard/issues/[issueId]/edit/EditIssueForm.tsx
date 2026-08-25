@@ -30,11 +30,18 @@ function Required() {
 export default function EditIssueForm({
   issue,
   categories,
+  hideResolution = false,
 }: {
   issue: IssueDetail;
   /** Existing issues.category values, offered as suggestions on the free-text
    *  Domain input — same convention as the New Issue form. */
   categories: string[];
+  /** True for a self-raiser (role raised_by) — same restriction
+   *  NewIssueForm.tsx already applies at creation: deciding the fix is
+   *  management work, reporting the problem is not. Presentation only —
+   *  updateIssueDetailsAction never reads this field's value for that role
+   *  regardless of whether the input is rendered. */
+  hideResolution?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(updateIssueDetailsAction, initialState);
 
@@ -114,19 +121,21 @@ export default function EditIssueForm({
           />
         </div>
 
-        <div>
-          <label htmlFor="resolution" className={labelClassName}>
-            Fix &amp; Action Required
-          </label>
-          <textarea
-            id="resolution"
-            name="resolution"
-            rows={4}
-            defaultValue={issue.resolution ?? ""}
-            className={inputClassName}
-          />
-          <p className={hintClassName}>Optional.</p>
-        </div>
+        {!hideResolution && (
+          <div>
+            <label htmlFor="resolution" className={labelClassName}>
+              Fix &amp; Action Required
+            </label>
+            <textarea
+              id="resolution"
+              name="resolution"
+              rows={4}
+              defaultValue={issue.resolution ?? ""}
+              className={inputClassName}
+            />
+            <p className={hintClassName}>Optional.</p>
+          </div>
+        )}
       </section>
 
       {state.error && (

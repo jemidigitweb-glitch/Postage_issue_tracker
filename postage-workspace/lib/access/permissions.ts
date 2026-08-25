@@ -17,8 +17,21 @@
 //  - No role hierarchy or inheritance (DECISION-001): each role's set is an
 //    explicit literal list.
 
-/** The three roles permitted by issue_tracking.management_users.role's CHECK constraint. */
-export type Role = "staff" | "management" | "admin";
+/**
+ * The roles permitted by issue_tracking.management_users.role's CHECK
+ * constraint.
+ *
+ * `raised_by` is NEW and requires migration/013_raised_by_staff_auth.sql to be
+ * applied before any account can hold it — the database constraint currently
+ * accepts only the first three. The application understands the role first so
+ * the migration can be reviewed against working, tested code.
+ *
+ * It is ONE SHARED account, not one login per Raised-By person: it is not
+ * linked to issue_tracking.issue_staff, and there is deliberately no
+ * management_users.staff_code. Authentication identity and the technical
+ * "Raised By" identity on an Issue stay separate.
+ */
+export type Role = "staff" | "management" | "admin" | "raised_by";
 
 /** Every permission this application recognizes. */
 export type Permission =
@@ -84,6 +97,28 @@ const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> = {
     "issue:change_status_own_assigned",
     "issue:analyse_own_assigned",
   ]),
+
+  // RAISED BY STAFF. A shared warehouse login: reads every Issue, and raises
+  // Issues as itself from the web.
+  //
+  // `issue:create` is narrower than it looks: the raiser recorded on the
+  // Issue is not the client's to choose. For this role the server resolves it
+  // from management_users.staff_code -> issue_staff and never reads a form
+  // key for it, so "create" means "create AS MYSELF" and cannot be used to
+  // file an Issue in somebody else's name.
+  //
+  // issue:edit was added so a Raised-by-Staff session can correct its own
+  // typos/details after submission (same Title/Domain/Priority/Description
+  // they can already set at creation) — updateIssueDetailsAction additionally
+  // refuses to let this role touch `resolution` ("Fix & Action Required"),
+  // the one field createIssueAction has always withheld from it too:
+  // deciding the fix is management work, reporting the problem is not.
+  //
+  // Everything else remains absent — comment, assign, status, investigate,
+  // resolve, reopen, delete, and every administrative surface (users, staff,
+  // discussions, tracker) — so each existing server-side guard already
+  // refuses this role without a single new check being written for it.
+  raised_by: new Set<Permission>(["issue:view_all", "issue:create", "issue:edit"]),
 
   // Unchanged from the pre-Stage-3 matrix. No account holds this role.
   management: new Set<Permission>([

@@ -6,10 +6,13 @@ import CourierStatus from "@/components/dashboard/CourierStatus";
 import UnshippedOrders from "@/components/dashboard/UnshippedOrders";
 import PostageUpdates from "@/components/dashboard/PostageUpdates";
 import OpenIssuesSummary from "@/components/dashboard/OpenIssuesSummary";
-import { redirectAssigneeToOwnIssues } from "@/lib/routeGuards";
+import { redirectAssigneeToOwnIssues, redirectRaisedByToIssues } from "@/lib/routeGuards";
 
 export default async function DashboardPage() {
   await redirectAssigneeToOwnIssues();
+  // Raised by Staff holds issue:view_all, so the guard above lets them
+  // through; this one confines them to the Issue list.
+  await redirectRaisedByToIssues("/dashboard");
 
   return (
     <DashboardLayout>

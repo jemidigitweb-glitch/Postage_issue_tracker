@@ -2,6 +2,8 @@ import Link from "next/link";
 
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { getCurrentUser, hasPermission } from "@/lib/auth";
+import { isIssuesOnlyRole } from "@/lib/access/raisedByAccess";
+import { findRaiserForUser } from "@/lib/queries/raiserLink";
 import { listActiveStaff } from "@/lib/queries/staff";
 import { listCategories } from "@/lib/queries/issues";
 import NewIssueForm from "./NewIssueForm";
@@ -36,13 +38,23 @@ export default async function NewIssuePage() {
     );
   }
 
-  // Active staff only — a deactivated staff member shouldn't be selectable
-  // as the raiser of a brand new issue (compare the "Raised By" filter on
-  // the issue list, which intentionally includes inactive staff too, since
-  // that's for finding existing historical issues).
-  // Existing Domain values, offered as datalist suggestions so a new Issue
-  // lands in an established category. Read-only; the column stays free text.
-  const [staff, categories] = await Promise.all([listActiveStaff(), listCategories()]);
+  // SELF-RAISER (role raised_by): they file Issues as themselves, so there is
+  // no raiser to choose. Their own linked issue_staff name is shown read-only
+  // and the picker is not rendered at all. The staff list is not even fetched
+  // for them — a form that cannot offer a choice has no use for the options.
+  //
+  // If the account is somehow unlinked, the page still renders: the action
+  // refuses the submission with a clear message, which is the guard. Blocking
+  // the page here as well would only turn a fixable setup problem into a dead
+  // end with no explanation.
+  const selfRaiser = isIssuesOnlyRole(currentUser?.role ?? null);
+  const [staff, categories, linkedRaiser] = await Promise.all([
+    selfRaiser ? Promise.resolve([]) : listActiveStaff(),
+    // Existing Domain values, offered as datalist suggestions so a new Issue
+    // lands in an established category. Read-only; the column stays free text.
+    listCategories(),
+    selfRaiser && currentUser ? findRaiserForUser(currentUser.userId) : Promise.resolve(null),
+  ]);
 
   return (
     <DashboardLayout>
@@ -64,7 +76,11 @@ export default async function NewIssuePage() {
           </p>
         </div>
 
-        <NewIssueForm staff={staff} categories={categories} />
+        <NewIssueForm
+          staff={staff}
+          categories={categories}
+          selfRaiserName={linkedRaiser?.staffName ?? null}
+        />
       </div>
     </DashboardLayout>
   );

@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "tsx --test tests/*.test.ts",
     "create-first-admin": "tsx scripts/create-first-admin.ts",
+    "provision-raised-by": "node --import tsx --env-file=.env.local scripts/provision-raised-by-staff.ts",
     "verify:scope": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-issue-scope.ts",
     "verify:assignee-tx": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-assignee-transactions.ts",
     "verify:account-settings": "node --import tsx --conditions=react-server --env-file=.env.local scripts/verify-account-settings.ts",

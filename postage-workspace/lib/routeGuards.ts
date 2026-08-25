@@ -3,6 +3,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser, hasPermission } from "./auth";
+import { RAISED_BY_HOME, isDashboardPathAllowedForRole } from "./access/raisedByAccess";
 
 // Server-side route guards for dashboard pages that are NOT part of the
 // Assignee's workspace.
@@ -45,4 +46,44 @@ export async function redirectAssigneeToOwnIssues(): Promise<void> {
     return;
   }
   redirect(ASSIGNEE_HOME);
+}
+
+/**
+ * Redirects a RAISED-BY-STAFF session away from any dashboard page that is not
+ * the Issue list or an Issue detail page.
+ *
+ * Why this exists as well as the guard above: `raised_by` holds
+ * `issue:view_all`, so redirectAssigneeToOwnIssues() correctly lets it through
+ * — that check asks "is this an Assignee", which it is not. This one asks the
+ * different question "is this role confined to Issues", and only `raised_by`
+ * answers yes.
+ *
+ * Behaviour by caller:
+ *  - Super Admin / management / Assignee — returns, page renders as before.
+ *  - Raised by Staff                     — redirect() to /dashboard/issues.
+ *  - Not signed in                       — returns, unchanged.
+ *
+ * The pages that already carry a permission guard (tracker, discussions,
+ * account-settings, New Issue, Add Staff) refuse `raised_by` on their own,
+ * because it holds none of the permissions they require. This helper is for
+ * the dashboard pages that carry NO guard — the index, booking, couriers and
+ * reports — which were public before this stage and stay exactly as public as
+ * they were for everyone else. It only ADDS the role restriction it is named
+ * for; it never removes an existing one, and it never widens access.
+ *
+ * `path` is passed by the caller rather than read from headers so the rule
+ * stays a pure function of its input and is testable without a request.
+ *
+ * Note redirect() throws internally (NEXT_REDIRECT), so it must be called
+ * outside a try/catch that would swallow it.
+ */
+export async function redirectRaisedByToIssues(path: string): Promise<void> {
+  const user = await getCurrentUser();
+  if (!user) {
+    return;
+  }
+  if (isDashboardPathAllowedForRole(user.role, path)) {
+    return;
+  }
+  redirect(RAISED_BY_HOME);
 }
