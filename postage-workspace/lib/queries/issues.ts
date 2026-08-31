@@ -299,6 +299,56 @@ function normalizeEnum<T extends string>(value: string | undefined, allowed: rea
   return (allowed as readonly string[]).includes(value) ? (value as T) : null;
 }
 
+// ---------------------------------------------------------------------------
+// Shared list filter
+//
+// The WHERE clause below is the ONE definition of "which Issues match the
+// Issues-page filters". listIssues() (paginated, for the screen) and
+// listIssuesForExport() (unpaginated, for the .xlsx download) both build their
+// predicate from it, so the export can never silently diverge from the list it
+// claims to be exporting — a filter added here applies to both at once.
+//
+// Bind-parameter POSITIONS are passed in rather than hard-coded because the
+// two callers number their parameters differently (the list query also binds
+// LIMIT/OFFSET). Every value is still a bind parameter; nothing user-supplied
+// is ever interpolated. `positions` comes only from the two literal objects in
+// this file.
+// ---------------------------------------------------------------------------
+interface IssueFilterPositions {
+  search: number;
+  staffCode: number;
+  status: number;
+  priority: number;
+  showDeleted: number;
+  category: number;
+  unrestricted: number;
+  assigneeId: number;
+}
+
+function issueFilterSql(p: IssueFilterPositions): string {
+  return `($${p.search}::text IS NULL OR i.issue_id ILIKE '%' || $${p.search} || '%' ESCAPE '\\' OR i.issue_title ILIKE '%' || $${p.search} || '%' ESCAPE '\\')
+       AND ($${p.staffCode}::text IS NULL OR i.staff_code = $${p.staffCode})
+       AND ($${p.status}::text IS NULL OR i.status = $${p.status})
+       AND ($${p.priority}::text IS NULL OR i.priority = $${p.priority})
+       AND (($${p.showDeleted}::boolean AND i.deleted_at IS NOT NULL) OR (NOT $${p.showDeleted}::boolean AND i.deleted_at IS NULL))
+       AND ($${p.category}::text IS NULL OR i.category = $${p.category})
+       AND ${scopePredicate("i.issue_id", p.unrestricted, p.assigneeId)}`;
+}
+
+/** Normalizes the raw filter inputs both list and export share, so the two
+ *  agree on what an empty string means, how ILIKE wildcards are escaped, and
+ *  which status/priority values are recognized. */
+function normalizeIssueFilters(params: ListIssuesParams) {
+  const trimmedSearch = params.search?.trim();
+  return {
+    search: trimmedSearch ? escapeLikePattern(trimmedSearch) : null,
+    staffCode: params.staffCode?.trim() || null,
+    status: normalizeEnum(params.status, VALID_STATUSES),
+    priority: normalizeEnum(params.priority, VALID_PRIORITIES),
+    category: params.category?.trim() || null,
+  };
+}
+
 /**
  * Lists issues with server-side pagination, search, and filtering. Unknown
  * or invalid `status`/`priority` values are silently ignored (treated as
@@ -315,12 +365,7 @@ export async function listIssues(
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Math.floor(params.pageSize ?? DEFAULT_PAGE_SIZE)));
   const offset = (page - 1) * pageSize;
 
-  const trimmedSearch = params.search?.trim();
-  const search = trimmedSearch ? escapeLikePattern(trimmedSearch) : null;
-  const staffCode = params.staffCode?.trim() || null;
-  const status = normalizeEnum(params.status, VALID_STATUSES);
-  const priority = normalizeEnum(params.priority, VALID_PRIORITIES);
-  const category = params.category?.trim() || null;
+  const { search, staffCode, status, priority, category } = normalizeIssueFilters(params);
   const showDeleted = params.showDeleted ?? false;
   // Resolved from the frozen whitelist above — never from raw input.
   const orderBy = buildIssueOrderBy(params.sort, params.order);
@@ -342,13 +387,16 @@ export async function listIssues(
      LEFT JOIN issue_tracking.issue_assignments ia ON ia.issue_id = i.issue_id AND ia.is_current = true
      LEFT JOIN issue_tracking.assignment_users au ON au.assignee_id = ia.assignee_id
      WHERE
-       ($1::text IS NULL OR i.issue_id ILIKE '%' || $1 || '%' ESCAPE '\\' OR i.issue_title ILIKE '%' || $1 || '%' ESCAPE '\\')
-       AND ($2::text IS NULL OR i.staff_code = $2)
-       AND ($3::text IS NULL OR i.status = $3)
-       AND ($4::text IS NULL OR i.priority = $4)
-       AND (($7::boolean AND i.deleted_at IS NOT NULL) OR (NOT $7::boolean AND i.deleted_at IS NULL))
-       AND ($8::text IS NULL OR i.category = $8)
-       AND ${scopePredicate("i.issue_id", 9, 10)}
+       ${issueFilterSql({
+         search: 1,
+         staffCode: 2,
+         status: 3,
+         priority: 4,
+         showDeleted: 7,
+         category: 8,
+         unrestricted: 9,
+         assigneeId: 10,
+       })}
      ORDER BY ${orderBy}
      LIMIT $5 OFFSET $6`,
     [
@@ -384,6 +432,158 @@ export async function listIssues(
     pageSize,
     totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
     showDeleted,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Export ("Download Issues")
+//
+// Same filters, same scope predicate, same ordering as the on-screen list —
+// but NO LIMIT/OFFSET, because the point of the export is to hand over every
+// matching Issue rather than the page currently being viewed. It is a pure
+// read: no write, no soft-delete change, no status/assignment side effect.
+//
+// showDeleted is not a parameter here and is bound to `false` unconditionally.
+// A soft-deleted Issue is removed history, and shipping it inside a
+// spreadsheet that leaves the application is exactly the case where it must
+// not reappear.
+// ---------------------------------------------------------------------------
+
+/** One exported row. Deliberately mirrors the Excel columns one-for-one and
+ *  carries NOTHING else: no user_id, no assignee_id, no staff_code, no
+ *  deleted_by, no extra_data blob, no timestamps beyond the raised date. If a
+ *  field is not on this interface it cannot reach the file. */
+export interface IssueExportRow {
+  issueId: string;
+  title: string;
+  raisedBy: string;
+  domain: string;
+  assignedTo: string | null;
+  status: IssueStatus;
+  priority: IssuePriority | null;
+  dateRaised: string;
+  description: string | null;
+  rootCause: string | null;
+  fixAndActionRequired: string | null;
+  implementationInProgress: string | null;
+  implementationDone: string | null;
+  finalResolution: string | null;
+}
+
+interface IssueExportDbRow {
+  issue_id: string;
+  issue_title: string;
+  staff_name: string;
+  category: string;
+  assigned_staff_name: string | null;
+  status: IssueStatus;
+  priority: IssuePriority | null;
+  created_date: string;
+  issue_description: string | null;
+  root_cause: string | null;
+  resolution: string | null;
+  implementation_progress: string | null;
+  implementation_done: string | null;
+  final_resolution: string | null;
+}
+
+/** Hard ceiling on one export. Well above the whole table today (~150 rows);
+ *  it exists only so a future data-growth surprise degrades into a truncated
+ *  file the caller is TOLD about (see `truncated` below) rather than an
+ *  out-of-memory server. */
+const EXPORT_MAX_ROWS = 20000;
+
+export interface ListIssuesForExportResult {
+  rows: IssueExportRow[];
+  /** True when EXPORT_MAX_ROWS was hit and the result is therefore NOT the
+   *  complete filtered set. Never silently ignored by the caller. */
+  truncated: boolean;
+}
+
+/**
+ * Every Issue matching the given filters, for the Excel export. Read-only.
+ *
+ * `staffCode` is REQUIRED and non-optional by design: the feature exports one
+ * Raised-By staff member's Issues, so there is no "all staff" export path to
+ * accidentally fall into via an empty filter value.
+ */
+export async function listIssuesForExport(
+  scope: IssueAccessScope,
+  params: ListIssuesParams & { staffCode: string }
+): Promise<ListIssuesForExportResult> {
+  const { unrestricted, assigneeId: scopeAssigneeId } = issueScopeQueryArgs(scope);
+  const { search, staffCode, status, priority, category } = normalizeIssueFilters(params);
+  const orderBy = buildIssueOrderBy(params.sort, params.order);
+
+  const result = await query<IssueExportDbRow>(
+    `SELECT
+       i.issue_id,
+       i.issue_title,
+       s.staff_name,
+       i.category,
+       au.assignee_name AS assigned_staff_name,
+       i.status,
+       i.priority,
+       to_char(i.created_date, 'YYYY-MM-DD') AS created_date,
+       i.issue_description,
+       i.extra_data->>'rootCause' AS root_cause,
+       i.resolution,
+       i.implementation_progress,
+       i.implementation_done,
+       i.final_resolution
+     FROM issue_tracking.issues i
+     JOIN issue_tracking.issue_staff s ON s.staff_code = i.staff_code
+     LEFT JOIN issue_tracking.issue_assignments ia ON ia.issue_id = i.issue_id AND ia.is_current = true
+     LEFT JOIN issue_tracking.assignment_users au ON au.assignee_id = ia.assignee_id
+     WHERE
+       ${issueFilterSql({
+         search: 1,
+         staffCode: 2,
+         status: 3,
+         priority: 4,
+         showDeleted: 5,
+         category: 6,
+         unrestricted: 7,
+         assigneeId: 8,
+       })}
+     ORDER BY ${orderBy}
+     LIMIT $9`,
+    [
+      search,
+      staffCode,
+      status,
+      priority,
+      // Deleted Issues are never exported — bound as a literal, not a param
+      // the caller controls.
+      false,
+      category,
+      unrestricted,
+      scopeAssigneeId,
+      EXPORT_MAX_ROWS + 1,
+    ]
+  );
+
+  const truncated = result.rows.length > EXPORT_MAX_ROWS;
+  const rows = truncated ? result.rows.slice(0, EXPORT_MAX_ROWS) : result.rows;
+
+  return {
+    truncated,
+    rows: rows.map((row) => ({
+      issueId: row.issue_id,
+      title: row.issue_title,
+      raisedBy: row.staff_name,
+      domain: row.category,
+      assignedTo: row.assigned_staff_name,
+      status: row.status,
+      priority: row.priority,
+      dateRaised: row.created_date,
+      description: row.issue_description,
+      rootCause: row.root_cause,
+      fixAndActionRequired: row.resolution,
+      implementationInProgress: row.implementation_progress,
+      implementationDone: row.implementation_done,
+      finalResolution: row.final_resolution,
+    })),
   };
 }
 

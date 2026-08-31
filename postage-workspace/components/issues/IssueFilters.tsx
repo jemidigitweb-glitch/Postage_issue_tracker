@@ -46,6 +46,7 @@ export default function IssueFilters({
   priority,
   category,
   hasActiveFilters,
+  exportMode = null,
 }: {
   staff: StaffRecord[];
   categories: string[];
@@ -55,8 +56,39 @@ export default function IssueFilters({
   priority: string;
   category: string;
   hasActiveFilters: boolean;
+  /** Who the "Download Issues" button exports, or null to hide it entirely.
+   *
+   *   "select" — Super Admin: the subject is whoever is chosen in Raised By,
+   *              so the button stays disabled until one staff member is
+   *              selected ("All staff" is not an export).
+   *   "self"   — Raised By Staff: the subject is always themselves, resolved
+   *              server-side from the session, so no selection is needed and
+   *              the button is always enabled.
+   *
+   * Presentation only. /dashboard/issues/export re-derives the role and the
+   * staff identity itself and is the actual gate. */
+  exportMode?: "select" | "self" | null;
 }) {
   const filterKey = [search, staffCode, status, priority, category].join("|");
+
+  // Built from the APPLIED filters (the props, which come from the URL), not
+  // from whatever is half-typed in the form — so the file always matches the
+  // rows currently on screen. `page` is deliberately absent: the export covers
+  // the whole filtered set, never one page of it.
+  const exportParams = new URLSearchParams();
+  // `staff` is sent ONLY in "select" mode. In "self" mode the server resolves
+  // the staff identity from the session and refuses a ?staff= naming anyone
+  // else, so sending the dropdown's value here — which a Raised By user is
+  // free to point at a colleague — would turn a legitimate list filter into a
+  // rejected export.
+  if (exportMode === "select" && staffCode) exportParams.set("staff", staffCode);
+  if (search) exportParams.set("q", search);
+  if (category) exportParams.set("category", category);
+  if (status) exportParams.set("status", status);
+  if (priority) exportParams.set("priority", priority);
+
+  const exportHref = `/dashboard/issues/export?${exportParams.toString()}`;
+  const exportEnabled = exportMode === "self" || (exportMode === "select" && Boolean(staffCode));
 
   return (
     <form
@@ -167,6 +199,38 @@ export default function IssueFilters({
           Clear
         </Link>
       )}
+
+      {/* Download Issues. Super Admin ("select") needs one Raised By staff
+          member chosen first — "All staff" is not an export, and the route
+          rejects it too. Raised By Staff ("self") always exports their own
+          Issues, so there is nothing to select.
+
+          A plain <a>, not next/link: client-side navigation would try to
+          render the response as a page. A normal browser request lets the
+          attachment Content-Disposition download the file and leave the
+          current page exactly where it is. */}
+      {exportMode &&
+        (exportEnabled ? (
+          <a
+            href={exportHref}
+            title={
+              exportMode === "self"
+                ? "Downloads every Issue you raised that matches the filters above."
+                : "Downloads every Issue raised by the selected staff member that matches the filters above."
+            }
+            className="rounded-lg border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-sm font-medium text-neutral-700 dark:text-neutral-300 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+          >
+            Download Issues
+          </a>
+        ) : (
+          <span
+            aria-disabled="true"
+            title="Select a staff member in Raised By to download their issues."
+            className="cursor-not-allowed rounded-lg border border-neutral-100 dark:border-neutral-900 px-4 py-2 text-sm font-medium text-neutral-300 dark:text-neutral-700"
+          >
+            Download Issues
+          </span>
+        ))}
     </form>
   );
 }
