@@ -1,51 +1,22 @@
+import { redirect } from "next/navigation";
+
+// THE SYSTEM'S FRONT DOOR.
+//
+// There is one entry point to this deployment and it is the sign-in page, so
+// the bare origin (https://warehouse-mobile-lite.vercel.app/) sends the visitor
+// straight there rather than showing a standing page of its own. /login then
+// makes the only routing decision that matters: an already-signed-in visitor is
+// forwarded to their destination, and everyone else gets the form.
+//
+// Warehouse Mobile Lite uses the same door with a return target —
+// /login?next=%2Fmobile — which is what app/manifest.ts installs as the PWA's
+// start_url. Both entry points therefore run through one authentication system,
+// which is the standing decision recorded in proxy.ts.
+//
+// `redirect()` here issues a 307 (Next.js's default outside Server Actions);
+// deliberately NOT permanentRedirect(), whose 308 browsers and proxies cache
+// indefinitely — that would make a future landing page impossible to introduce
+// without every returning visitor still being bounced.
 export default function Home() {
-  return (
-    <div className="min-h-screen bg-white dark:bg-neutral-950 flex flex-col">
-
-      {/* Header */}
-      <header className="border-b border-neutral-200 dark:border-neutral-800 px-8 py-4">
-        <span className="text-xs font-semibold tracking-widest uppercase text-neutral-400 dark:text-neutral-500">
-          LEDSone
-        </span>
-      </header>
-
-      {/* Main */}
-      <main className="flex-1 flex flex-col items-center justify-center px-6">
-        <div className="w-full max-w-lg text-center">
-
-          {/* Title */}
-          <h1 className="text-4xl font-bold tracking-tight text-neutral-900 dark:text-neutral-50 mb-3">
-            LEDSone Postage Workspace
-          </h1>
-
-          {/* Subtitle */}
-          <p className="text-lg text-neutral-500 dark:text-neutral-400 mb-12">
-            Operational Dashboard for the Postage Team
-          </p>
-
-          {/* Status block */}
-          <div className="border border-neutral-200 dark:border-neutral-800 rounded-2xl px-8 py-6 bg-neutral-50 dark:bg-neutral-900">
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-400 dark:text-neutral-500 mb-3">
-              Project Status
-            </p>
-            <div className="flex items-center justify-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-              <span className="text-base font-semibold text-neutral-800 dark:text-neutral-100">
-                Foundation Setup Complete
-              </span>
-            </div>
-          </div>
-
-        </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-neutral-200 dark:border-neutral-800 px-8 py-4 text-center">
-        <span className="text-xs text-neutral-400 dark:text-neutral-600">
-          LEDSone · Postage Department
-        </span>
-      </footer>
-
-    </div>
-  );
+  redirect("/login");
 }

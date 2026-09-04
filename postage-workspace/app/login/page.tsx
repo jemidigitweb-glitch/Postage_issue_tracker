@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, type CurrentUser } from "@/lib/auth";
 import { loginDestination, safeReturnTarget } from "@/lib/access/raisedByAccess";
 
 import LoginForm from "./LoginForm";
@@ -24,7 +24,35 @@ export default async function LoginPage({
   // used. Anything not on the internal allow-list becomes the Issue list.
   const destination = loginDestination(next);
 
-  const user = await getCurrentUser();
+  // ── A DATABASE HICCUP MUST NOT CLOSE THE FRONT DOOR ───────────────────────
+  // getCurrentUser() is database-backed (it re-reads the role rather than
+  // trusting the cookie), and this page is where every visitor to the
+  // deployment arrives. An unhandled rejection here does not degrade the login
+  // — it replaces it with Next.js's "This page couldn't load. A server error
+  // occurred." screen, locking everybody out over a transient connection fault.
+  //
+  // The failure is contained instead: the visitor is treated as signed out and
+  // shown the form, which is the correct fallback in both directions. Nobody is
+  // let in — no session is created here, and the Server Action re-verifies the
+  // password against the same database — and nobody who is genuinely signed in
+  // loses anything beyond one skipped redirect, since their cookie survives and
+  // the next request forwards them normally.
+  //
+  // redirect() stays OUTSIDE the try block: it signals by throwing, and catching
+  // it here would swallow the forward (documented behaviour — see
+  // node_modules/next/dist/docs/01-app/03-api-reference/04-functions/redirect.md).
+  let user: CurrentUser | null = null;
+  try {
+    user = await getCurrentUser();
+  } catch (error) {
+    // Message only. The error object from `pg` can carry the connection string.
+    console.error(
+      `[login] could not resolve the session, showing the form: ${
+        error instanceof Error ? error.message : "unknown error"
+      }`
+    );
+  }
+
   if (user) {
     redirect(destination);
   }

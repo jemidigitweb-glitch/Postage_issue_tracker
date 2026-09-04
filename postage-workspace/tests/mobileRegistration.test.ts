@@ -375,11 +375,34 @@ describe("Stage 5 — PWA manifest", () => {
   const manifestSource = readFileSync(join(process.cwd(), "app/manifest.ts"), "utf8");
   const layoutSource = readFileSync(join(process.cwd(), "app/mobile/layout.tsx"), "utf8");
 
-  it("names the app and installs standalone at /mobile", () => {
+  it("names the app and installs standalone", () => {
     assert.ok(manifestSource.includes('name: "Warehouse Mobile Lite"'));
     assert.ok(manifestSource.includes('display: "standalone"'));
-    assert.ok(manifestSource.includes('start_url: "/mobile"'));
-    assert.ok(manifestSource.includes('scope: "/mobile"'));
+  });
+
+  // SUPERSEDED start_url. /mobile is behind the ordinary login now (proxy.ts),
+  // so an icon pointing straight at /mobile only earns the worker a redirect.
+  // The installed app starts at the login carrying /mobile as its return target.
+  it("starts at the login with /mobile as the return target", () => {
+    assert.ok(manifestSource.includes('start_url: "/login?next=%2Fmobile"'));
+    assert.equal(
+      manifestSource.includes('start_url: "/mobile"'),
+      false,
+      "starting at /mobile is a guaranteed redirect through /login"
+    );
+  });
+
+  // Forced by the start_url above: a start_url outside its own scope makes the
+  // manifest invalid, and the browser answers by refusing to install it.
+  it("scopes wide enough to contain its own start_url", () => {
+    assert.ok(manifestSource.includes('scope: "/"'));
+    const scope = manifestSource.match(/scope: "([^"]+)"/)?.[1];
+    const startUrl = manifestSource.match(/start_url: "([^"]+)"/)?.[1];
+    assert.ok(scope && startUrl, "both fields must be present");
+    assert.ok(
+      startUrl!.split("?")[0].startsWith(scope!),
+      `start_url ${startUrl} must sit inside scope ${scope}`
+    );
   });
 
   it("declares theme and background colours and an icon set", () => {

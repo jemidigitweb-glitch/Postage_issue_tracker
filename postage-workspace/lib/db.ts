@@ -46,14 +46,50 @@ function createPool(): Pool {
       "Missing DATABASE_URL environment variable. Set it in .env.local (never commit it)."
     );
   }
-  return new Pool({
+  const pool = new Pool({
     connectionString: DATABASE_URL,
     // SSL is required by the target Postgres server (confirmed operationally
     // during the historical data migration — see migration/migrate-issues.js).
     // rejectUnauthorized: false matches the same tradeoff already accepted
     // there; revisit if the deployment target's certificate chain changes.
     ssl: { rejectUnauthorized: false },
+
+    // ── SERVERLESS SIZING ───────────────────────────────────────────────────
+    // Every Vercel function instance runs this module in its own process and
+    // therefore holds its own pool. `max: 5` keeps a burst of concurrent
+    // instances from exhausting the Postgres server's connection slots — with
+    // pg's default of 10 per instance, a handful of warm instances is already
+    // enough to be refused a connection, which surfaces to the visitor as a
+    // failed page rather than a slow one.
+    max: 5,
+    // Idle sockets are dropped quickly rather than left to be killed by the
+    // platform while the instance is frozen between requests.
+    idleTimeoutMillis: 10_000,
+    // Never wait indefinitely for a connection slot: fail the one request
+    // instead of holding the function open until the platform times it out.
+    connectionTimeoutMillis: 10_000,
+    keepAlive: true,
   });
+
+  // ── WHY THIS LISTENER IS NOT OPTIONAL ─────────────────────────────────────
+  // `pg` emits 'error' on the Pool when a client that is sitting IDLE loses its
+  // connection — the ordinary outcome of a network partition, a database
+  // restart, or (the case that bites here) a Vercel function instance being
+  // frozen between requests for long enough that the server hangs the socket
+  // up. Node's EventEmitter contract turns an 'error' event with no listener
+  // into an uncaught exception, so without this handler that background socket
+  // drop does not fail one query — it tears down the whole function instance,
+  // and the next visitor to be routed to it gets Next.js's "This page couldn't
+  // load. A server error occurred." screen on a page that is otherwise fine.
+  //
+  // With a listener attached, the pool simply discards the dead client and the
+  // next getPool().query(...) checks out a fresh one. Logs the message only —
+  // never the error object, which carries the connection string.
+  pool.on("error", (error: Error) => {
+    console.error(`[db] idle client dropped, discarding it: ${error.message}`);
+  });
+
+  return pool;
 }
 
 /**
