@@ -8,7 +8,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import IssueFilters from "@/components/issues/IssueFilters";
 import IssueTable from "@/components/issues/IssueTable";
 import IssueTabs from "@/components/issues/IssueTabs";
-import { getCurrentUserWithScope, hasPermission, type IssueAccessScope } from "@/lib/auth";
+import { getCurrentUserWithScope, hasPermission, isSuperAdmin, type IssueAccessScope } from "@/lib/auth";
 import { listAssignmentUsers } from "@/lib/queries/assignmentUsers";
 import {
   listAssignedIssues,
@@ -147,6 +147,26 @@ export default async function IssuesPage({
       ])
     : [false, false, false, false, false];
 
+  // Who the Download Issues button exports — decided by ROLE, never by
+  // issue:view_all (both 'admin' and 'raised_by' hold that permission, but
+  // they get very different exports):
+  //
+  //   admin      -> "select": any staff member chosen in the Raised By filter.
+  //   raised_by  -> "self":   only the Issues this account itself raised, with
+  //                           the staff_code resolved from the session by the
+  //                           route, never sent from here.
+  //   anyone else-> null:     no button at all.
+  //
+  // UI affordance only; /dashboard/issues/export re-derives both the role and
+  // the staff identity server-side and is the actual gate.
+  const exportMode: "select" | "self" | null = !currentUser
+    ? null
+    : isSuperAdmin(currentUser)
+      ? "select"
+      : currentUser.role === "raised_by"
+        ? "self"
+        : null;
+
   // Search/filter params only — shared by the pagination links and the
   // sortable headers. Sort is added on top of this for pagination (so paging
   // keeps the chosen order) but deliberately NOT for the headers, which set
@@ -207,6 +227,7 @@ export default async function IssuesPage({
           priority={priority}
           category={category}
           hasActiveFilters={hasActiveFilters}
+          exportMode={exportMode}
         />
 
         {errorMessage ? (
